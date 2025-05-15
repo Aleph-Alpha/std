@@ -119,6 +119,7 @@ func NewClient(cfg Config, logger Logger) (*Minio, error) {
 
 // monitorConnection periodically checks the MinIO connection and triggers reconnecting if needed
 func (m *Minio) monitorConnection(ctx context.Context) {
+	defer close(m.reconnectSignal)
 	ticker := time.NewTicker(connectionHealthCheckInterval)
 	defer ticker.Stop()
 
@@ -158,12 +159,10 @@ outerLoop:
 		select {
 		case <-m.shutdownSignal:
 			m.logger.Info("Stopping MinIO connection retry loop due to shutdown signal", nil, nil)
-			close(m.reconnectSignal)
 			return
 
 		case <-ctx.Done():
 			m.logger.Info("Stopping MinIO connection retry loop due to context cancellation", nil, nil)
-			close(m.reconnectSignal)
 			return
 
 		case err := <-m.reconnectSignal:
@@ -176,12 +175,10 @@ outerLoop:
 				select {
 				case <-m.shutdownSignal:
 					m.logger.Info("Stopping MinIO connection retry loop during reconnection due to shutdown signal", nil, nil)
-					close(m.reconnectSignal)
 					return
 
 				case <-ctx.Done():
 					m.logger.Info("Stopping MinIO connection retry loop during reconnection due to context cancellation", nil, nil)
-					close(m.reconnectSignal)
 					return
 
 				default:
