@@ -37,12 +37,18 @@ func NewPostgres(cfg Config, logger logger) *Postgres {
 		cfg:             cfg,
 		logger:          logger,
 		shutdownSignal:  make(chan struct{}),
-		retryChanSignal: make(chan error),
+		retryChanSignal: make(chan error, 1),
 	}
 }
 
 func connectToPostgres(logger logger, postgresConfig Config) (*gorm.DB, error) {
-	pgConnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", postgresConfig.Connection.Host, postgresConfig.Connection.Port, postgresConfig.Connection.User, postgresConfig.Connection.Password, postgresConfig.Connection.DbName, postgresConfig.Connection.SSLMode)
+	pgConnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		postgresConfig.Connection.Host,
+		postgresConfig.Connection.Port,
+		postgresConfig.Connection.User,
+		postgresConfig.Connection.Password,
+		postgresConfig.Connection.DbName,
+		postgresConfig.Connection.SSLMode)
 
 	database, err := gorm.Open(
 		postgres.Open(pgConnStr),

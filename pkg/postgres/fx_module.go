@@ -34,6 +34,16 @@ func RegisterPostgresLifecycle(lifecycle fx.Lifecycle, postgres *Postgres, logge
 		OnStop: func(ctx context.Context) error {
 			close(postgres.shutdownSignal)
 			wg.Wait()
+
+			// Close the database connection
+			sqlDB, err := postgres.DB().DB()
+			if err == nil {
+				err := sqlDB.Close()
+				if err != nil {
+					return err
+				}
+			}
+
 			return nil
 		},
 	})
