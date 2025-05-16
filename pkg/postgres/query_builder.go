@@ -77,7 +77,7 @@ func (qb *QueryBuilder) Group(query string) *QueryBuilder {
 	return qb
 }
 
-// Having adds a HAVING clause
+// Having added a HAVING clause
 func (qb *QueryBuilder) Having(query interface{}, args ...interface{}) *QueryBuilder {
 	qb.db = qb.db.Having(query, args...)
 	return qb

@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/docker/docker v28.1.1+incompatible
 	github.com/docker/go-connections v0.5.0
+	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v7 v7.0.91
 	github.com/streadway/amqp v1.1.0
 	github.com/stretchr/testify v1.10.0

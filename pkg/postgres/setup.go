@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+//go:generate mockgen -source=setup.go -destination=mock_logger.go -package=postgres
 type logger interface {
 	Info(msg string, err error, fields ...map[string]interface{})
 	Debug(msg string, err error, fields ...map[string]interface{})
@@ -36,6 +37,7 @@ func NewPostgres(cfg Config, logger logger) *Postgres {
 		client:          conn,
 		cfg:             cfg,
 		logger:          logger,
+		mu:              &sync.RWMutex{},
 		shutdownSignal:  make(chan struct{}),
 		retryChanSignal: make(chan error, 1),
 	}
