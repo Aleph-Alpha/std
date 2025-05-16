@@ -21,7 +21,7 @@ type Postgres struct {
 	client          *gorm.DB
 	cfg             Config
 	logger          logger
-	mu              sync.RWMutex
+	mu              *sync.RWMutex
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
 }

@@ -57,7 +57,7 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Ensure migration history table exists
+	// Ensure the migration history table exists
 	if err := p.ensureMigrationHistoryTable(); err != nil {
 		return fmt.Errorf("failed to ensure migration history table: %w", err)
 	}
@@ -74,7 +74,7 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 		Type:       string(SchemaType),
 		ExecutedAt: time.Now(),
 		ExecutedBy: "system",
-		Duration:   0, // We don't track duration for auto-migrations
+		Duration:   0, // We don't track the duration for auto-migrations
 		Status:     "success",
 	}
 
@@ -95,18 +95,18 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Ensure migration history table exists
+	// Ensure the migration history table exists
 	if err := p.ensureMigrationHistoryTable(); err != nil {
 		return fmt.Errorf("failed to ensure migration history table: %w", err)
 	}
 
-	// Get list of applied migrations
+	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
 	if err := p.client.Find(&applied).Error; err != nil {
 		return fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
-	// Build a map of applied migration IDs for quick lookup
+	// Build a map of applied migration IDs for a quick lookup
 	appliedMap := make(map[string]bool)
 	for _, m := range applied {
 		appliedMap[m.ID] = true
@@ -118,7 +118,7 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 		return fmt.Errorf("failed to load migrations: %w", err)
 	}
 
-	// Sort migrations by ID to ensure correct order
+	// Sort migrations by ID to ensure the correct order
 	sort.Slice(migrations, func(i, j int) bool {
 		return migrations[i].ID < migrations[j].ID
 	})
@@ -287,7 +287,7 @@ func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string)
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Get list of applied migrations
+	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
 	if err := p.client.WithContext(ctx).Find(&applied).Error; err != nil {
 		return nil, fmt.Errorf("failed to get applied migrations: %w", err)
@@ -305,7 +305,7 @@ func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string)
 		return nil, fmt.Errorf("failed to load migrations: %w", err)
 	}
 
-	// Build the status
+	// Build status
 	var status []map[string]interface{}
 	for _, m := range upMigrations {
 		record, applied := appliedMap[m.ID]
@@ -349,7 +349,7 @@ func (p *Postgres) CreateMigration(migrationsDir, name string, migrationType Mig
 	upTemplate := fmt.Sprintf("-- Migration: %s\n-- Type: %s\n-- Created: %s\n\n", name, migrationType, time.Now().Format(time.RFC3339))
 	downTemplate := fmt.Sprintf("-- Migration: %s (rollback)\n-- Type: %s\n-- Created: %s\n\n", name, migrationType, time.Now().Format(time.RFC3339))
 
-	// Ensure migrations directory exists
+	// Ensure the migrations directory exists
 	if err := os.MkdirAll(migrationsDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create migrations directory: %w", err)
 	}
