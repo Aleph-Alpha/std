@@ -68,3 +68,13 @@ import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pk
 // Import the rabbit package
 import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/rabbit"
 ```
+
+# Go Packages Documentation
+
+Generated on Fri May 23 00:00:52 CEST 2025
+
+## Packages
+- [logger](docs/pkg/logger.md)
+- [minio](docs/pkg/minio.md)
+- [postgres](docs/pkg/postgres.md)
+- [rabbit](docs/pkg/rabbit.md)
