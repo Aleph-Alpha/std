@@ -7,9 +7,33 @@ import (
 	"io"
 )
 
-// Put uploads an object to the specified bucket
+// Put uploads an object to the specified bucket.
+// This method handles the direct upload of data to MinIO, managing both the transfer
+// and proper error handling.
+//
+// Parameters:
+//   - ctx: Context for controlling the upload operation
+//   - objectKey: Path and name of the object in the bucket
+//   - reader: Source of the data to upload
+//   - size: Optional parameter specifying the size of the data in bytes.
+//     If not provided or set to 0, an unknown size is assumed, which may affect
+//     upload performance as chunking decisions can't be optimized
+//
+// Returns:
+//   - int64: The number of bytes uploaded
+//   - error: Any error that occurred during the upload
+//
+// Example:
+//
+//	file, _ := os.Open("document.pdf")
+//	defer file.Close()
+//
+//	fileInfo, _ := file.Stat()
+//	size, err := minioClient.Put(ctx, "documents/document.pdf", file, fileInfo.Size())
+//	if err == nil {
+//	    fmt.Printf("Uploaded %d bytes\n", size)
+//	}
 func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error) {
-
 	actualSize := unknownSize
 	// If size was provided, use it
 	if len(size) > 0 && size[0] != 0 {
@@ -26,8 +50,29 @@ func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, siz
 	return response.Size, nil
 }
 
-// Get retrieves an object from the bucket and returns its contents as a byte slice
-// Optimized for both small and large files with safety considerations for buffer use
+// Get retrieves an object from the bucket and returns its contents as a byte slice.
+// This method is optimized for both small and large files with safety considerations
+// for buffer use. For small files, it uses direct allocation, while for larger files
+// it leverages a buffer pool to reduce memory pressure.
+//
+// Parameters:
+//   - ctx: Context for controlling the download operation
+//   - objectKey: Path and name of the object in the bucket
+//
+// Returns:
+//   - []byte: The object's contents as a byte slice
+//   - error: Any error that occurred during the download
+//
+// Note: For very large files, consider using a streaming approach rather than
+// loading the entire file into memory with this method.
+//
+// Example:
+//
+//	data, err := minioClient.Get(ctx, "documents/report.pdf")
+//	if err == nil {
+//	    fmt.Printf("Downloaded %d bytes\n", len(data))
+//	    ioutil.WriteFile("report.pdf", data, 0644)
+//	}
 func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error) {
 	// Get the object with a single call
 	reader, err := m.Client.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
@@ -90,7 +135,21 @@ func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error) {
 	return result, nil
 }
 
-// Delete removes an object from the specified bucket
+// Delete removes an object from the specified bucket.
+// This method permanently deletes the object from MinIO storage.
+//
+// Parameters:
+//   - ctx: Context for controlling the delete operation
+//   - objectKey: Path and name of the object to delete
+//
+// Returns an error if the deletion fails.
+//
+// Example:
+//
+//	err := minioClient.Delete(ctx, "documents/old-report.pdf")
+//	if err == nil {
+//	    fmt.Println("Object successfully deleted")
+//	}
 func (m *Minio) Delete(ctx context.Context, objectKey string) error {
 	err := m.Client.RemoveObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.RemoveObjectOptions{})
 	if err != nil {

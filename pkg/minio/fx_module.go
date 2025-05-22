@@ -6,6 +6,20 @@ import (
 	"sync"
 )
 
+// FXModule is an fx.Module that provides and configures the MinIO client.
+// This module registers the MinIO client with the Fx dependency injection framework,
+// making it available to other components in the application.
+//
+// The module:
+// 1. Provides the MinIO client factory function
+// 2. Invokes the lifecycle registration to manage the client's lifecycle
+//
+// Usage:
+//
+//	app := fx.New(
+//	    minio.FXModule,
+//	    // other modules...
+//	)
 var FXModule = fx.Module("minio",
 	fx.Provide(
 		NewClient,
@@ -13,6 +27,21 @@ var FXModule = fx.Module("minio",
 	fx.Invoke(RegisterLifecycle),
 )
 
+// RegisterLifecycle registers the MinIO client with the fx lifecycle system.
+// This function sets up proper initialization and graceful shutdown of the MinIO client,
+// including starting and stopping the connection monitoring goroutines.
+//
+// Parameters:
+//   - lc: The fx lifecycle controller
+//   - mi: The MinIO client instance
+//   - logger: Logger for recording lifecycle events
+//
+// The function registers two background goroutines:
+// 1. A connection monitor that checks for connection health
+// 2. A retry mechanism that handles reconnection when needed
+//
+// On application shutdown, it ensures these goroutines are properly terminated
+// and waits for their completion before allowing the application to exit.
 func RegisterLifecycle(lc fx.Lifecycle, mi *Minio, logger Logger) {
 
 	if mi == nil {

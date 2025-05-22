@@ -1,0 +1,106 @@
+// Package postgres provides functionality for interacting with PostgreSQL databases.
+//
+// The postgres package offers a robust interface for working with PostgreSQL databases,
+// built on top of the standard database/sql package. It includes connection management,
+// query execution, transaction handling, and migration tools.
+//
+// Core Features:
+//   - Connection pooling and management
+//   - Parameterized query execution
+//   - Transaction support with automatic rollback on errors
+//   - Schema migration tools
+//   - Row scanning utilities
+//   - Basic CRUD operations
+//
+// Basic Usage:
+//
+//	import (
+//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/postgres"
+//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+//	)
+//
+//	// Create a logger
+//	log, _ := logger.NewLogger(logger.Config{Level: "info"})
+//
+//	// Create a new database connection
+//	db, err := postgres.New(postgres.Config{
+//		Host:     "localhost",
+//		Port:     5432,
+//		Username: "postgres",
+//		Password: "password",
+//		Database: "mydb",
+//	}, log)
+//	if err != nil {
+//		log.Fatal("Failed to connect to database", err, nil)
+//	}
+//	defer db.Close()
+//
+//	// Execute a query
+//	rows, err := db.Query(context.Background(), "SELECT id, name FROM users WHERE age > $1", 18)
+//	if err != nil {
+//		log.Error("Query failed", err, nil)
+//	}
+//	defer rows.Close()
+//
+//	// Scan the results
+//	var users []User
+//	for rows.Next() {
+//		var user User
+//		if err := rows.Scan(&user.ID, &user.Name); err != nil {
+//			log.Error("Scan failed", err, nil)
+//		}
+//		users = append(users, user)
+//	}
+//
+// Transaction Example:
+//
+//	err = db.WithTransaction(context.Background(), func(tx postgres.Transaction) error {
+//		// Execute multiple queries in a transaction
+//		_, err := tx.Exec("UPDATE accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
+//		if err != nil {
+//			return err  // Transaction will be rolled back
+//		}
+//
+//		_, err = tx.Exec("UPDATE accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
+//		if err != nil {
+//			return err  // Transaction will be rolled back
+//		}
+//
+//		return nil  // Transaction will be committed
+//	})
+//
+// Basic Operations:
+//
+//	// Create a record
+//	id, err := db.Insert(ctx, "INSERT INTO users(name, email) VALUES($1, $2) RETURNING id", "John", "john@example.com")
+//
+//	// Check if a record exists
+//	exists, err := db.Exists(ctx, "SELECT 1 FROM users WHERE email = $1", "john@example.com")
+//
+//	// Get a single record
+//	var user User
+//	err = db.Get(ctx, &user, "SELECT id, name, email FROM users WHERE id = $1", id)
+//
+// FX Module Integration:
+//
+// This package provides an fx module for easy integration:
+//
+//	app := fx.New(
+//		logger.Module,
+//		postgres.Module,
+//		// ... other modules
+//	)
+//	app.Run()
+//
+// Performance Considerations:
+//
+//   - Connection pooling is automatically handled to optimize performance
+//   - Prepared statements are used internally to reduce parsing overhead
+//   - Consider using batch operations for multiple insertions
+//   - Query timeouts are recommended for all database operations
+//
+// Thread Safety:
+//
+// All methods on the DB interface are safe for concurrent use by multiple
+// goroutines.
+package postgres

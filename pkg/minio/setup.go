@@ -11,33 +11,67 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+// Logger defines the interface for logging operations within the MinIO client.
+// This interface allows for dependency injection of any compatible logger implementation.
+//
 //go:generate mockgen -source=setup.go -destination=mock_logger.go -package=minio
 type Logger interface {
+	// Info logs informational messages with optional error and additional fields
 	Info(msg string, err error, fields ...map[string]interface{})
+
+	// Debug logs debug-level messages with optional error and additional fields
 	Debug(msg string, err error, fields ...map[string]interface{})
+
+	// Warn logs warning messages with optional error and additional fields
 	Warn(msg string, err error, fields ...map[string]interface{})
+
+	// Error logs error messages with the associated error and optional additional fields
 	Error(msg string, err error, fields ...map[string]interface{})
+
+	// Fatal logs critical error messages that typically require immediate attention
 	Fatal(msg string, err error, fields ...map[string]interface{})
 }
 
-// Minio represents a MinIO client with additional functionality
+// Minio represents a MinIO client with additional functionality.
+// It wraps the standard MinIO client with features for connection management,
+// reconnection handling, and thread-safety.
 type Minio struct {
-	Client          *minio.Client
-	CoreClient      *minio.Core // Added a core client for low-level operations
-	cfg             Config
-	logger          Logger
-	mu              sync.RWMutex
-	shutdownSignal  chan struct{}
+	// Client is the standard MinIO client for high-level operations
+	Client *minio.Client
+
+	// CoreClient provides access to low-level operations not available in the standard client
+	CoreClient *minio.Core
+
+	// cfg holds the configuration for this MinIO client instance
+	cfg Config
+
+	// logger is used for logging operations and errors
+	logger Logger
+
+	// mu provides thread-safety for client operations
+	mu sync.RWMutex
+
+	// shutdownSignal is used to signal the connection monitor to stop
+	shutdownSignal chan struct{}
+
+	// reconnectSignal is used to trigger reconnection attempts
 	reconnectSignal chan error
-	bufferPool      *BufferPool
+
+	// bufferPool manages reusable byte buffers to reduce memory allocations
+	bufferPool *BufferPool
 }
 
-// BufferPool implements a pool of bytes.Buffers
+// BufferPool implements a pool of bytes.Buffers to reduce memory allocations.
+// It's used for temporary buffer operations when reading or writing objects.
 type BufferPool struct {
+	// pool is the underlying sync.Pool that manages the buffer objects
 	pool sync.Pool
 }
 
-// NewBufferPool creates a new BufferPool
+// NewBufferPool creates a new BufferPool instance.
+// The pool will create new bytes.Buffer instances as needed when none are available.
+//
+// Returns a configured BufferPool ready for use.
 func NewBufferPool() *BufferPool {
 	return &BufferPool{
 		pool: sync.Pool{
@@ -48,17 +82,40 @@ func NewBufferPool() *BufferPool {
 	}
 }
 
-// Get returns a buffer from the pool
+// Get returns a buffer from the pool.
+// The returned buffer may be newly allocated or reused from a previous Put call.
+// The caller should Reset the buffer before use if its previous contents are not needed.
+//
+// Returns a *bytes.Buffer that should be returned to the pool when no longer needed.
 func (bp *BufferPool) Get() *bytes.Buffer {
 	return bp.pool.Get().(*bytes.Buffer)
 }
 
-// Put returns a buffer to the pool
+// Put returns a buffer to the pool for future reuse.
+// The buffer should not be used after calling Put as it may be provided to another goroutine.
+//
+// Parameters:
+//   - b: The buffer to return to the pool
 func (bp *BufferPool) Put(b *bytes.Buffer) {
 	bp.pool.Put(b)
 }
 
-// NewClient creates and validates a new MinIO client
+// NewClient creates and validates a new MinIO client.
+// It establishes connections to both the standard and core MinIO APIs,
+// validates the connection, and ensures the configured bucket exists.
+//
+// Parameters:
+//   - cfg: Configuration for the MinIO client
+//   - logger: Logger for recording operations and errors
+//
+// Returns a configured and validated MinIO client or an error if initialization fails.
+//
+// Example:
+//
+//	client, err := minio.NewClient(config, myLogger)
+//	if err != nil {
+//	    return fmt.Errorf("failed to initialize MinIO client: %w", err)
+//	}
 func NewClient(cfg Config, logger Logger) (*Minio, error) {
 	// Create the standard client
 	client, err := connectToMinio(cfg, logger)
@@ -117,8 +174,14 @@ func NewClient(cfg Config, logger Logger) (*Minio, error) {
 	return minioClient, nil
 }
 
-// monitorConnection periodically checks the MinIO connection and triggers reconnecting if needed
+// monitorConnection periodically checks the MinIO connection and triggers reconnecting if needed.
+// This method runs as a goroutine and monitors the health of the MinIO connection,
+// triggering reconnection attempts when issues are detected.
+//
+// Parameters:
+//   - ctx: Context for controlling the monitor's lifecycle
 func (m *Minio) monitorConnection(ctx context.Context) {
+	defer close(m.reconnectSignal)
 	ticker := time.NewTicker(connectionHealthCheckInterval)
 	defer ticker.Stop()
 
@@ -151,19 +214,22 @@ func (m *Minio) monitorConnection(ctx context.Context) {
 	}
 }
 
-// retryConnection manages reconnection to MinIO using a similar pattern to the Rabbit implementation
+// retryConnection manages reconnection to MinIO when connection issues are detected.
+// This method runs as a goroutine and attempts to reestablish the connection
+// when the monitor detects issues or when manually triggered.
+//
+// Parameters:
+//   - ctx: Context for controlling the retry loop's lifecycle
 func (m *Minio) retryConnection(ctx context.Context) {
 outerLoop:
 	for {
 		select {
 		case <-m.shutdownSignal:
 			m.logger.Info("Stopping MinIO connection retry loop due to shutdown signal", nil, nil)
-			close(m.reconnectSignal)
 			return
 
 		case <-ctx.Done():
 			m.logger.Info("Stopping MinIO connection retry loop due to context cancellation", nil, nil)
-			close(m.reconnectSignal)
 			return
 
 		case err := <-m.reconnectSignal:
@@ -176,12 +242,10 @@ outerLoop:
 				select {
 				case <-m.shutdownSignal:
 					m.logger.Info("Stopping MinIO connection retry loop during reconnection due to shutdown signal", nil, nil)
-					close(m.reconnectSignal)
 					return
 
 				case <-ctx.Done():
 					m.logger.Info("Stopping MinIO connection retry loop during reconnection due to context cancellation", nil, nil)
-					close(m.reconnectSignal)
 					return
 
 				default:
@@ -251,6 +315,14 @@ outerLoop:
 	}
 }
 
+// connectToMinio creates a new standard MinIO client.
+// This is an internal helper method used during initial connection and reconnection.
+//
+// Parameters:
+//   - cfg: Configuration for the MinIO connection
+//   - logger: Logger for recording operations and errors
+//
+// Returns a configured MinIO client or an error if the connection fails.
 func connectToMinio(cfg Config, logger Logger) (*minio.Client, error) {
 	// Add validation for an empty endpoint
 	if cfg.Connection.Endpoint == "" {
@@ -277,7 +349,14 @@ func connectToMinio(cfg Config, logger Logger) (*minio.Client, error) {
 	return client, nil
 }
 
-// New function to create a Core client
+// connectToMinioCore creates a new MinIO Core client for low-level operations.
+// This is an internal helper method used during initial connection and reconnection.
+//
+// Parameters:
+//   - cfg: Configuration for the MinIO connection
+//   - logger: Logger for recording operations and errors
+//
+// Returns a configured MinIO Core client or an error if the connection fails.
 func connectToMinioCore(cfg Config, logger Logger) (*minio.Core, error) {
 	// Add validation for an empty endpoint
 	if cfg.Connection.Endpoint == "" {
@@ -305,7 +384,13 @@ func connectToMinioCore(cfg Config, logger Logger) (*minio.Core, error) {
 	return coreClient, nil
 }
 
-// validateConnection performs a simple operation to validate connectivity
+// validateConnection performs a simple operation to validate connectivity to MinIO.
+// It attempts to list buckets to ensure the connection and credentials are valid.
+//
+// Parameters:
+//   - ctx: Context for controlling the validation operation
+//
+// Returns nil if the connection is valid, or an error if the validation fails.
 func (m *Minio) validateConnection(ctx context.Context) error {
 	// Set a timeout for validation
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -320,7 +405,14 @@ func (m *Minio) validateConnection(ctx context.Context) error {
 	return nil
 }
 
-// ensureBucketExists checks if the configured bucket exists and creates it if necessary
+// ensureBucketExists checks if the configured bucket exists and creates it if necessary.
+// This method is called during initialization and reconnection to ensure the
+// bucket specified in the configuration is available.
+//
+// Parameters:
+//   - ctx: Context for controlling the bucket check/creation operation
+//
+// Returns nil if the bucket exists or was successfully created, or an error if the operation fails.
 func (m *Minio) ensureBucketExists(ctx context.Context) error {
 	bucketName := m.cfg.Connection.BucketName
 	if bucketName == "" {

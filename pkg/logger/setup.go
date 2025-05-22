@@ -8,11 +8,42 @@ import (
 )
 
 // Logger is a wrapper around Uber's Zap logger.
+// It provides a simplified interface to the underlying Zap logger,
+// with additional functionality specific to the application's needs.
 type Logger struct {
+	// Zap is the underlying zap.Logger instance
+	// This is exposed to allow direct access to Zap-specific functionality
+	// when needed, but most logging should go through the wrapper methods.
 	Zap *zap.Logger
 }
 
 // NewLoggerClient initializes and returns a new instance of the logger based on configuration.
+// This function creates a configured Zap logger with appropriate encoding, log levels,
+// and output destinations.
+//
+// Parameters:
+//   - cfg: Configuration for the logger, including log level
+//
+// Returns:
+//   - *Logger: A configured logger instance ready for use
+//
+// The logger is configured with:
+//   - JSON encoding for structured logging
+//   - ISO8601 timestamp format
+//   - Capital letter level encoding (e.g., "INFO", "ERROR")
+//   - Process ID and service name as default fields
+//   - Caller information (file and line) included in log entries
+//   - Output directed to stderr
+//
+// If initialization fails, the function will call log.Fatal to terminate the application.
+//
+// Example:
+//
+//	loggerConfig := logger.Config{
+//	    Level: logger.Info,
+//	}
+//	log := logger.NewLoggerClient(loggerConfig)
+//	log.Info("Application started", nil, nil)
 func NewLoggerClient(cfg Config) *Logger {
 
 	encoderCfg := zap.NewProductionEncoderConfig()

@@ -1,0 +1,57 @@
+package postgres
+
+import "time"
+
+// Config represents the complete configuration for a PostgresSQL database connection.
+// It encapsulates both the basic connection parameters and detailed connection pool settings.
+type Config struct {
+	// Connection contains the essential parameters needed to establish a database connection
+	Connection Connection
+
+	// ConnectionDetails contains configuration for the connection pool behavior
+	ConnectionDetails ConnectionDetails
+}
+
+// Connection holds the basic parameters required to connect to a PostgresSQL database.
+// These parameters are used to construct the database connection string.
+type Connection struct {
+	// Host specifies the database server hostname or IP address
+	Host string
+
+	// Port specifies the TCP port on which the database server is listening to
+	Port string
+
+	// User specifies the database username for authentication
+	User string
+
+	// Password specifies the database user password for authentication
+	Password string
+
+	// DbName specifies the name of the database to connect to
+	DbName string
+
+	// SSLMode specifies the SSL mode for the connection (e.g., "disable", "require", "verify-ca", "verify-full")
+	// For production environments, it's recommended to use at least "require"
+	SSLMode string
+}
+
+// ConnectionDetails holds configuration settings for the database connection pool.
+// These settings help optimize performance and resource usage by controlling
+// how database connections are created, reused, and expired.
+type ConnectionDetails struct {
+	// MaxOpenConns controls the maximum number of open connections to the database.
+	// Setting this appropriately helps prevent overwhelming the database with too many connections.
+	// Default is 0 (unlimited).
+	MaxOpenConns int
+
+	// MaxIdleConns controls the maximum number of connections in the idle connection pool.
+	// A higher value can improve performance under a concurrent load but consumes more resources.
+	// Default is 2.
+	MaxIdleConns int
+
+	// ConnMaxLifetime is the maximum amount of time a connection may be reused.
+	// Expired connections are closed and removed from the pool during connection acquisition.
+	// This helps ensure database-enforced timeouts are respected.
+	// Default is 0 (unlimited).
+	ConnMaxLifetime time.Duration
+}
