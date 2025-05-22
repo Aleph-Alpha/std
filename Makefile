@@ -1,6 +1,6 @@
 # Makefile at project root
 
-.PHONY: docs test build clean
+.PHONY: docs test build clean test-with-containers
 
 # Generate documentation using gomarkdoc
 docs:
@@ -51,4 +51,14 @@ build:
 
 # Run tests
 test:
-	go test ./...
+	go test -v ./...
+
+# Test with containers - auto-detect Colima and set appropriate variables
+test-with-containers:
+	@if [ -S "$$HOME/.colima/default/docker.sock" ]; then \
+		echo "Colima detected, running tests with Colima configuration..."; \
+		DOCKER_HOST=unix://$$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLED=true go test -v ./...; \
+	else \
+		echo "Colima not detected, running standard tests..."; \
+		go test -v ./...; \
+	fi
