@@ -4,7 +4,20 @@ import (
 	"context"
 )
 
-// Find finds records that match the given conditions
+// Find retrieves records from the database that match the given conditions.
+// It populates the dest parameter with the query results.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - dest: Pointer to a slice where the results will be stored
+//   - conditions: Optional query conditions (follows GORM conventions)
+//
+// Return an error if the query fails or nil on success.
+//
+// Example:
+//
+//	var users []User
+//	err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -12,7 +25,20 @@ func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...int
 	return p.client.WithContext(ctx).Find(dest, conditions...).Error
 }
 
-// First finds the first record that matches the given conditions
+// First retrieves the first record that matches the given conditions.
+// It populates the dest parameter with the result or returns an error if no matching record exists.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - dest: Pointer to a struct where the result will be stored
+//   - conditions: Optional query conditions (follows GORM conventions)
+//
+// Return ErrRecordNotFound if no matching record exists, or another error if the query fails.
+//
+// Example:
+//
+//	var user User
+//	err := db.First(ctx, &user, "email = ?", "user@example.com")
 func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -20,7 +46,20 @@ func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...in
 	return p.client.WithContext(ctx).First(dest, conditions...).Error
 }
 
-// Create creates a new record
+// Create inserts a new record into the database.
+// It processes the value parameter according to GORM conventions, performing hooks
+// and validations defined on the model.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - value: The struct or slice of structs to be created
+//
+// Returns an error if the creation fails or nil on success.
+//
+// Example:
+//
+//	user := User{Name: "John", Email: "john@example.com"}
+//	err := db.Create(ctx, &user)
 func (p *Postgres) Create(ctx context.Context, value interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -28,7 +67,20 @@ func (p *Postgres) Create(ctx context.Context, value interface{}) error {
 	return p.client.WithContext(ctx).Create(value).Error
 }
 
-// Save updates a record
+// Save updates the database record if the primary key exists,
+// otherwise it creates a new record. It performs a full update
+// of all fields, not just changed fields.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - value: The struct to be saved
+//
+// Returns an error if the operation fails or nil on success.
+//
+// Example:
+//
+//	user.Name = "Updated Name"
+//	err := db.Save(ctx, &user)
 func (p *Postgres) Save(ctx context.Context, value interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -36,9 +88,21 @@ func (p *Postgres) Save(ctx context.Context, value interface{}) error {
 	return p.client.WithContext(ctx).Save(value).Error
 }
 
-// Update updates records that match the given condition
-// model should be the model type (e.g., &User{})
-// attrs should be a map, struct, or name/value pair to update
+// Update updates records that match the given model's non-zero fields.
+// It only updates the fields provided in attrs and only affects records
+// that match the model's primary key or query conditions.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - model: The model or query conditions to find records to update
+//   - attrs: Map, struct, or name/value pairs for the fields to update
+//
+// Returns an error if the update fails or nil on success.
+//
+// Example:
+//
+//	// Update user with ID=1
+//	err := db.Update(ctx, &User{ID: 1}, map[string]interface{}{"name": "New Name", "age": 30})
 func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -46,7 +110,22 @@ func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interfac
 	return p.client.WithContext(ctx).Model(model).Updates(attrs).Error
 }
 
-// UpdateColumn For updating with individual field-value pairs, provide a separate method
+// UpdateColumn updates a single column's value for records that match the given model.
+// Unlike Update, it doesn't run hooks and can be used to update fields that are
+// zero values (like setting a string to empty or a number to zero).
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - model: The model or query conditions to find records to update
+//   - columnName: Name of the column to update
+//   - value: New value for the column
+//
+// Returns an error if the update fails or nil on success.
+//
+// Example:
+//
+//	// Set status to "inactive" for user with ID=1
+//	err := db.UpdateColumn(ctx, &User{ID: 1}, "status", "inactive")
 func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -54,7 +133,23 @@ func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnNa
 	return p.client.WithContext(ctx).Model(model).Update(columnName, value).Error
 }
 
-// UpdateColumns For updating multiple columns with name/value pairs
+// UpdateColumns updates multiple columns with name/value pairs for records that match the given model.
+// Like UpdateColumn, it doesn't run hooks and can update zero-value fields.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - model: The model or query conditions to find records to update
+//   - columnValues: Map of column names to their new values
+//
+// Returns an error if the update fails or nil on success.
+//
+// Example:
+//
+//	// Update multiple fields for user with ID=1
+//	err := db.UpdateColumns(ctx, &User{ID: 1}, map[string]interface{}{
+//	    "status": "inactive",
+//	    "last_login": time.Now(),
+//	})
 func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -62,7 +157,24 @@ func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnV
 	return p.client.WithContext(ctx).Model(model).Updates(columnValues).Error
 }
 
-// Delete deletes records that match the given conditions
+// Delete removes records that match the given value and conditions from the database.
+// It respects soft delete if implemented on the model.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - value: The model to delete or a slice for batch delete
+//   - conditions: Additional conditions to filter records to delete
+//
+// Return an error if the deletion fails or nil on success.
+//
+// Example:
+//
+//	// Delete user with ID=1
+//	err := db.Delete(ctx, &User{}, "id = ?", 1)
+//
+//	// Or with a model instance
+//	user := User{ID: 1}
+//	err := db.Delete(ctx, &user)
 func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -70,7 +182,21 @@ func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...
 	return p.client.WithContext(ctx).Delete(value, conditions...).Error
 }
 
-// Exec executes raw SQL
+// Exec executes raw SQL directly against the database.
+// This is useful for operations not easily expressed through GORM's API
+// or for performance-critical code.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - SQL: The SQL statement to execute
+//   - values: Parameters for the SQL statement
+//
+// Returns an error if the execution fails or nil on success.
+//
+// Example:
+//
+//	err := db.Exec(ctx, "UPDATE users SET status = ? WHERE last_login < ?",
+//	               "inactive", time.Now().AddDate(0, -6, 0))
 func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -78,7 +204,21 @@ func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) 
 	return p.client.WithContext(ctx).Exec(sql, values...).Error
 }
 
-// Count counts records that match the given conditions
+// Count determines the number of records that match the given conditions.
+// It populates the count parameter with the result.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - model: The model type to count
+//   - count: Pointer to an int64 where the count will be stored
+//   - conditions: Query conditions to filter the records to count
+//
+// Returns an error if the query fails or nil on success.
+//
+// Example:
+//
+//	var count int64
+//	err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -86,7 +226,25 @@ func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, c
 	return p.client.WithContext(ctx).Model(model).Where(conditions[0], conditions[1:]...).Count(count).Error
 }
 
-// UpdateWhere updates records that match the given condition
+// UpdateWhere updates records that match the specified WHERE condition.
+// This method provides more flexibility than Update for complex conditions.
+//
+// Parameters:
+//   - ctx: Context for the database operation
+//   - model: The model type to update
+//   - attrs: Fields to update (map, struct, or name/value pairs)
+//   - condition: WHERE condition as a string
+//   - args: Arguments for the WHERE condition
+//
+// Returns an error if the update fails or nil on success.
+//
+// Example:
+//
+//	// Update all users who haven't logged in for 6 months
+//	err := db.UpdateWhere(ctx, &User{},
+//	                      map[string]interface{}{"status": "inactive"},
+//	                      "last_login < ?",
+//	                      time.Now().AddDate(0, -6, 0))
 func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

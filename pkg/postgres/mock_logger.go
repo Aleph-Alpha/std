@@ -15,7 +15,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// Mocklogger is a mock of logger interface.
+// Mocklogger is a mock of Logger interface.
 type Mocklogger struct {
 	ctrl     *gomock.Controller
 	recorder *MockloggerMockRecorder

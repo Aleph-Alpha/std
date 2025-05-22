@@ -153,6 +153,42 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// waitForPostgresReady attempts to connect to PostgresSQL until it's ready or times out
+func waitForPostgresReady(host, port, user, password, dbname string, timeout time.Duration) error {
+	// Use standard PostgresSQL connection string
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
+
+	startTime := time.Now()
+	for {
+		if time.Since(startTime) > timeout {
+			return fmt.Errorf("timed out waiting for PostgreSQL to be ready after %s", timeout)
+		}
+
+		// Try to establish a connection
+		db, err := sql.Open("postgres", connStr)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		// Try a simple ping
+		err = db.Ping()
+		if err == nil {
+			// Close the connection and return success
+			err = db.Close()
+			if err != nil {
+				return fmt.Errorf("error closing database connection: %w", err)
+			}
+			return nil
+		}
+
+		// Close the connection even if ping failed
+		_ = db.Close()
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 // TestPostgresWithFXModule tests the postgres package using the existing FX module
 func TestPostgresWithFXModule(t *testing.T) {
 	// Skip if running in short mode
@@ -160,17 +196,17 @@ func TestPostgresWithFXModule(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Setup PostgreSQL container
+	// Setup PostgresSQL containerInstance
 	ctx := context.Background()
-	container, err := setupPostgresContainer(ctx)
+	containerInstance, err := setupPostgresContainer(ctx)
 	require.NoError(t, err)
 	defer func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Fatalf("failed to terminate container: %s", err)
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate containerInstance: %s", err)
 		}
 	}()
 
-	// Create mock controller and logger
+	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockLogger := NewMocklogger(ctrl)
@@ -179,29 +215,28 @@ func TestPostgresWithFXModule(t *testing.T) {
 	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(msg string, err error, fields ...map[string]interface{}) {
 			t.Logf("FATAL: %s, Error: %v", msg, err)
-			// Don't actually exit the test
 		}).AnyTimes()
 
-	// Setup expected logger calls
+	// Set up expected Logger calls
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Print connection details for debugging
-	t.Logf("Using PostgreSQL on %s:%s", container.Host, container.Port)
+	t.Logf("Using PostgreSQL on %s:%s", containerInstance.Host, containerInstance.Port)
 
 	// Get the Postgres instance to test it
 	var postgres *Postgres
 
 	// Create a test app using the existing FXModule
 	app := fxtest.New(t,
-		// Provide dependencies with the correct container config
+		// Provide dependencies with the correct containerInstance config
 		fx.Provide(
 			func() Config {
-				return container.Config
+				return containerInstance.Config
 			},
-			func() logger {
+			func() Logger {
 				return mockLogger
 			},
 		),
@@ -374,7 +409,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 	t.Run("ErrorTranslation", func(t *testing.T) {
 		ctx := context.Background()
 
-		// Test record not found error
+		// Test record didn't find an error
 		var user TestUser
 		err := postgres.First(ctx, &user, "name = ?", "NonExistentUser")
 		translatedErr := TranslateError(err)
@@ -411,18 +446,18 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 
 	// This test is more complex and requires stopping and starting containers
 	ctx := context.Background()
-	container, err := setupPostgresContainer(ctx)
+	containerInstance, err := setupPostgresContainer(ctx)
 	require.NoError(t, err)
 	defer func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Fatalf("failed to terminate container: %s", err)
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate containerInstance: %s", err)
 		}
 	}()
 
 	// Print connection details for debugging
-	t.Logf("Using PostgreSQL on %s:%s", container.Host, container.Port)
+	t.Logf("Using PostgreSQL on %s:%s", containerInstance.Host, containerInstance.Port)
 
-	// Create mock controller and logger
+	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockLogger := NewMocklogger(ctrl)
@@ -431,23 +466,36 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(msg string, err error, fields ...map[string]interface{}) {
 			t.Logf("FATAL: %s, Error: %v", msg, err)
-			// Don't actually exit the test
 		}).AnyTimes()
 
-	// Setup expected logger calls
+	// Set up expected Logger calls
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	// Create a Postgres instance directly (not through FX)
-	postgres := NewPostgres(container.Config, mockLogger)
-	if postgres == nil || postgres.client == nil {
-		t.Skip("Skipping test as database connection failed")
-		return
-	}
+	// Get the Postgres instance to test it
+	var postgres *Postgres
 
-	require.NotNil(t, postgres)
+	// Create a test app using the existing FXModule
+	app := fxtest.New(t,
+		// Provide dependencies with the correct containerInstance config
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+			func() Logger {
+				return mockLogger
+			},
+		),
+		// Use the existing FXModule
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	// Start the application
+	err = app.Start(ctx)
+	require.NoError(t, err)
 
 	// Verify connection works using the public DB() method
 	db := postgres.DB()
@@ -460,10 +508,10 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 	// Simulate a connection error by sending a signal to the retry channel
 	postgres.retryChanSignal <- fmt.Errorf("test connection error")
 
-	// Give time for reconnection attempt
+	// Give time for a reconnection attempt
 	time.Sleep(100 * time.Millisecond)
 
-	// Connection should still work since the container is running
+	// Connection should still work since the containerInstance is running
 	db = postgres.DB() // Get the DB again in case it was updated
 	err = db.Raw("SELECT 1").Scan(&result).Error
 	assert.NoError(t, err)
@@ -476,47 +524,12 @@ func TestErrorHandling(t *testing.T) {
 		assert.Equal(t, ErrRecordNotFound, TranslateError(gorm.ErrRecordNotFound))
 		assert.Equal(t, ErrDuplicateKey, TranslateError(gorm.ErrDuplicatedKey))
 		assert.Equal(t, ErrForeignKey, TranslateError(gorm.ErrForeignKeyViolated))
+		assert.Equal(t, ErrInvalidData, TranslateError(gorm.ErrInvalidData))
 
 		// Test custom error
 		customErr := fmt.Errorf("custom error")
 		assert.Equal(t, customErr, TranslateError(customErr))
 	})
-}
-
-// waitForPostgresReady attempts to connect to PostgreSQL until it's ready or times out
-func waitForPostgresReady(host, port, user, password, dbname string, timeout time.Duration) error {
-	// Use standard PostgreSQL connection string
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
-
-	startTime := time.Now()
-	for {
-		if time.Since(startTime) > timeout {
-			return fmt.Errorf("timed out waiting for PostgreSQL to be ready after %s", timeout)
-		}
-
-		// Try to establish a connection
-		db, err := sql.Open("postgres", connStr)
-		if err != nil {
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-
-		// Try a simple ping
-		err = db.Ping()
-		if err == nil {
-			// Close the connection and return success
-			err = db.Close()
-			if err != nil {
-				return fmt.Errorf("error closing database connection: %w", err)
-			}
-			return nil
-		}
-
-		// Close the connection even if ping failed
-		_ = db.Close()
-		time.Sleep(500 * time.Millisecond)
-	}
 }
 
 // Test models for advanced query operations
@@ -526,14 +539,14 @@ type (
 		Name       string
 		Price      float64
 		CategoryID uint
-		Category   Category    // Belongs to relationship
-		OrderItems []OrderItem // Has many relationship
+		Category   Category    // Belongs to a relationship
+		OrderItems []OrderItem // Has many relationships
 	}
 
 	Category struct {
 		gorm.Model
 		Name     string
-		Products []Product // Has many relationship
+		Products []Product // Has many relationships
 	}
 
 	Customer struct {
@@ -541,25 +554,25 @@ type (
 		Name    string
 		Email   string
 		Address string
-		Orders  []Order // Has many relationship
+		Orders  []Order // Has many relationships
 	}
 
 	Order struct {
 		gorm.Model
 		CustomerID  uint
-		Customer    Customer // Belongs to relationship
+		Customer    Customer // Belongs to a relationship
 		OrderDate   time.Time
 		OrderStatus string
-		OrderItems  []OrderItem // Has many relationship
+		OrderItems  []OrderItem // Has many relationships
 		TotalAmount float64
 	}
 
 	OrderItem struct {
 		gorm.Model
 		OrderID   uint
-		Order     Order // Belongs to relationship
+		Order     Order // Belongs to a relationship
 		ProductID uint
-		Product   Product // Belongs to relationship
+		Product   Product // Belongs to a relationship
 		Quantity  int
 		Price     float64
 	}
@@ -572,39 +585,56 @@ func TestAdvancedQueryOperations(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Setup PostgreSQL container
+	// Setup PostgresSQL containerInstance
 	ctx := context.Background()
-	container, err := setupPostgresContainer(ctx)
+	containerInstance, err := setupPostgresContainer(ctx)
 	require.NoError(t, err)
 	defer func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Fatalf("failed to terminate container: %s", err)
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate containerInstance: %s", err)
 		}
 	}()
 
-	// Create mock controller and logger
+	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockLogger := NewMocklogger(ctrl)
 
-	// Setup expected logger calls
+	// Set up expected Logger calls
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	// Create Postgres instance
-	postgres := NewPostgres(container.Config, mockLogger)
-	require.NotNil(t, postgres)
-	require.NotNil(t, postgres.client)
+	// Get the Postgres instance to test it
+	var postgres *Postgres
+
+	// Create a test app using the existing FXModule
+	app := fxtest.New(t,
+		// Provide dependencies with the correct containerInstance config
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+			func() Logger {
+				return mockLogger
+			},
+		),
+		// Use the existing FXModule
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	// Start the application
+	err = app.Start(ctx)
+	require.NoError(t, err)
 
 	// Get the DB
 	db := postgres.DB()
 	require.NotNil(t, db)
 
-	// Auto-migrate schemas
-	err = db.AutoMigrate(&Category{}, &Product{}, &Customer{}, &Order{}, &OrderItem{})
+	err = postgres.AutoMigrate(&Category{}, &Product{}, &Customer{}, &Order{}, &OrderItem{})
 	require.NoError(t, err)
 
 	// Seed test data
@@ -621,7 +651,7 @@ func TestAdvancedQueryOperations(t *testing.T) {
 
 // seedTestData creates test data for all tests
 func seedTestData(ctx context.Context, postgres *Postgres) error {
-	db := postgres.DB()
+	//db := postgres.DB()
 
 	// Create categories
 	categories := []Category{
@@ -632,7 +662,7 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 	}
 
 	for i := range categories {
-		if err := db.Create(&categories[i]).Error; err != nil {
+		if err := postgres.Create(ctx, &categories[i]); err != nil {
 			return fmt.Errorf("failed to create category: %w", err)
 		}
 	}
@@ -651,7 +681,7 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 	}
 
 	for i := range products {
-		if err := db.Create(&products[i]).Error; err != nil {
+		if err := postgres.Create(ctx, &products[i]); err != nil {
 			return fmt.Errorf("failed to create product: %w", err)
 		}
 	}
@@ -664,7 +694,7 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 	}
 
 	for i := range customers {
-		if err := db.Create(&customers[i]).Error; err != nil {
+		if err := postgres.Create(ctx, &customers[i]); err != nil {
 			return fmt.Errorf("failed to create customer: %w", err)
 		}
 	}
@@ -680,7 +710,7 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 	}
 
 	for i := range orders {
-		if err := db.Create(&orders[i]).Error; err != nil {
+		if err := postgres.Create(ctx, &orders[i]); err != nil {
 			return fmt.Errorf("failed to create order: %w", err)
 		}
 	}
@@ -698,7 +728,7 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 	}
 
 	for i := range orderItems {
-		if err := db.Create(&orderItems[i]).Error; err != nil {
+		if err := postgres.Create(ctx, &orderItems[i]); err != nil {
 			return fmt.Errorf("failed to create order item: %w", err)
 		}
 	}
@@ -706,7 +736,7 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 	// Update order total amounts based on order items
 	for _, order := range orders {
 		var items []OrderItem
-		if err := db.Where("order_id = ?", order.ID).Find(&items).Error; err != nil {
+		if err := postgres.Find(ctx, &items, "order_id = ?", order.ID); err != nil {
 			return fmt.Errorf("failed to fetch order items: %w", err)
 		}
 
@@ -715,7 +745,9 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 			total += item.Price * float64(item.Quantity)
 		}
 
-		if err := db.Model(&order).Update("total_amount", total).Error; err != nil {
+		if err := postgres.Update(ctx, &order, map[string]interface{}{
+			"total_amount": total,
+		}); err != nil {
 			return fmt.Errorf("failed to update order total: %w", err)
 		}
 	}
@@ -977,7 +1009,7 @@ func testJoinsAndRelationships(ctx context.Context, postgres *Postgres) func(t *
 
 		// Test 5: Self JOIN
 		t.Run("SelfJoin", func(t *testing.T) {
-			// First create some sample data with self-references
+			// First, create some sample data with self-references
 			err := postgres.Exec(ctx, `
 				CREATE TABLE IF NOT EXISTS employees (
 					id SERIAL PRIMARY KEY,
@@ -999,7 +1031,7 @@ func testJoinsAndRelationships(ctx context.Context, postgres *Postgres) func(t *
 			`)
 			require.NoError(t, err)
 
-			// Query with self join
+			// Query with self-join
 			type EmployeeWithManager struct {
 				ID          int    `gorm:"column:id"`
 				Name        string `gorm:"column:name"`
@@ -1020,7 +1052,7 @@ func testJoinsAndRelationships(ctx context.Context, postgres *Postgres) func(t *
 			require.NoError(t, err)
 			require.Equal(t, 6, len(results))
 
-			// Verify self join worked
+			// Verify self-join worked
 			assert.Equal(t, "CEO", results[0].Name)
 			assert.Nil(t, results[0].ManagerID)
 			assert.Empty(t, results[0].ManagerName)
@@ -1132,7 +1164,7 @@ func testGroupByHavingClauses(ctx context.Context, postgres *Postgres) func(t *t
 				assert.LessOrEqual(t, r.AvgPrice, r.MaxPrice)
 				assert.Greater(t, r.ProductCount, 0)
 
-				// Check that total price is approximately product_count * avg_price
+				// Check that the total price is approximately product_count * avg_price
 				expectedTotal := float64(r.ProductCount) * r.AvgPrice
 				assert.InDelta(t, expectedTotal, r.TotalPrice, expectedTotal*0.1) // Allow 10% tolerance
 			}
@@ -1393,12 +1425,12 @@ func testWindowFunctions(ctx context.Context, postgres *Postgres) func(t *testin
 				}
 
 				if prevResult != nil {
-					// Current order's prev_amount should equal previous order's total_amount
+					// The current order's prev_amount should equal the previous order's total_amount
 					if r.PrevAmount != nil {
 						assert.InDelta(t, prevResult.TotalAmount, *r.PrevAmount, 0.01)
 					}
 
-					// Previous order's next_amount should equal current order's total_amount
+					// The previous order's next_amount should equal the current order's total_amount
 					if prevResult.NextAmount != nil {
 						assert.InDelta(t, r.TotalAmount, *prevResult.NextAmount, 0.01)
 					}
@@ -1406,7 +1438,7 @@ func testWindowFunctions(ctx context.Context, postgres *Postgres) func(t *testin
 					// Check days_since_last_order calculation
 					if r.DaysSinceLastOrder != nil {
 						daysDiff := int(r.OrderDate.Sub(prevResult.OrderDate).Hours() / 24)
-						assert.InDelta(t, daysDiff, *r.DaysSinceLastOrder, 1) // Allow 1 day difference due to time part
+						assert.InDelta(t, daysDiff, *r.DaysSinceLastOrder, 1) // Allow a 1-day difference due to time part
 					}
 				}
 
@@ -1521,14 +1553,14 @@ func testCTEExpressions(ctx context.Context, postgres *Postgres) func(t *testing
 				assert.GreaterOrEqual(t, r.OrderCount, 1)
 				assert.GreaterOrEqual(t, r.TotalSpent, 0.0)
 
-				// Avg order value should be total spent divided by order count
+				// Avg order value should be totally spent divided by order count
 				assert.InDelta(t, r.TotalSpent/float64(r.OrderCount), r.AvgOrderValue, 0.01)
 			}
 		})
 
 		// Test 3: Recursive CTE
 		t.Run("RecursiveCTE", func(t *testing.T) {
-			// First we'll create a hierarchical structure to test with
+			// First, we'll create a hierarchical structure to test with
 			err := postgres.Exec(ctx, `
 				CREATE TABLE IF NOT EXISTS categories_tree (
 					id SERIAL PRIMARY KEY,
@@ -1598,7 +1630,7 @@ func testCTEExpressions(ctx context.Context, postgres *Postgres) func(t *testing
 			assert.Equal(t, "Electronics", results[0].Name)
 			assert.Equal(t, 0, results[0].Level)
 
-			// Check a deep nested path
+			// Check a deep-nested path
 			var gamingLaptopsResult *CategoryPath
 			for i, r := range results {
 				if r.Name == "Gaming Laptops" {
@@ -1614,7 +1646,7 @@ func testCTEExpressions(ctx context.Context, postgres *Postgres) func(t *testing
 
 		// Test 4: CTE with UPDATE
 		t.Run("CTEWithUpdate", func(t *testing.T) {
-			// First check current prices
+			// First, check current prices
 			var beforeProducts []Product
 			err := postgres.Query(ctx).
 				Model(&Product{}).
@@ -1710,22 +1742,22 @@ func TestTransactionHandling(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Setup PostgreSQL container
+	// Setup PostgresSQL containerInstance
 	ctx := context.Background()
-	container, err := setupPostgresContainer(ctx)
+	containerInstance, err := setupPostgresContainer(ctx)
 	require.NoError(t, err)
 	defer func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Fatalf("failed to terminate container: %s", err)
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate containerInstance: %s", err)
 		}
 	}()
 
-	// Create mock controller and logger
+	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockLogger := NewMocklogger(ctrl)
 
-	// Setup expected logger calls
+	// Set up expected Logger calls
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -1733,7 +1765,7 @@ func TestTransactionHandling(t *testing.T) {
 	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Create Postgres instance
-	postgres := NewPostgres(container.Config, mockLogger)
+	postgres := NewPostgres(containerInstance.Config, mockLogger)
 	require.NotNil(t, postgres)
 	require.NotNil(t, postgres.client)
 
@@ -1798,7 +1830,7 @@ func testBasicTransactionCommit(ctx context.Context, postgres *Postgres) func(t 
 				return err
 			}
 
-			// Create transaction log
+			// Create a transaction log
 			txLog := TransactionLog{
 				FromAccountID: aliceAccount.ID,
 				ToAccountID:   bobAccount.ID,
@@ -1858,7 +1890,7 @@ func testTransactionRollback(ctx context.Context, postgres *Postgres) func(t *te
 				return err
 			}
 
-			// Create transaction log
+			// Create a transaction log
 			txLog := TransactionLog{
 				FromAccountID: charlieAccount.ID,
 				ToAccountID:   daveAccount.ID,

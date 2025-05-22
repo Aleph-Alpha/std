@@ -6,6 +6,10 @@ import (
 	"sync"
 )
 
+// FXModule is an fx module that provides the Postgres database component.
+// It registers the Postgres constructor for dependency injection
+// and sets up lifecycle hooks to properly initialize and shut down
+// the database connection.
 var FXModule = fx.Module("postgres",
 	fx.Provide(
 		NewPostgres,
@@ -13,7 +17,15 @@ var FXModule = fx.Module("postgres",
 	fx.Invoke(RegisterPostgresLifecycle),
 )
 
-func RegisterPostgresLifecycle(lifecycle fx.Lifecycle, postgres *Postgres, logger logger) {
+// RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database component.
+// It sets up:
+// 1. Connection monitoring on the application starts
+// 2. Automatic reconnection mechanism on application start
+// 3. Graceful shutdown of database connections on application stop
+//
+// The function uses a WaitGroup to ensure that all goroutines complete
+// before the application terminates.
+func RegisterPostgresLifecycle(lifecycle fx.Lifecycle, postgres *Postgres, logger Logger) {
 	wg := &sync.WaitGroup{}
 	lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {

@@ -9,8 +9,12 @@ import (
 	"time"
 )
 
+// Logger defines the interface for logging operations within the postgres package.
+// It provides methods for different logging levels to track database operations,
+// connection status, and error handling.
+
 //go:generate mockgen -source=setup.go -destination=mock_logger.go -package=postgres
-type logger interface {
+type Logger interface {
 	Info(msg string, err error, fields ...map[string]interface{})
 	Debug(msg string, err error, fields ...map[string]interface{})
 	Warn(msg string, err error, fields ...map[string]interface{})
@@ -18,16 +22,24 @@ type logger interface {
 	Fatal(msg string, err error, fields ...map[string]interface{})
 }
 
+// Postgres is a thread-safe wrapper around gorm.DB that provides connection monitoring,
+// automatic reconnection, and standardized database operations.
+// It guards all database operations with a mutex to ensure thread safety
+// and includes mechanisms for graceful shutdown and connection health monitoring.
 type Postgres struct {
 	client          *gorm.DB
 	cfg             Config
-	logger          logger
+	logger          Logger
 	mu              *sync.RWMutex
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
 }
 
-func NewPostgres(cfg Config, logger logger) *Postgres {
+// NewPostgres creates a new Postgres instance with the provided configuration and Logger.
+// It establishes the initial database connection and sets up the internal state
+// for connection monitoring and recovery. If the initial connection fails,
+// it logs a fatal error and terminates.
+func NewPostgres(cfg Config, logger Logger) *Postgres {
 	conn, err := connectToPostgres(logger, cfg)
 	if err != nil {
 		logger.Fatal("error in connecting to postgres after all retries", nil, nil)
@@ -43,7 +55,11 @@ func NewPostgres(cfg Config, logger logger) *Postgres {
 	}
 }
 
-func connectToPostgres(logger logger, postgresConfig Config) (*gorm.DB, error) {
+// connectToPostgres establishes a connection to the PostgresSQL database using the provided
+// configuration. It sets up the connection string, opens the connection with GORM,
+// and configures the connection pool with appropriate parameters for performance.
+// Returns the initialized GORM DB instance or an error if the connection fails.
+func connectToPostgres(logger Logger, postgresConfig Config) (*gorm.DB, error) {
 	pgConnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		postgresConfig.Connection.Host,
 		postgresConfig.Connection.Port,
@@ -72,12 +88,20 @@ func connectToPostgres(logger logger, postgresConfig Config) (*gorm.DB, error) {
 	databaseInstance.SetMaxIdleConns(25)
 	databaseInstance.SetConnMaxLifetime(1 * time.Minute)
 
-	logger.Info("Successfully connected to PostgreSQL database", nil, nil)
+	logger.Info("Successfully connected to PostgresSQL database", nil, nil)
 
 	return database, nil
 }
 
-func (p *Postgres) retryConnection(ctx context.Context, logger logger, cfg Config) {
+// retryConnection continuously attempts to reconnect to the PostgresSQL database when notified
+// of a connection failure. It operates as a goroutine that waits for signals on retryChanSignal
+// before attempting reconnection. The function respects context cancellation and shutdown signals,
+// ensuring graceful termination when requested.
+//
+// It implements two nested loops:
+// - The outer loop waits for retry signals
+// - The inner loop attempts reconnection until successful
+func (p *Postgres) retryConnection(ctx context.Context, logger Logger, cfg Config) {
 outerLoop:
 	for {
 		select {
@@ -112,6 +136,13 @@ outerLoop:
 	}
 }
 
+// monitorConnection periodically checks the health of the database connection
+// and triggers reconnection attempts when necessary. It runs as a goroutine that
+// performs health checks at regular intervals (10 seconds) and signals the
+// retryConnection goroutine when a failure is detected.
+//
+// The function respects context cancellation and shutdown signals, ensuring
+// proper resource cleanup and graceful termination when requested.
 func (p *Postgres) monitorConnection(ctx context.Context) {
 	defer close(p.retryChanSignal)
 	ticker := time.NewTicker(10 * time.Second)
@@ -137,6 +168,9 @@ func (p *Postgres) monitorConnection(ctx context.Context) {
 }
 
 // healthCheck performs a health check on the Postgres database connection.
+// It acquires a read lock to safely access the client, then attempts to ping
+// the database with a timeout of 5 seconds to verify connectivity.
+//
 // It returns nil if the database is healthy, or an error with details about the issue.
 func (p *Postgres) healthCheck() error {
 	p.mu.RLock()

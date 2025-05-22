@@ -11,48 +11,91 @@ import (
 	"time"
 )
 
-// MigrationType defines the type of migration
+// MigrationType defines the type of migration, categorizing the purpose of the change.
+// This helps track and organize migrations based on their impact on the database.
 type MigrationType string
 
 const (
 	// SchemaType represents schema changes (tables, columns, indexes, etc.)
+	// These migrations modify the structure of the database.
 	SchemaType MigrationType = "schema"
+
 	// DataType represents data manipulations (inserts, updates, etc.)
+	// These migrations modify the content within the database.
 	DataType MigrationType = "data"
 )
 
-// MigrationDirection specifies the direction of the migration
+// MigrationDirection specifies the direction of the migration,
+// indicating whether it's applying a change or reverting one.
 type MigrationDirection string
 
 const (
-	// UpMigration indicates a forward migration
+	// UpMigration indicates a forward migration that applies a change.
 	UpMigration MigrationDirection = "up"
-	// DownMigration indicates a rollback migration
+
+	// DownMigration indicates a rollback migration that reverts a change.
 	DownMigration MigrationDirection = "down"
 )
 
-// Migration represents a single database migration
+// Migration represents a single database migration with all its metadata and content.
+// Each migration contains the SQL to execute and information about its purpose and identity.
 type Migration struct {
-	ID        string             // Unique ID (typically a timestamp or version number)
-	Name      string             // Descriptive name
-	Type      MigrationType      // Schema or data migration
-	Direction MigrationDirection // Up or down migration
-	SQL       string             // The SQL to execute
+	// ID is a unique identifier for the migration, typically a timestamp (YYYYMMDDHHMMSS)
+	// that also helps establish the execution order.
+	ID string
+
+	// Name is a descriptive label for the migration, typically describing what it does.
+	Name string
+
+	// Type categorizes the migration as either schema or data.
+	Type MigrationType
+
+	// Direction indicates whether this is an up (apply) or down (rollback) migration.
+	Direction MigrationDirection
+
+	// SQL contains the actual SQL statements to execute for this migration.
+	SQL string
 }
 
-// MigrationHistoryRecord represents a record in the migration history table
+// MigrationHistoryRecord represents a record in the migration history table.
+// It tracks when and how each migration was applied, enabling the system
+// to determine which migrations have been run and providing an audit trail.
 type MigrationHistoryRecord struct {
-	ID           string    // Migration ID
-	Name         string    // Migration name
-	Type         string    // Migration type (schema/data)
-	ExecutedAt   time.Time // When the migration was applied
-	ExecutedBy   string    // Who applied the migration
-	Duration     int64     // How long it took to apply in milliseconds
-	Status       string    // Success or failure
-	ErrorMessage string    `gorm:"type:text"` // Error message if failed
+	// ID matches the migration ID that was applied.
+	ID string
+
+	// Name is the descriptive name of the migration.
+	Name string
+
+	// Type indicates whether this was a schema or data migration.
+	Type string
+
+	// ExecutedAt records when the migration was applied.
+	ExecutedAt time.Time
+
+	// ExecutedBy tracks who or what system applied the migration.
+	ExecutedBy string
+
+	// Duration measures how long the migration took to execute in milliseconds.
+	Duration int64
+
+	// Status indicates whether the migration completed successfully or failed.
+	Status string
+
+	// ErrorMessage contains details if the migration failed.
+	ErrorMessage string `gorm:"type:text"`
 }
 
-// AutoMigrate is a wrapper around GORM's AutoMigrate with additional features
+// AutoMigrate is a wrapper around GORM's AutoMigrate with additional features.
+// It tracks migrations in the migration history table and provides better error handling.
+//
+// Parameters:
+//   - models: The GORM models to auto-migrate
+//
+// Returns an error if any part of the migration process fails.
+//
+// This method is useful during development or for simple applications,
+// but for production systems, explicit migrations are recommended.
 func (p *Postgres) AutoMigrate(models ...interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -85,12 +128,26 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 	return nil
 }
 
-// ensureMigrationHistoryTable creates the migration history table if it doesn't exist
+// ensureMigrationHistoryTable creates the migration history table if it doesn't exist.
+// This internal method is called before any migration operation to make sure
+// the system can track which migrations have been applied.
 func (p *Postgres) ensureMigrationHistoryTable() error {
 	return p.client.AutoMigrate(&MigrationHistoryRecord{})
 }
 
-// MigrateUp applies all pending migrations
+// MigrateUp applies all pending migrations from the specified directory.
+// It identifies which migrations haven't been applied yet, sorts them by ID,
+// and applies them in order within transactions.
+//
+// Parameters:
+//   - ctx: Context for database operations
+//   - migrationsDir: Directory containing the migration SQL files
+//
+// Returns an error if any migration fails or if there are issues accessing the migrations.
+//
+// Example:
+//
+//	err := db.MigrateUp(ctx, "./migrations")
 func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -176,7 +233,19 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 	return nil
 }
 
-// MigrateDown rolls back the last applied migration
+// MigrateDown rolls back the last applied migration.
+// It finds the most recently applied migration and executes its corresponding
+// down migration to revert the changes.
+//
+// Parameters:
+//   - ctx: Context for database operations
+//   - migrationsDir: Directory containing the migration SQL files
+//
+// Returns an error if the rollback fails or if the down migration can't be found.
+//
+// Example:
+//
+//	err := db.MigrateDown(ctx, "./migrations")
 func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -230,7 +299,19 @@ func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error 
 	return nil
 }
 
-// loadMigrations loads migrations from the specified directory
+// loadMigrations loads migrations from the specified directory.
+// It parses migration files to extract their metadata and content,
+// filtering by the specified direction (up or down).
+//
+// Parameters:
+//   - dir: Directory containing the migration SQL files
+//   - direction: Whether to load up (apply) or down (rollback) migrations
+//
+// Returns a slice of Migration objects and any error encountered.
+//
+// Migration files should follow the naming convention:
+// <version>_<type>_<name>.<direction>.sql
+// Example: 20230101120000_schema_create_users_table.up.sql
 func (p *Postgres) loadMigrations(dir string, direction MigrationDirection) ([]Migration, error) {
 	var migrations []Migration
 
@@ -282,7 +363,25 @@ func (p *Postgres) loadMigrations(dir string, direction MigrationDirection) ([]M
 	return migrations, nil
 }
 
-// GetMigrationStatus returns the status of all migrations
+// GetMigrationStatus returns the status of all migrations.
+// It compares available migrations with those that have been applied
+// to build a comprehensive status report.
+//
+// Parameters:
+//   - ctx: Context for database operations
+//   - migrationsDir: Directory containing the migration SQL files
+//
+// Returns a slice of maps with status information for each migration,
+// or an error if the status cannot be determined.
+//
+// Example:
+//
+//	status, err := db.GetMigrationStatus(ctx, "./migrations")
+//	if err == nil {
+//	    for _, m := range status {
+//	        fmt.Printf("Migration %s: %v\n", m["id"], m["applied"])
+//	    }
+//	}
 func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string) ([]map[string]interface{}, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -333,7 +432,22 @@ func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string)
 	return status, nil
 }
 
-// CreateMigration generates a new migration file
+// CreateMigration generates a new migration file.
+// It creates both up and down migration files with appropriate names and timestamps.
+//
+// Parameters:
+//   - migrationsDir: Directory where migration files should be created
+//   - name: Descriptive name for the migration
+//   - migrationType: Whether this is a schema or data migration
+//
+// Returns the base filename of the created migration or an error if creation fails.
+//
+// Example:
+//
+//	filename, err := db.CreateMigration("./migrations", "create_users_table", postgres.SchemaType)
+//	if err == nil {
+//	    fmt.Printf("Created migration: %s\n", filename)
+//	}
 func (p *Postgres) CreateMigration(migrationsDir, name string, migrationType MigrationType) (string, error) {
 	// Generate a timestamp-based ID
 	id := time.Now().Format("20060102150405")
