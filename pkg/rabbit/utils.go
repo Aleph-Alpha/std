@@ -3,7 +3,7 @@ package rabbit
 import (
 	"context"
 	"fmt"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"sync"
 	"time"
 )
@@ -143,7 +143,7 @@ func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Messag
 }
 
 // ConsumeDLQ starts consuming messages from the dead-letter queue.
-// This method is useful for processing failed messages that were sent
+// This method is useful for processing failed messages sent
 // to the dead-letter queue.
 //
 // Parameters:
@@ -178,7 +178,7 @@ func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Mes
 //   - ctx: Context for cancellation control
 //   - msg: Message payload as a byte slice
 //
-// Returns an error if publishing fails or if the context is cancelled.
+// Returns an error if publishing fails or if the context is canceled.
 //
 // Example:
 //

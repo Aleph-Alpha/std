@@ -24,7 +24,7 @@
 //	log, _ := logger.NewLogger(logger.Config{Level: "info"})
 //
 //	// Create a new RabbitMQ client
-//	client, err := rabbit.New(rabbit.Config{
+//	, err := rabbit.New(rabbit.Config{
 //		Connection: rabbit.ConnectionConfig{
 //			URI: "amqp://guest:guest@localhost:5672/",
 //		},
@@ -84,7 +84,7 @@
 //
 // FX Module Integration:
 //
-// This package provides an fx module for easy integration:
+// This package provides a fx module for easy integration:
 //
 //	app := fx.New(
 //		logger.Module,
