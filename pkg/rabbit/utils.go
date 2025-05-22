@@ -8,18 +8,46 @@ import (
 	"time"
 )
 
+// Message defines the interface for consumed messages from RabbitMQ.
+// This interface abstracts the underlying AMQP message structure and
+// provides methods for acknowledging or rejecting messages.
 type Message interface {
+	// AckMsg acknowledges the message, informing RabbitMQ that the message
+	// has been successfully processed and can be removed from the queue.
 	AckMsg() error
+
+	// NackMsg rejects the message. If requeue is true, the message will be
+	// returned to the queue for redelivery; otherwise, it will be discarded
+	// or sent to a dead-letter exchange if configured.
 	NackMsg(requeue bool) error
+
+	// Body returns the message payload as a byte slice.
 	Body() []byte
 }
 
+// ConsumerMessage implements the Message interface and wraps an AMQP delivery.
+// This struct provides access to the message content and acknowledgment methods.
 type ConsumerMessage struct {
-	body     []byte
-	delivery *amqp.Delivery
+	body     []byte         // The message payload
+	delivery *amqp.Delivery // The underlying AMQP delivery object
 }
 
-// ConsumeQueue consumes messages from a specified queue
+// consumeQueue consumes messages from a specified queue and sends them to a channel.
+// This is an internal method that handles the actual consumption logic.
+//
+// Parameters:
+//   - ctx: Context for cancellation control
+//   - wg: WaitGroup for coordinating shutdown
+//   - queueName: Name of the queue to consume from
+//
+// Returns a channel that delivers consumed messages. This channel will be closed
+// when consumption stops due to context cancellation, shutdown signal, or errors.
+//
+// The method includes:
+//   - Automatic reconnection when the channel is closed
+//   - Context-aware cancellation
+//   - Graceful shutdown handling
+//   - Buffered output channel to improve throughput
 func (rb *Rabbit) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueName string) <-chan Message {
 	outChan := make(chan Message, 100)
 
@@ -85,17 +113,84 @@ func (rb *Rabbit) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueNam
 	return outChan
 }
 
-// Consume is now a wrapper for backward compatibility
+// Consume starts consuming messages from the queue specified in the configuration.
+// This method provides a channel where consumed messages will be delivered.
+//
+// Parameters:
+//   - ctx: Context for cancellation control
+//   - wg: WaitGroup for coordinating shutdown
+//
+// Returns a channel that delivers Message interfaces for each consumed message.
+//
+// Example:
+//
+//	wg := &sync.WaitGroup{}
+//	ctx, cancel := context.WithCancel(context.Background())
+//	defer cancel()
+//
+//	msgChan := rabbitClient.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    // Process the message
+//	    fmt.Println("Received:", string(msg.Body()))
+//
+//	    // Acknowledge successful processing
+//	    if err := msg.AckMsg(); err != nil {
+//	        log.Printf("Failed to ack message: %v", err)
+//	    }
+//	}
 func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
 	return rb.consumeQueue(ctx, wg, rb.cfg.Channel.QueueName)
 }
 
-// ConsumeDLQ is a convenience wrapper for consuming from DLQ
+// ConsumeDLQ starts consuming messages from the dead-letter queue.
+// This method is useful for processing failed messages that were sent
+// to the dead-letter queue.
+//
+// Parameters:
+//   - ctx: Context for cancellation control
+//   - wg: WaitGroup for coordinating shutdown
+//
+// Returns a channel that delivers Message interfaces for each consumed message
+// from the dead-letter queue.
+//
+// Example:
+//
+//	wg := &sync.WaitGroup{}
+//	ctx, cancel := context.WithCancel(context.Background())
+//	defer cancel()
+//
+//	dlqChan := rabbitClient.ConsumeDLQ(ctx, wg)
+//	for msg := range dlqChan {
+//	    // Process the failed message
+//	    fmt.Println("Failed message:", string(msg.Body()))
+//
+//	    // Acknowledge after processing
+//	    msg.AckMsg()
+//	}
 func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
 	return rb.consumeQueue(ctx, wg, "dlq-queue")
 }
 
-// Publish sends a message to the RabbitMQ exchange.
+// Publish sends a message to the RabbitMQ exchange specified in the configuration.
+// This method is thread-safe and respects context cancellation.
+//
+// Parameters:
+//   - ctx: Context for cancellation control
+//   - msg: Message payload as a byte slice
+//
+// Returns an error if publishing fails or if the context is cancelled.
+//
+// Example:
+//
+//	ctx := context.Background()
+//	message := []byte("Hello, RabbitMQ!")
+//
+//	err := rabbitClient.Publish(ctx, message)
+//	if err != nil {
+//	    log.Printf("Failed to publish message: %v", err)
+//	} else {
+//	    log.Println("Message published successfully")
+//	}
 func (rb *Rabbit) Publish(ctx context.Context, msg []byte) error {
 
 	select {
@@ -135,14 +230,27 @@ func (rb *Rabbit) Publish(ctx context.Context, msg []byte) error {
 	}
 }
 
+// AckMsg acknowledges the message, informing RabbitMQ that the message
+// has been successfully processed and can be removed from the queue.
+//
+// Returns an error if the acknowledgment fails.
 func (rb *ConsumerMessage) AckMsg() error {
 	return rb.delivery.Ack(false)
 }
 
+// NackMsg rejects the message. If requeue is true, the message will be
+// returned to the queue for redelivery; otherwise, it will be discarded
+// or sent to a dead-letter exchange if configured.
+//
+// Parameters:
+//   - requeue: Whether to requeue the message for another delivery attempt
+//
+// Returns an error if the rejection fails.
 func (rb *ConsumerMessage) NackMsg(requeue bool) error {
 	return rb.delivery.Nack(false, requeue)
 }
 
+// Body returns the message payload as a byte slice.
 func (rb *ConsumerMessage) Body() []byte {
 	return rb.body
 }
