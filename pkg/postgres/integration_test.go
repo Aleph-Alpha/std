@@ -209,7 +209,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMocklogger(ctrl)
+	mockLogger := NewMockLogger(ctrl)
 
 	// Override Fatal to prevent test termination
 	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -460,7 +460,7 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMocklogger(ctrl)
+	mockLogger := NewMockLogger(ctrl)
 
 	// Override Fatal to prevent test termination
 	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -598,7 +598,7 @@ func TestAdvancedQueryOperations(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMocklogger(ctrl)
+	mockLogger := NewMockLogger(ctrl)
 
 	// Set up expected Logger calls
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -1755,7 +1755,7 @@ func TestTransactionHandling(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMocklogger(ctrl)
+	mockLogger := NewMockLogger(ctrl)
 
 	// Set up expected Logger calls
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
