@@ -15,6 +15,7 @@ Core Features:
 - Bucket operations \(create, check existence\)
 - Object operations \(upload, download, delete\)
 - Presigned URL generation for temporary access
+- Multipart upload and download support for large files
 - Notification configuration
 - Integration with the Logger package for structured logging
 
@@ -22,41 +23,106 @@ Basic Usage:
 
 ```
 import (
-	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/minio"
-	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/minio"
+		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+	)
+
+	// Create a logger
+	log, _ := logger.NewLogger(logger.Config{Level: "info"})
+
+	// Create a new MinIO client
+	client, err := minio.New(minio.Config{
+		Connection: minio.ConnectionConfig{
+			Endpoint:        "play.min.io",
+			AccessKeyID:     "minioadmin",
+			SecretAccessKey: "minioadmin",
+			UseSSL:          true,
+			BucketName:      "mybucket",
+         AccessBucketCreation: true,
+		},
+		PresignedConfig: minio.PresignedConfig{
+			ExpiryDuration: 1 * time.Hour,
+		},
+	}, log)
+	if err != nil {
+		log.Fatal("Failed to create MinIO client", err, nil)
+	}
+
+	// Create a bucket if it doesn't exist
+	err = client.CreateBucket(context.Background(), "mybucket")
+	if err != nil {
+		log.Error("Failed to create bucket", err, nil)
+	}
+
+	// Upload a file
+	file, _ := os.Open("/local/path/file.txt")
+	defer file.Close()
+	fileInfo, _ := file.Stat()
+	_, err = client.Put(context.Background(), "path/to/object.txt", file, fileInfo.Size())
+	if err != nil {
+		log.Error("Failed to upload file", err, nil)
+	}
+
+	// Generate a presigned URL for downloading
+	url, err := client.PreSignedGet(context.Background(), "path/to/object.txt")
+	if err != nil {
+		log.Error("Failed to generate presigned URL", err, nil)
+	}
+```
+
+Multipart Operations:
+
+For large files, the package provides multipart upload and download capabilities:
+
+Multipart Upload Example:
+
+```
+// Generate multipart upload URLs for a 1GB file
+upload, err := client.GenerateMultipartUploadURLs(
+	ctx,
+	"large-file.zip",
+	1024*1024*1024, // 1GB
+	"application/zip",
+	2*time.Hour, // URLs valid for 2 hours
 )
-
-// Create a logger
-log, _ := logger.NewLogger(logger.Config{Level: "info"})
-
-// Create a new MinIO client
-client, err := minio.New(minio.Config{
-	Endpoint:  "play.min.io",
-	AccessKey: "minioadmin",
-	SecretKey: "minioadmin",
-	Secure:    true,
-}, log)
 if err != nil {
-	log.Fatal("Failed to create MinIO client", err, nil)
+	log.Error("Failed to generate upload URLs", err, nil)
 }
 
-// Create a bucket if it doesn't exist
-err = client.CreateBucketIfNotExists(context.Background(), "mybucket")
+// Use the returned URLs to upload each part
+urls := upload.GetPresignedURLs()
+partNumbers := upload.GetPartNumbers()
+
+// After uploading parts, complete the multipart upload
+err = client.CompleteMultipartUpload(
+	ctx,
+	upload.GetObjectKey(),
+	upload.GetUploadID(),
+	partNumbers,
+	etags, // ETags returned from each part upload
+)
+```
+
+Multipart Download Example:
+
+```
+// Generate multipart download URLs for a large file
+download, err := client.GenerateMultipartPresignedGetURLs(
+	ctx,
+	"large-file.zip",
+	10*1024*1024, // 10MB parts
+	1*time.Hour,  // URLs valid for 1 hour
+)
 if err != nil {
-	log.Error("Failed to create bucket", err, nil)
+	log.Error("Failed to generate download URLs", err, nil)
 }
 
-// Upload a file
-_, err = client.UploadFile(context.Background(), "mybucket", "path/to/object.txt", "/local/path/file.txt", nil)
-if err != nil {
-	log.Error("Failed to upload file", err, nil)
-}
+// Use the returned URLs to download each part
+urls := download.GetPresignedURLs()
+ranges := download.GetPartRanges()
 
-// Generate a presigned URL valid for 1 hour
-url, err := client.GetPresignedURL(context.Background(), "mybucket", "path/to/object.txt", time.Hour)
-if err != nil {
-	log.Error("Failed to generate presigned URL", err, nil)
-}
+// Each URL can be used with an HTTP client to download a specific part
+// by setting the Range header to the corresponding value from ranges
 ```
 
 FX Module Integration:
@@ -77,7 +143,7 @@ Security Considerations:
 When using this package, follow these security best practices:
 
 - Use environment variables or a secure secrets manager for credentials
-- Always enable TLS \(Secure=true\) in production environments
+- Always enable TLS \(UseSSL=true\) in production environments
 - Use presigned URLs with the shortest viable expiration time
 - Set appropriate bucket policies and access controls
 - Consider using server\-side encryption for sensitive data
@@ -87,7 +153,7 @@ Error Handling:
 All operations return clear error messages that can be logged:
 
 ```
-_, err := client.DownloadFile(ctx, "mybucket", "object.txt", "/local/path/download.txt")
+data, err := client.Get(ctx, "object.txt")
 if err != nil {
 	if strings.Contains(err.Error(), "The specified key does not exist") {
 		// Handle not found case
@@ -97,6 +163,10 @@ if err != nil {
 	}
 }
 ```
+
+Thread Safety:
+
+All methods on the Minio type are safe for concurrent use by multiple goroutines.
 
 Package minio is a generated GoMock package.
 
@@ -174,6 +244,8 @@ const (
 
     // UploadDefaultContentType is the default MIME type to use for uploaded objects.
     UploadDefaultContentType string = "application/octet-stream"
+
+    MultipartDownloadDefaultPartSize int64 = 5 * 1024 * 1024
 )
 ```
 
@@ -221,7 +293,7 @@ The function registers two background goroutines: 1. A connection monitor that c
 On application shutdown, it ensures these goroutines are properly terminated and waits for their completion before allowing the application to exit.
 
 <a name="AMQPNotification"></a>
-## type [AMQPNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L184-L217>)
+## type [AMQPNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L189-L222>)
 
 AMQPNotification defines an AMQP notification target. AMQP notifications can be used with systems like RabbitMQ.
 
@@ -263,7 +335,7 @@ type AMQPNotification struct {
 ```
 
 <a name="BaseNotification"></a>
-## type [BaseNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L152-L167>)
+## type [BaseNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L157-L172>)
 
 BaseNotification contains common properties for all notification types. This is embedded in specific notification target types.
 
@@ -333,7 +405,7 @@ Parameters:
 - b: The buffer to return to the pool
 
 <a name="Config"></a>
-## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L38-L53>)
+## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L40-L55>)
 
 Config defines the top\-level configuration for MinIO. This structure contains all configuration options for the MinIO client, organized into logical sections for different aspects of functionality.
 
@@ -357,7 +429,7 @@ type Config struct {
 ```
 
 <a name="ConnectionConfig"></a>
-## type [ConnectionConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L57-L78>)
+## type [ConnectionConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L59-L80>)
 
 ConnectionConfig contains MinIO server connection details. These parameters are required to establish a connection to a MinIO server.
 
@@ -387,7 +459,7 @@ type ConnectionConfig struct {
 ```
 
 <a name="DownloadConfig"></a>
-## type [DownloadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L102-L110>)
+## type [DownloadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L104-L115>)
 
 DownloadConfig defines parameters that control download behavior. These settings optimize memory usage when downloading objects of different sizes.
 
@@ -400,11 +472,14 @@ type DownloadConfig struct {
     // InitialBufferSize is the starting buffer size in bytes for downloading large files
     // This affects memory usage when downloading large objects
     InitialBufferSize int
+
+    // DefaultMultipartDownload is the default size of parts to download at each part
+    DefaultMultipartDownload int
 }
 ```
 
 <a name="KafkaNotification"></a>
-## type [KafkaNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L237-L249>)
+## type [KafkaNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L242-L254>)
 
 KafkaNotification defines a Kafka notification target. Kafka notifications publish events to a Kafka topic.
 
@@ -425,7 +500,7 @@ type KafkaNotification struct {
 ```
 
 <a name="KafkaSASLAuth"></a>
-## type [KafkaSASLAuth](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L253-L262>)
+## type [KafkaSASLAuth](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L258-L267>)
 
 KafkaSASLAuth contains Kafka SASL authentication details. SASL is used for authenticating with Kafka brokers.
 
@@ -467,7 +542,7 @@ type Logger interface {
 ```
 
 <a name="MQTTNotification"></a>
-## type [MQTTNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L266-L290>)
+## type [MQTTNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L271-L295>)
 
 MQTTNotification defines an MQTT notification target. MQTT notifications publish events to an MQTT broker.
 
@@ -1157,7 +1232,7 @@ type MultipartUploadInfo struct {
 ```
 
 <a name="NotificationConfig"></a>
-## type [NotificationConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L130-L148>)
+## type [NotificationConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L135-L153>)
 
 NotificationConfig defines the configuration for event notifications. MinIO can send notifications when events occur on buckets \(e.g., object created\).
 
@@ -1184,7 +1259,7 @@ type NotificationConfig struct {
 ```
 
 <a name="PresignedConfig"></a>
-## type [PresignedConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L114-L126>)
+## type [PresignedConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L119-L131>)
 
 PresignedConfig contains configuration options for presigned URLs. Presigned URLs allow temporary access to objects without requiring AWS credentials.
 
@@ -1205,7 +1280,7 @@ type PresignedConfig struct {
 ```
 
 <a name="RedisNotification"></a>
-## type [RedisNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L221-L233>)
+## type [RedisNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L226-L238>)
 
 RedisNotification defines a Redis notification target. Redis notifications publish events to a Redis pub/sub channel or list.
 
@@ -1226,7 +1301,7 @@ type RedisNotification struct {
 ```
 
 <a name="UploadConfig"></a>
-## type [UploadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L82-L98>)
+## type [UploadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L84-L100>)
 
 UploadConfig defines the configuration for upload constraints. These parameters control how objects are uploaded, particularly for large objects.
 
@@ -1251,7 +1326,7 @@ type UploadConfig struct {
 ```
 
 <a name="WebhookNotification"></a>
-## type [WebhookNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L171-L180>)
+## type [WebhookNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L176-L185>)
 
 WebhookNotification defines a webhook notification target. Webhook notifications send HTTP POST requests to a specified endpoint.
 

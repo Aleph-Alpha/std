@@ -9,47 +9,109 @@
 //   - Bucket operations (create, check existence)
 //   - Object operations (upload, download, delete)
 //   - Presigned URL generation for temporary access
+//   - Multipart upload and download support for large files
 //   - Notification configuration
 //   - Integration with the Logger package for structured logging
 //
 // Basic Usage:
 //
-//	import (
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/minio"
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+//		import (
+//			"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/minio"
+//			"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+//		)
+//
+//		// Create a logger
+//		log, _ := logger.NewLogger(logger.Config{Level: "info"})
+//
+//		// Create a new MinIO client
+//		client, err := minio.New(minio.Config{
+//			Connection: minio.ConnectionConfig{
+//				Endpoint:        "play.min.io",
+//				AccessKeyID:     "minioadmin",
+//				SecretAccessKey: "minioadmin",
+//				UseSSL:          true,
+//				BucketName:      "mybucket",
+//	         AccessBucketCreation: true,
+//			},
+//			PresignedConfig: minio.PresignedConfig{
+//				ExpiryDuration: 1 * time.Hour,
+//			},
+//		}, log)
+//		if err != nil {
+//			log.Fatal("Failed to create MinIO client", err, nil)
+//		}
+//
+//		// Create a bucket if it doesn't exist
+//		err = client.CreateBucket(context.Background(), "mybucket")
+//		if err != nil {
+//			log.Error("Failed to create bucket", err, nil)
+//		}
+//
+//		// Upload a file
+//		file, _ := os.Open("/local/path/file.txt")
+//		defer file.Close()
+//		fileInfo, _ := file.Stat()
+//		_, err = client.Put(context.Background(), "path/to/object.txt", file, fileInfo.Size())
+//		if err != nil {
+//			log.Error("Failed to upload file", err, nil)
+//		}
+//
+//		// Generate a presigned URL for downloading
+//		url, err := client.PreSignedGet(context.Background(), "path/to/object.txt")
+//		if err != nil {
+//			log.Error("Failed to generate presigned URL", err, nil)
+//		}
+//
+// Multipart Operations:
+//
+// For large files, the package provides multipart upload and download capabilities:
+//
+// Multipart Upload Example:
+//
+//	// Generate multipart upload URLs for a 1GB file
+//	upload, err := client.GenerateMultipartUploadURLs(
+//		ctx,
+//		"large-file.zip",
+//		1024*1024*1024, // 1GB
+//		"application/zip",
+//		2*time.Hour, // URLs valid for 2 hours
+//	)
+//	if err != nil {
+//		log.Error("Failed to generate upload URLs", err, nil)
+//	}
+//
+//	// Use the returned URLs to upload each part
+//	urls := upload.GetPresignedURLs()
+//	partNumbers := upload.GetPartNumbers()
+//
+//	// After uploading parts, complete the multipart upload
+//	err = client.CompleteMultipartUpload(
+//		ctx,
+//		upload.GetObjectKey(),
+//		upload.GetUploadID(),
+//		partNumbers,
+//		etags, // ETags returned from each part upload
 //	)
 //
-//	// Create a logger
-//	log, _ := logger.NewLogger(logger.Config{Level: "info"})
+// Multipart Download Example:
 //
-//	// Create a new MinIO client
-//	client, err := minio.New(minio.Config{
-//		Endpoint:  "play.min.io",
-//		AccessKey: "minioadmin",
-//		SecretKey: "minioadmin",
-//		Secure:    true,
-//	}, log)
+//	// Generate multipart download URLs for a large file
+//	download, err := client.GenerateMultipartPresignedGetURLs(
+//		ctx,
+//		"large-file.zip",
+//		10*1024*1024, // 10MB parts
+//		1*time.Hour,  // URLs valid for 1 hour
+//	)
 //	if err != nil {
-//		log.Fatal("Failed to create MinIO client", err, nil)
+//		log.Error("Failed to generate download URLs", err, nil)
 //	}
 //
-//	// Create a bucket if it doesn't exist
-//	err = client.CreateBucketIfNotExists(context.Background(), "mybucket")
-//	if err != nil {
-//		log.Error("Failed to create bucket", err, nil)
-//	}
+//	// Use the returned URLs to download each part
+//	urls := download.GetPresignedURLs()
+//	ranges := download.GetPartRanges()
 //
-//	// Upload a file
-//	_, err = client.UploadFile(context.Background(), "mybucket", "path/to/object.txt", "/local/path/file.txt", nil)
-//	if err != nil {
-//		log.Error("Failed to upload file", err, nil)
-//	}
-//
-//	// Generate a presigned URL valid for 1 hour
-//	url, err := client.GetPresignedURL(context.Background(), "mybucket", "path/to/object.txt", time.Hour)
-//	if err != nil {
-//		log.Error("Failed to generate presigned URL", err, nil)
-//	}
+//	// Each URL can be used with an HTTP client to download a specific part
+//	// by setting the Range header to the corresponding value from ranges
 //
 // FX Module Integration:
 //
@@ -66,7 +128,7 @@
 //
 // When using this package, follow these security best practices:
 //   - Use environment variables or a secure secrets manager for credentials
-//   - Always enable TLS (Secure=true) in production environments
+//   - Always enable TLS (UseSSL=true) in production environments
 //   - Use presigned URLs with the shortest viable expiration time
 //   - Set appropriate bucket policies and access controls
 //   - Consider using server-side encryption for sensitive data
@@ -75,7 +137,7 @@
 //
 // All operations return clear error messages that can be logged:
 //
-//	_, err := client.DownloadFile(ctx, "mybucket", "object.txt", "/local/path/download.txt")
+//	data, err := client.Get(ctx, "object.txt")
 //	if err != nil {
 //		if strings.Contains(err.Error(), "The specified key does not exist") {
 //			// Handle not found case
@@ -84,4 +146,8 @@
 //			log.Error("Download failed", err, nil)
 //		}
 //	}
+//
+// Thread Safety:
+//
+// All methods on the Minio type are safe for concurrent use by multiple goroutines.
 package minio
