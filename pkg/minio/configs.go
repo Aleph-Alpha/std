@@ -30,6 +30,8 @@ const (
 
 	// UploadDefaultContentType is the default MIME type to use for uploaded objects.
 	UploadDefaultContentType string = "application/octet-stream"
+
+	MultipartDownloadDefaultPartSize int64 = 5 * 1024 * 1024
 )
 
 // Config defines the top-level configuration for MinIO.
@@ -107,6 +109,9 @@ type DownloadConfig struct {
 	// InitialBufferSize is the starting buffer size in bytes for downloading large files
 	// This affects memory usage when downloading large objects
 	InitialBufferSize int
+
+	// DefaultMultipartDownload is the default size of parts to download at each part
+	DefaultMultipartDownload int
 }
 
 // PresignedConfig contains configuration options for presigned URLs.

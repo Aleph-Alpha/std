@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -1466,4 +1467,459 @@ func waitForObjectToBeAvailable(t *testing.T, ctx context.Context, client *Minio
 	}
 
 	t.Fatalf("Object verification failed after %d retries", maxRetries)
+}
+
+// TestGenerateMultipartPresignedGetURLs tests the functionality of generating presigned URLs
+// for multipart downloads with various file sizes and configurations
+func TestGenerateMultipartPresignedGetURLs(t *testing.T) {
+	// Set up context with cancellation capability
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start MinIO container
+	containerInstance, host, port, err := createMinIOContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if containerInstance != nil {
+			_ = containerInstance.Terminate(ctx)
+		}
+	}()
+
+	// Wait for MinIO to be ready
+	err = waitForMinioReady(host, port, 10*time.Second)
+	require.NoError(t, err)
+
+	// Create mock controller and logger
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockLogger := NewMockLogger(ctrl)
+
+	// Set logger expectations
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Define file sizes for testing
+	smallFileSize := int64(10 * 1024 * 1024)   // 10MB
+	mediumFileSize := int64(100 * 1024 * 1024) // 100MB
+	largeFileSize := int64(256 * 1024 * 1024)  // 256MB (to keep test duration reasonable)
+
+	// Run test cases
+	testCases := []struct {
+		name             string
+		config           Config
+		objectKey        string
+		fileSize         int64
+		contentType      string
+		partSize         int64
+		customExpiry     time.Duration
+		expectError      bool
+		validateInfo     func(t *testing.T, download MultipartPresignedGet)
+		validateDownload bool // Whether to test actual download using the URLs
+		skipInShortMode  bool
+	}{
+		{
+			name: "Basic Multipart Download",
+			config: Config{
+				Connection: ConnectionConfig{
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
+				},
+				PresignedConfig: PresignedConfig{
+					ExpiryDuration: 15 * time.Minute,
+				},
+			},
+			objectKey:        "test-multipart-get-small.dat",
+			fileSize:         smallFileSize,
+			contentType:      "application/octet-stream",
+			partSize:         5 * 1024 * 1024, // 5MB parts
+			validateDownload: true,
+			validateInfo: func(t *testing.T, download MultipartPresignedGet) {
+				require.Equal(t, "test-multipart-get-small.dat", download.GetObjectKey())
+				require.Equal(t, smallFileSize, download.GetTotalSize())
+				require.Equal(t, "application/octet-stream", download.GetContentType())
+
+				// Check URL and range count (10MB file with 5MB parts = 2 parts)
+				urls := download.GetPresignedURLs()
+				ranges := download.GetPartRanges()
+				require.Equal(t, 2, len(urls))
+				require.Equal(t, 2, len(ranges))
+
+				// Check that ranges are correct
+				require.Equal(t, "bytes=0-5242879", ranges[0])
+				require.Equal(t, fmt.Sprintf("bytes=5242880-%d", smallFileSize-1), ranges[1])
+
+				// Check expiry time is in the future
+				require.Greater(t, download.GetExpiryTimestamp(), time.Now().Unix())
+
+				// Check URLs contain necessary query parameters
+				for _, url := range urls {
+					require.Contains(t, url, "X-Amz-Signature=")
+					require.Contains(t, url, "response-content-range=bytes")
+				}
+
+				// Test IsExpired() function
+				require.False(t, download.IsExpired(), "Download URLs should not be expired yet")
+			},
+		},
+		{
+			name: "Medium File Download with Custom Expiry",
+			config: Config{
+				Connection: ConnectionConfig{
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
+				},
+				PresignedConfig: PresignedConfig{
+					ExpiryDuration: 15 * time.Minute, // Default, but we'll override
+				},
+			},
+			objectKey:        "test-multipart-get-medium.dat",
+			fileSize:         mediumFileSize,
+			contentType:      "application/binary",
+			partSize:         10 * 1024 * 1024, // 10MB parts
+			customExpiry:     60 * time.Minute, // Custom 1-hour expiry
+			validateDownload: true,
+			validateInfo: func(t *testing.T, download MultipartPresignedGet) {
+				// Check that expiry time is approximately 1 hour in the future
+				expectedExpiry := time.Now().Add(60 * time.Minute).Unix()
+				require.InDelta(t, expectedExpiry, download.GetExpiryTimestamp(), 5) // Allow 5-second tolerance
+
+				// Check URL count (100MB with 10MB parts = 10 parts)
+				require.Equal(t, 10, len(download.GetPresignedURLs()))
+				require.Equal(t, 10, len(download.GetPartRanges()))
+
+				// Check ETag is not empty
+				require.NotEmpty(t, download.GetETag())
+			},
+		},
+		{
+			name: "Large File Download",
+			config: Config{
+				Connection: ConnectionConfig{
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
+				},
+				PresignedConfig: PresignedConfig{
+					ExpiryDuration: 30 * time.Minute,
+				},
+			},
+			objectKey:        "test-multipart-get-large.dat",
+			fileSize:         largeFileSize,
+			contentType:      "application/binary",
+			partSize:         16 * 1024 * 1024, // 16MB parts
+			validateDownload: false,            // Skip full download for large file to save time
+			validateInfo: func(t *testing.T, download MultipartPresignedGet) {
+				// Check URL count (256MB with 16MB parts = 16 parts)
+				require.Equal(t, 16, len(download.GetPresignedURLs()))
+				require.Equal(t, 16, len(download.GetPartRanges()))
+
+				// Validate just the first and last range
+				ranges := download.GetPartRanges()
+				require.Equal(t, "bytes=0-16777215", ranges[0])
+				require.Equal(t, fmt.Sprintf("bytes=%d-%d", (len(ranges)-1)*16*1024*1024, largeFileSize-1), ranges[len(ranges)-1])
+			},
+			skipInShortMode: true,
+		},
+		{
+			name: "With Custom Base URL",
+			config: Config{
+				Connection: ConnectionConfig{
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
+				},
+				PresignedConfig: PresignedConfig{
+					ExpiryDuration: 15 * time.Minute,
+					BaseURL:        "https://custom-endpoint.example.com",
+				},
+			},
+			objectKey:        "test-multipart-get-custom-url.dat",
+			fileSize:         smallFileSize,
+			partSize:         5 * 1024 * 1024, // 5MB parts
+			contentType:      "application/octet-stream",
+			validateDownload: false, // Skip download as custom URL won't be reachable
+			validateInfo: func(t *testing.T, download MultipartPresignedGet) {
+				// Check that URLs use the custom domain
+				urls := download.GetPresignedURLs()
+				for _, url := range urls {
+					require.Contains(t, url, "https://custom-endpoint.example.com")
+					require.NotContains(t, url, host)
+				}
+			},
+		},
+		{
+			name: "Small Part Size (below minimum)",
+			config: Config{
+				Connection: ConnectionConfig{
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
+				},
+				PresignedConfig: PresignedConfig{
+					ExpiryDuration: 15 * time.Minute,
+				},
+			},
+			objectKey:        "test-multipart-get-small-parts.dat",
+			fileSize:         smallFileSize,
+			contentType:      "application/octet-stream",
+			partSize:         1 * 1024 * 1024, // 1MB parts (below minimum)
+			validateDownload: false,
+			validateInfo: func(t *testing.T, download MultipartPresignedGet) {
+				// Should adjust to minimum part size (5MB)
+				// 10MB file with 5MB parts = 2 parts
+				require.Equal(t, 2, len(download.GetPresignedURLs()))
+			},
+		},
+		{
+			name: "Error - Object Doesn't Exist",
+			config: Config{
+				Connection: ConnectionConfig{
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					AccessBucketCreation: true,
+				},
+				PresignedConfig: PresignedConfig{
+					ExpiryDuration: 15 * time.Minute,
+				},
+			},
+			objectKey:        "non-existent-object.dat",
+			partSize:         5 * 1024 * 1024,
+			expectError:      true,
+			validateDownload: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Skip large file tests in short mode
+			if testing.Short() && tc.skipInShortMode {
+				t.Skip("Skipping large file test in short mode")
+			}
+
+			// Create a client for this test case
+			var client *Minio
+			app := fxtest.New(t,
+				FXModule,
+				fx.Provide(
+					func() Config {
+						return tc.config
+					},
+					func() Logger {
+						return mockLogger
+					},
+				),
+				fx.Populate(&client),
+			)
+
+			require.NoError(t, app.Start(ctx))
+			defer func() {
+				require.NoError(t, app.Stop(ctx))
+			}()
+
+			// Skip setup for the error test case with non-existent object
+			if tc.objectKey != "non-existent-object.dat" {
+				// Create and upload a test file first
+				uploadTestFile(t, ctx, client, tc.objectKey, tc.fileSize, tc.contentType)
+			}
+
+			// Generate multipart download URLs
+			var download MultipartPresignedGet
+			var err error
+
+			// Call with custom expiry if specified
+			if tc.customExpiry > 0 {
+				download, err = client.GenerateMultipartPresignedGetURLs(
+					ctx, tc.objectKey, tc.partSize, tc.customExpiry)
+			} else {
+				download, err = client.GenerateMultipartPresignedGetURLs(
+					ctx, tc.objectKey, tc.partSize)
+			}
+
+			// Verify error handling
+			if tc.expectError {
+				require.Error(t, err, "Expected an error for test case: %s", tc.name)
+				require.Nil(t, download, "Download should be nil when an error occurs")
+				return
+			}
+
+			require.NoError(t, err, "Failed to generate multipart download URLs")
+			require.NotNil(t, download, "MultipartPresignedGet should not be nil")
+
+			// Log basic info for reference
+			t.Logf("Generated multipart download for object: %s", download.GetObjectKey())
+			t.Logf("Total URLs generated: %d", len(download.GetPresignedURLs()))
+			t.Logf("Total size: %d bytes", download.GetTotalSize())
+
+			// Validate the returned info
+			if tc.validateInfo != nil {
+				tc.validateInfo(t, download)
+			}
+
+			// Skip the actual download test if not required
+			if !tc.validateDownload {
+				return
+			}
+
+			// Test downloading parts
+			urls := download.GetPresignedURLs()
+			ranges := download.GetPartRanges()
+
+			// Create a byte slice to store the reassembled content
+			totalBytes := make([]byte, download.GetTotalSize())
+			var bytesDownloaded int64
+
+			// Use a simple HTTP client for downloads
+			httpClient := &http.Client{Timeout: 30 * time.Second}
+
+			// Download each part
+			for i, url := range urls {
+				t.Logf("Downloading part %d of %d with range %s", i+1, len(urls), ranges[i])
+
+				// Create request with range header
+				req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+				require.NoError(t, err, "Failed to create request for part %d", i+1)
+				req.Header.Set("Range", ranges[i])
+
+				// Download the part
+				resp, err := httpClient.Do(req)
+				require.NoError(t, err, "Failed to download part %d", i+1)
+				defer resp.Body.Close()
+
+				// Verify response status code (should be 206 Partial Content)
+				require.Equal(t, http.StatusPartialContent, resp.StatusCode,
+					"Expected 206 Partial Content status for part %d, got %d",
+					i+1, resp.StatusCode)
+
+				// Parse the range to determine where in the buffer to put the data
+				rangeStr := ranges[i]
+				startEnd := strings.Split(strings.Split(rangeStr, "=")[1], "-")
+				start, _ := strconv.ParseInt(startEnd[0], 10, 64)
+
+				// Read the part data directly into the correct position in the buffer
+				n, err := io.ReadFull(resp.Body, totalBytes[start:start+resp.ContentLength])
+				require.NoError(t, err, "Failed to read part data")
+				require.Equal(t, resp.ContentLength, int64(n), "Downloaded bytes mismatch")
+
+				bytesDownloaded += int64(n)
+			}
+
+			// Verify total bytes downloaded
+			require.Equal(t, download.GetTotalSize(), bytesDownloaded,
+				"Total downloaded size mismatch")
+
+			// For small files, verify content integrity by downloading the full file and comparing
+			if tc.fileSize <= smallFileSize {
+				fullData, err := client.Get(ctx, tc.objectKey)
+				require.NoError(t, err, "Failed to download full file for comparison")
+				require.Equal(t, len(fullData), len(totalBytes), "Full download size mismatch")
+
+				// Compare content
+				require.Equal(t, fullData, totalBytes, "Multipart download content differs from full download")
+				t.Log("Successfully verified data integrity by comparing with full download")
+			}
+
+			// Clean up
+			err = client.Delete(ctx, tc.objectKey)
+			require.NoError(t, err, "Failed to clean up test object")
+		})
+	}
+}
+
+// uploadTestFile creates and uploads a test file with the specified size and content type
+func uploadTestFile(t *testing.T, ctx context.Context, client *Minio, objectKey string, fileSize int64, contentType string) {
+	t.Helper()
+
+	// Generate test data
+	var reader io.Reader
+	if fileSize <= 10*1024*1024 { // 10MB or less
+		// For small files, use a string pattern
+		pattern := generateTestContent(fileSize)
+		reader = strings.NewReader(pattern)
+	} else {
+		// For larger files, use a deterministic random data generator
+		reader = newRandomDataReader(fileSize)
+	}
+
+	// Create a temporary file
+	tempFile, err := os.CreateTemp("", "minio-test-*")
+	require.NoError(t, err, "Failed to create temporary file")
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Write data to the temp file
+	written, err := io.Copy(tempFile, reader)
+	require.NoError(t, err, "Failed to write to temporary file")
+	require.Equal(t, fileSize, written, "Written file size mismatch")
+
+	// Rewind the file for reading
+	_, err = tempFile.Seek(0, 0)
+	require.NoError(t, err, "Failed to rewind temporary file")
+
+	// Upload the file using the Put method with size
+	t.Logf("Uploading test file %s (%d bytes)", objectKey, fileSize)
+	uploadedSize, err := client.Put(ctx, objectKey, tempFile, fileSize)
+	require.NoError(t, err, "Failed to upload test file")
+	require.Equal(t, fileSize, uploadedSize, "Uploaded size mismatch")
+
+	// Verify the file exists and has correct size and content type
+	objInfo, err := client.Client.StatObject(ctx, client.cfg.Connection.BucketName,
+		objectKey, minio.StatObjectOptions{})
+	require.NoError(t, err, "Failed to verify uploaded file")
+	require.Equal(t, fileSize, objInfo.Size, "Uploaded file size mismatch")
+
+	// Set the content type if needed using CopyObject with metadata
+	if contentType != "" && objInfo.ContentType != contentType {
+		// Create source options
+		srcOpts := minio.CopySrcOptions{
+			Bucket: client.cfg.Connection.BucketName,
+			Object: objectKey,
+		}
+
+		// Create destination options with a new content type
+		dstOpts := minio.CopyDestOptions{
+			Bucket: client.cfg.Connection.BucketName,
+			Object: objectKey,
+			UserMetadata: map[string]string{
+				"Content-Type": contentType,
+			},
+			ReplaceMetadata: true,
+		}
+
+		// Copy an object to itself with new metadata
+		_, err = client.Client.CopyObject(ctx, dstOpts, srcOpts)
+		require.NoError(t, err, "Failed to set content type")
+
+		// Verify the content type was set
+		objInfo, err = client.Client.StatObject(ctx, client.cfg.Connection.BucketName,
+			objectKey, minio.StatObjectOptions{})
+		require.NoError(t, err, "Failed to verify content type")
+		require.Equal(t, contentType, objInfo.ContentType, "Content type mismatch")
+	}
+
+	t.Logf("Successfully uploaded test file: %s (%d bytes)", objInfo.Key, objInfo.Size)
 }
