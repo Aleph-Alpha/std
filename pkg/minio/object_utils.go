@@ -40,8 +40,12 @@ func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, siz
 		actualSize = size[0]
 	}
 
+	// Extract tracing information from context or generate new IDs
+	traceMetadata := extractTraceMetadataFromContext(ctx)
+
 	response, err := m.Client.PutObject(ctx, m.cfg.Connection.BucketName, objectKey, reader, actualSize, minio.PutObjectOptions{
-		PartSize: m.cfg.UploadConfig.MinPartSize,
+		PartSize:     m.cfg.UploadConfig.MinPartSize,
+		UserMetadata: traceMetadata,
 	})
 
 	if err != nil {

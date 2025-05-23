@@ -342,8 +342,15 @@ func (m *Minio) initiateMultipartUpload(ctx context.Context, objectKey, contentT
 		contentType = "application/octet-stream"
 	}
 
+	// Extract tracing information from context or generate new IDs
+	traceMetadata := extractTraceMetadataFromContext(ctx)
+
 	// Use a standard client to start multipart upload
-	opts := minio.PutObjectOptions{ContentType: contentType}
+	opts := minio.PutObjectOptions{
+		ContentType:  contentType,
+		UserMetadata: traceMetadata,
+	}
+
 	uploadID, err := m.CoreClient.NewMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, opts)
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize multipart upload: %w", err)
@@ -654,33 +661,4 @@ func (m *Minio) PreSignedPut(ctx context.Context, objectKey string) (string, err
 		return urlGenerator(presignedUrl, m.cfg.PresignedConfig.BaseURL)
 	}
 	return presignedUrl.String(), nil
-}
-
-// urlGenerator replaces the host of a presigned URL with a custom base URL.
-// This internal helper function allows modifying generated presigned URLs
-// to use a different endpoint, which is useful for proxied setups.
-//
-// Parameters:
-//   - presignedUrl: The original URL from MinIO
-//   - baseUrl: The base URL to use instead
-//
-// Returns:
-//   - string: The modified URL
-//   - error: Any error that occurred during URL processing
-func urlGenerator(presignedUrl *url.URL, baseUrl string) (string, error) {
-	base, err := url.Parse(baseUrl)
-	if err != nil {
-		return "", fmt.Errorf("invalid BaseURL format: %v", err)
-	}
-
-	finalURL, err := url.Parse(presignedUrl.String())
-	if err != nil {
-		return "", fmt.Errorf("failed to parse presigned URL: %v", err)
-	}
-	finalURL.Scheme = base.Scheme
-	finalURL.Host = base.Host
-	if base.Path != "" && base.Path != "/" {
-		finalURL.Path = base.ResolveReference(&url.URL{Path: finalURL.Path}).Path
-	}
-	return finalURL.String(), nil
 }
