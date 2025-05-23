@@ -32,7 +32,7 @@ import (
 log, _ := logger.NewLogger(logger.Config{Level: "info"})
 
 // Create a new RabbitMQ client
-client, err := rabbit.New(rabbit.Config{
+, err := rabbit.New(rabbit.Config{
 	Connection: rabbit.ConnectionConfig{
 		URI: "amqp://guest:guest@localhost:5672/",
 	},
@@ -95,7 +95,7 @@ for msg := range dlqChan {
 
 FX Module Integration:
 
-This package provides an fx module for easy integration:
+This package provides a fx module for easy integration:
 
 ```
 app := fx.New(
@@ -636,7 +636,7 @@ for msg := range msgChan {
 func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
 ```
 
-ConsumeDLQ starts consuming messages from the dead\-letter queue. This method is useful for processing failed messages that were sent to the dead\-letter queue.
+ConsumeDLQ starts consuming messages from the dead\-letter queue. This method is useful for processing failed messages sent to the dead\-letter queue.
 
 Parameters:
 
@@ -676,7 +676,7 @@ Parameters:
 - ctx: Context for cancellation control
 - msg: Message payload as a byte slice
 
-Returns an error if publishing fails or if the context is cancelled.
+Returns an error if publishing fails or if the context is canceled.
 
 Example:
 

@@ -133,20 +133,20 @@ Package postgres is a generated GoMock package.
 - [type MigrationDirection](<#MigrationDirection>)
 - [type MigrationHistoryRecord](<#MigrationHistoryRecord>)
 - [type MigrationType](<#MigrationType>)
-- [type Mocklogger](<#Mocklogger>)
-  - [func NewMocklogger\(ctrl \*gomock.Controller\) \*Mocklogger](<#NewMocklogger>)
-  - [func \(m \*Mocklogger\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#Mocklogger.Debug>)
-  - [func \(m \*Mocklogger\) EXPECT\(\) \*MockloggerMockRecorder](<#Mocklogger.EXPECT>)
-  - [func \(m \*Mocklogger\) Error\(msg string, err error, fields ...map\[string\]any\)](<#Mocklogger.Error>)
-  - [func \(m \*Mocklogger\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#Mocklogger.Fatal>)
-  - [func \(m \*Mocklogger\) Info\(msg string, err error, fields ...map\[string\]any\)](<#Mocklogger.Info>)
-  - [func \(m \*Mocklogger\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#Mocklogger.Warn>)
-- [type MockloggerMockRecorder](<#MockloggerMockRecorder>)
-  - [func \(mr \*MockloggerMockRecorder\) Debug\(msg, err any, fields ...any\) \*gomock.Call](<#MockloggerMockRecorder.Debug>)
-  - [func \(mr \*MockloggerMockRecorder\) Error\(msg, err any, fields ...any\) \*gomock.Call](<#MockloggerMockRecorder.Error>)
-  - [func \(mr \*MockloggerMockRecorder\) Fatal\(msg, err any, fields ...any\) \*gomock.Call](<#MockloggerMockRecorder.Fatal>)
-  - [func \(mr \*MockloggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockloggerMockRecorder.Info>)
-  - [func \(mr \*MockloggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockloggerMockRecorder.Warn>)
+- [type MockLogger](<#MockLogger>)
+  - [func NewMockLogger\(ctrl \*gomock.Controller\) \*MockLogger](<#NewMockLogger>)
+  - [func \(m \*MockLogger\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Debug>)
+  - [func \(m \*MockLogger\) EXPECT\(\) \*MockLoggerMockRecorder](<#MockLogger.EXPECT>)
+  - [func \(m \*MockLogger\) Error\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Error>)
+  - [func \(m \*MockLogger\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Fatal>)
+  - [func \(m \*MockLogger\) Info\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Info>)
+  - [func \(m \*MockLogger\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Warn>)
+- [type MockLoggerMockRecorder](<#MockLoggerMockRecorder>)
+  - [func \(mr \*MockLoggerMockRecorder\) Debug\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Debug>)
+  - [func \(mr \*MockLoggerMockRecorder\) Error\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Error>)
+  - [func \(mr \*MockLoggerMockRecorder\) Fatal\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Fatal>)
+  - [func \(mr \*MockLoggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Info>)
+  - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
 - [type Postgres](<#Postgres>)
   - [func NewPostgres\(cfg Config, logger Logger\) \*Postgres](<#NewPostgres>)
   - [func \(p \*Postgres\) AutoMigrate\(models ...interface\{\}\) error](<#Postgres.AutoMigrate>)
@@ -440,132 +440,132 @@ const (
 )
 ```
 
-<a name="Mocklogger"></a>
-## type [Mocklogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L19-L23>)
+<a name="MockLogger"></a>
+## type [MockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L19-L23>)
 
-Mocklogger is a mock of Logger interface.
+MockLogger is a mock of Logger interface.
 
 ```go
-type Mocklogger struct {
+type MockLogger struct {
     // contains filtered or unexported fields
 }
 ```
 
-<a name="NewMocklogger"></a>
-### func [NewMocklogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L31>)
+<a name="NewMockLogger"></a>
+### func [NewMockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L31>)
 
 ```go
-func NewMocklogger(ctrl *gomock.Controller) *Mocklogger
+func NewMockLogger(ctrl *gomock.Controller) *MockLogger
 ```
 
-NewMocklogger creates a new mock instance.
+NewMockLogger creates a new mock instance.
 
-<a name="Mocklogger.Debug"></a>
-### func \(\*Mocklogger\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L43>)
+<a name="MockLogger.Debug"></a>
+### func \(\*MockLogger\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L43>)
 
 ```go
-func (m *Mocklogger) Debug(msg string, err error, fields ...map[string]any)
+func (m *MockLogger) Debug(msg string, err error, fields ...map[string]any)
 ```
 
 Debug mocks base method.
 
-<a name="Mocklogger.EXPECT"></a>
-### func \(\*Mocklogger\) [EXPECT](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L38>)
+<a name="MockLogger.EXPECT"></a>
+### func \(\*MockLogger\) [EXPECT](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L38>)
 
 ```go
-func (m *Mocklogger) EXPECT() *MockloggerMockRecorder
+func (m *MockLogger) EXPECT() *MockLoggerMockRecorder
 ```
 
 EXPECT returns an object that allows the caller to indicate expected use.
 
-<a name="Mocklogger.Error"></a>
-### func \(\*Mocklogger\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L60>)
+<a name="MockLogger.Error"></a>
+### func \(\*MockLogger\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L60>)
 
 ```go
-func (m *Mocklogger) Error(msg string, err error, fields ...map[string]any)
+func (m *MockLogger) Error(msg string, err error, fields ...map[string]any)
 ```
 
 Error mocks base method.
 
-<a name="Mocklogger.Fatal"></a>
-### func \(\*Mocklogger\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L77>)
+<a name="MockLogger.Fatal"></a>
+### func \(\*MockLogger\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L77>)
 
 ```go
-func (m *Mocklogger) Fatal(msg string, err error, fields ...map[string]any)
+func (m *MockLogger) Fatal(msg string, err error, fields ...map[string]any)
 ```
 
 Fatal mocks base method.
 
-<a name="Mocklogger.Info"></a>
-### func \(\*Mocklogger\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L94>)
+<a name="MockLogger.Info"></a>
+### func \(\*MockLogger\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L94>)
 
 ```go
-func (m *Mocklogger) Info(msg string, err error, fields ...map[string]any)
+func (m *MockLogger) Info(msg string, err error, fields ...map[string]any)
 ```
 
 Info mocks base method.
 
-<a name="Mocklogger.Warn"></a>
-### func \(\*Mocklogger\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L111>)
+<a name="MockLogger.Warn"></a>
+### func \(\*MockLogger\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L111>)
 
 ```go
-func (m *Mocklogger) Warn(msg string, err error, fields ...map[string]any)
+func (m *MockLogger) Warn(msg string, err error, fields ...map[string]any)
 ```
 
 Warn mocks base method.
 
-<a name="MockloggerMockRecorder"></a>
-## type [MockloggerMockRecorder](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L26-L28>)
+<a name="MockLoggerMockRecorder"></a>
+## type [MockLoggerMockRecorder](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L26-L28>)
 
-MockloggerMockRecorder is the mock recorder for Mocklogger.
+MockLoggerMockRecorder is the mock recorder for MockLogger.
 
 ```go
-type MockloggerMockRecorder struct {
+type MockLoggerMockRecorder struct {
     // contains filtered or unexported fields
 }
 ```
 
-<a name="MockloggerMockRecorder.Debug"></a>
-### func \(\*MockloggerMockRecorder\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L53>)
+<a name="MockLoggerMockRecorder.Debug"></a>
+### func \(\*MockLoggerMockRecorder\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L53>)
 
 ```go
-func (mr *MockloggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Call
+func (mr *MockLoggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Call
 ```
 
 Debug indicates an expected call of Debug.
 
-<a name="MockloggerMockRecorder.Error"></a>
-### func \(\*MockloggerMockRecorder\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L70>)
+<a name="MockLoggerMockRecorder.Error"></a>
+### func \(\*MockLoggerMockRecorder\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L70>)
 
 ```go
-func (mr *MockloggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Call
+func (mr *MockLoggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Call
 ```
 
 Error indicates an expected call of Error.
 
-<a name="MockloggerMockRecorder.Fatal"></a>
-### func \(\*MockloggerMockRecorder\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L87>)
+<a name="MockLoggerMockRecorder.Fatal"></a>
+### func \(\*MockLoggerMockRecorder\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L87>)
 
 ```go
-func (mr *MockloggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Call
+func (mr *MockLoggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Call
 ```
 
 Fatal indicates an expected call of Fatal.
 
-<a name="MockloggerMockRecorder.Info"></a>
-### func \(\*MockloggerMockRecorder\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L104>)
+<a name="MockLoggerMockRecorder.Info"></a>
+### func \(\*MockLoggerMockRecorder\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L104>)
 
 ```go
-func (mr *MockloggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
+func (mr *MockLoggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
 ```
 
 Info indicates an expected call of Info.
 
-<a name="MockloggerMockRecorder.Warn"></a>
-### func \(\*MockloggerMockRecorder\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L121>)
+<a name="MockLoggerMockRecorder.Warn"></a>
+### func \(\*MockLoggerMockRecorder\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L121>)
 
 ```go
-func (mr *MockloggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
+func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
 ```
 
 Warn indicates an expected call of Warn.
