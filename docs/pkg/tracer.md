@@ -6,87 +6,112 @@
 import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
 ```
 
-Package tracer provides a simple, consistent API for distributed tracing in Go applications using OpenTelemetry standards. It handles span creation, propagation, attribute management, and trace exporting with minimal configuration.
+Package tracer provides distributed tracing functionality using OpenTelemetry.
 
-The package includes:
+The tracer package offers a simplified interface for implementing distributed tracing in Go applications. It abstracts away the complexity of OpenTelemetry to provide a clean, easy\-to\-use API for creating and managing trace spans.
+
+Core Features:
 
 - Simple span creation and management
 - Error recording and status tracking
-- Automatic trace context propagation across service boundaries
-- Flexible attribute recording with type support
-- Integration with Uber FX for dependency injection
+- Customizable span attributes
+- Cross\-service trace context propagation
+- Integration with OpenTelemetry backends
 
-### Basic Usage
-
-Initialize the tracer:
+Basic Usage:
 
 ```
-cfg := tracer.Config{
-    ServiceName: "user-service",
-    AppEnv: "production",
-    EnableExport: true,
-}
-tracerClient := tracer.NewClient(cfg, logger)
-```
+import (
+	"context"
+	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
+	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+)
 
-Create spans for operations:
+// Create a logger
+log, _ := logger.NewLogger(logger.Config{Level: "info"})
 
-```
-ctx, span := tracerClient.StartSpan(ctx, "fetch-user-data")
+// Create a tracer
+tracerClient := tracer.NewClient(tracer.Config{
+	ServiceName:  "my-service",
+	AppEnv:       "development",
+	EnableExport: true,
+}, log)
+
+// Create a span
+ctx, span := tracerClient.StartSpan(ctx, "process-request")
 defer span.End()
-```
 
-Record errors when they occur:
+// Add attributes to the span
+span.SetAttributes(map[string]interface{}{
+	"user.id": "123",
+	"request.id": "abc-xyz",
+})
 
-```
+// Record errors
 if err != nil {
-    tracerClient.RecordErrorOnSpan(span, err)
-    return nil, err
+	span.RecordError(err)
+	return nil, err
 }
 ```
 
-Add attributes to provide context:
+Distributed Tracing Across Services:
 
 ```
-tracerClient.SetAttributes(span, map[string]interface{}{
-    "user.id": userID,
-    "request.size": size,
-    "cache.hit": true,
-})
+// In the sending service
+ctx, span := tracer.StartSpan(ctx, "send-request")
+defer span.End()
+
+// Extract trace context for an outgoing HTTP request
+traceHeaders := tracer.GetCarrier(ctx)
+for key, value := range traceHeaders {
+	req.Header.Set(key, value)
+}
+
+// In the receiving service
+func httpHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract headers from the request
+	headers := make(map[string]string)
+	for key, values := range r.Header {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+
+	// Create a context with the trace information
+	ctx := tracer.SetCarrierOnContext(r.Context(), headers)
+
+	// Create a child span in this service
+	ctx, span := tracer.StartSpan(ctx, "handle-request")
+	defer span.End()
+	// ...
+}
 ```
 
-### Distributed Tracing
+FX Module Integration:
 
-For outgoing requests, extract trace context:
-
-```
-headers := tracerClient.GetCarrier(ctx)
-// Add headers to outgoing HTTP request or message
-```
-
-For incoming requests, import trace context:
-
-```
-// Extract headers from incoming HTTP request or message
-ctx = tracerClient.SetCarrierOnContext(ctx, headers)
-```
-
-### Uber FX Integration
-
-To use with Uber FX, import the module in your application:
+This package provides an fx module for easy integration:
 
 ```
 app := fx.New(
-    tracer.FXModule,
-    // other modules...
+	logger.Module,
+	tracer.Module,
+	// ... other modules
 )
+app.Run()
 ```
 
-This will automatically set up the tracer and manage its lifecycle.
+Best Practices:
 
-### Best Practices
+- Create spans for significant operations in your code
+- Always defer span.End\(\) immediately after creating a span
+- Use descriptive span names that identify the operation
+- Add relevant attributes to provide context
+- Record errors when operations fail
+- Ensure trace context is properly propagated between services
 
-1. Always end spans with defer span.End\(\) 2. Create spans for significant operations, not every function call 3. Add attributes that provide business context to aid troubleshooting 4. Propagate context through your call stack to maintain the trace 5. Record errors on spans to correlate exceptions with traces
+Thread Safety:
+
+All methods on the Tracer type and Span interface are safe for concurrent use by multiple goroutines.
 
 Package tracer is a generated GoMock package.
 
@@ -110,13 +135,12 @@ Package tracer is a generated GoMock package.
   - [func \(mr \*MockLoggerMockRecorder\) Fatal\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Fatal>)
   - [func \(mr \*MockLoggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Info>)
   - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
+- [type Span](<#Span>)
 - [type Tracer](<#Tracer>)
   - [func NewClient\(cfg Config, logger Logger\) \*Tracer](<#NewClient>)
   - [func \(t \*Tracer\) GetCarrier\(ctx context.Context\) map\[string\]string](<#Tracer.GetCarrier>)
-  - [func \(t \*Tracer\) RecordErrorOnSpan\(span traceSpan.Span, err error\)](<#Tracer.RecordErrorOnSpan>)
-  - [func \(t \*Tracer\) SetAttributes\(span traceSpan.Span, attrs map\[string\]interface\{\}\)](<#Tracer.SetAttributes>)
   - [func \(t \*Tracer\) SetCarrierOnContext\(ctx context.Context, carrier map\[string\]string\) context.Context](<#Tracer.SetCarrierOnContext>)
-  - [func \(t \*Tracer\) StartSpan\(ctx context.Context, name string\) \(context.Context, traceSpan.Span\)](<#Tracer.StartSpan>)
+  - [func \(t \*Tracer\) StartSpan\(ctx context.Context, name string\) \(context.Context, Span\)](<#Tracer.StartSpan>)
 
 
 ## Variables
@@ -357,6 +381,60 @@ func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
 
 Warn indicates an expected call of Warn.
 
+<a name="Span"></a>
+## type [Span](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L30-L67>)
+
+Span represents a trace span for tracking operations in distributed systems. It provides methods for ending the span, recording errors, and setting attributes.
+
+The Span interface abstracts the underlying OpenTelemetry implementation details, providing a clean API for application code to interact with spans without direct dependencies on the tracing library.
+
+Spans represent a single operation or unit of work in your application. They form a hierarchy where a parent span can have multiple child spans, creating a trace that shows the flow of operations and their relationships.
+
+To use a span effectively: 1. Always call End\(\) when the operation completes \(typically with defer\) 2. Add attributes that provide context about the operation 3. Record any errors that occur during the operation
+
+Spans created with StartSpan\(\) automatically inherit the parent span from the context if one exists, creating a proper span hierarchy.
+
+```go
+type Span interface {
+    // End completes the span and sends it to configured exporters.
+    // End should be called when the operation being traced is complete.
+    // It's recommended to defer this call immediately after obtaining the span.
+    //
+    // Example:
+    //   ctx, span := tracer.StartSpan(ctx, "operation-name")
+    //   defer span.End()
+    End()
+
+    // SetAttributes adds key-value pairs of attributes to the span.
+    // These attributes provide additional context about the operation.
+    // The method supports various data types including strings, integers,
+    // floating-point numbers, and booleans.
+    //
+    // Example:
+    //   span.SetAttributes(map[string]interface{}{
+    //     "user.id": userID,
+    //     "request.size": size,
+    //     "request.type": "background",
+    //     "priority": 3,
+    //     "retry.enabled": true,
+    //   })
+    SetAttributes(attrs map[string]interface{})
+
+    // RecordError marks the span as having encountered an error and
+    // records the error information within the span. This helps with
+    // error tracing and debugging by clearly identifying which spans
+    // represent failed operations.
+    //
+    // Example:
+    //   result, err := database.Query(ctx, query)
+    //   if err != nil {
+    //     span.RecordError(err)
+    //     return nil, err
+    //   }
+    RecordError(err error)
+}
+```
+
 <a name="Tracer"></a>
 ## type [Tracer](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/setup.go#L42-L45>)
 
@@ -417,7 +495,7 @@ defer span.End()
 ```
 
 <a name="Tracer.GetCarrier"></a>
-### func \(\*Tracer\) [GetCarrier](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L173>)
+### func \(\*Tracer\) [GetCarrier](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L287>)
 
 ```go
 func (t *Tracer) GetCarrier(ctx context.Context) map[string]string
@@ -425,7 +503,9 @@ func (t *Tracer) GetCarrier(ctx context.Context) map[string]string
 
 GetCarrier extracts the current trace context from a context object and returns it as a map that can be transmitted across service boundaries. This is essential for distributed tracing to maintain trace continuity across different services.
 
-The returned map contains W3C Trace Context headers that follow the standard format for distributed tracing, making it compatible with other services that support the W3C Trace Context specification.
+This method extracts W3C Trace Context headers, which follow the standard format for distributed tracing propagation. Using standardized headers ensures compatibility with other services and observability tools in your infrastructure that support the W3C Trace Context specification.
+
+When a trace spans multiple services \(e.g., a web service calling a database service\), the trace context must be passed between these services to maintain a unified trace. This method facilitates this by extracting that context into a format that can be added to HTTP headers, message queue properties, or other inter\-service communication.
 
 Parameters:
 
@@ -463,78 +543,8 @@ func makeHttpRequest(ctx context.Context, url string) (*http.Response, error) {
 }
 ```
 
-<a name="Tracer.RecordErrorOnSpan"></a>
-### func \(\*Tracer\) [RecordErrorOnSpan](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L33>)
-
-```go
-func (t *Tracer) RecordErrorOnSpan(span traceSpan.Span, err error)
-```
-
-RecordErrorOnSpan records an error on a span and sets its status to error. This method is used to indicate that a span represents a failed operation, which helps with error tracing and monitoring in observability systems.
-
-Parameters:
-
-- span: The span on which to record the error
-- err: The error to record on the span
-
-Example:
-
-```
-ctx, span := tracer.StartSpan(ctx, "fetch-user-data")
-defer span.End()
-
-data, err := fetchUserData(ctx, userID)
-if err != nil {
-    // Record the error on the span to track it in traces
-    tracer.RecordErrorOnSpan(span, err)
-    return nil, err
-}
-
-return data, nil
-```
-
-<a name="Tracer.SetAttributes"></a>
-### func \(\*Tracer\) [SetAttributes](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L107>)
-
-```go
-func (t *Tracer) SetAttributes(span traceSpan.Span, attrs map[string]interface{})
-```
-
-SetAttributes adds one or more attributes to a span with support for different data types. Attributes provide additional context and metadata for spans, making traces more informative for debugging and analysis.
-
-Parameters:
-
-- span: The span to add attributes to
-- attrs: A map of attribute keys to values. Values can be strings, ints, int64s, float64s, or booleans. Other types are converted to strings.
-
-Supported value types:
-
-- string: Stored as string attributes
-- int/int64: Stored as integer attributes
-- float64: Stored as floating\-point attributes
-- bool: Stored as boolean attributes
-- other types: Converted to strings using fmt.Sprint
-
-Example:
-
-```
-ctx, span := tracer.StartSpan(ctx, "process-payment")
-defer span.End()
-
-// Add attributes to provide context about the operation
-tracer.SetAttributes(span, map[string]interface{}{
-    "user.id": userID,
-    "payment.amount": amount,
-    "payment.currency": "USD",
-    "payment.method": "credit_card",
-    "request.id": requestID,
-})
-
-// Perform the payment processing...
-```
-
 <a name="Tracer.SetCarrierOnContext"></a>
-### func \(\*Tracer\) [SetCarrierOnContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L217>)
+### func \(\*Tracer\) [SetCarrierOnContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L340>)
 
 ```go
 func (t *Tracer) SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context
@@ -542,7 +552,9 @@ func (t *Tracer) SetCarrierOnContext(ctx context.Context, carrier map[string]str
 
 SetCarrierOnContext extracts trace information from a carrier map and injects it into a context. This is the complement to GetCarrier and is typically used when receiving requests or messages from other services that include trace headers.
 
-This method is crucial for maintaining distributed trace continuity across service boundaries by ensuring that spans created in this service are properly connected to spans from upstream services.
+This method is crucial for maintaining distributed trace continuity across service boundaries. When a service receives a request from another service that includes trace context headers, this method allows the receiving service to continue the existing trace rather than starting a new one. This creates a complete end\-to\-end view of the request's journey through your distributed system.
+
+The method works with standard W3C Trace Context headers, ensuring compatibility across different services and observability systems. It handles extracting trace IDs, span IDs, and other trace context information from the carrier map and properly initializing the context for continuation of the trace.
 
 Parameters:
 
@@ -575,31 +587,39 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
     ctx := tracer.SetCarrierOnContext(r.Context(), headers)
 
     // Use this traced context for processing the request
+    // Any spans created with this context will be properly connected to the trace
     result, err := processRequest(ctx, r)
     // ...
 }
 ```
 
 <a name="Tracer.StartSpan"></a>
-### func \(\*Tracer\) [StartSpan](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L70>)
+### func \(\*Tracer\) [StartSpan](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L232>)
 
 ```go
-func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, traceSpan.Span)
+func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, Span)
 ```
 
-StartSpan creates a new span with the given name and returns an updated context containing the span, along with the span itself. This is the primary method for creating spans to trace operations in your application.
+StartSpan creates a new span with the given name and returns an updated context containing the span, along with a Span interface. This is the primary method for creating spans to trace operations in your application.
 
-The created span becomes a child of any span that exists in the provided context. If no span exists in the context, a new root span is created.
+The created span becomes a child of any span that exists in the provided context. If no span exists in the context, a new root span is created. This automatically builds a hierarchy of spans that reflects the structure of your application's operations.
 
 Parameters:
 
 - ctx: The parent context, which may contain a parent span
-- name: A descriptive name for the operation being traced
+- name: A descriptive name for the operation being traced \(e.g., "http\-request", "db\-query"\)
 
 Returns:
 
 - context.Context: A new context containing the created span
-- traceSpan.Span: The created span, which must be ended when the operation completes
+- Span: An interface to interact with the span, which must be ended when the operation completes
+
+Best practices:
+
+- Use descriptive, consistent naming conventions for spans
+- Create spans for operations that are significant for performance or debugging
+- For operations with sub\-operations, create a parent span for the overall operation and child spans for each sub\-operation
+- Always defer span.End\(\) immediately after creating the span
 
 Example:
 
@@ -610,10 +630,18 @@ func processRequest(ctx context.Context, req Request) (Response, error) {
     // Ensure the span is ended when the function returns
     defer span.End()
 
+    // Add context information to the span
+    span.SetAttributes(map[string]interface{}{
+        "request.id": req.ID,
+        "request.type": req.Type,
+        "user.id": req.UserID,
+    })
+
     // Perform the operation, using the context with the span
     result, err := performWork(ctx, req)
     if err != nil {
-        tracer.RecordErrorOnSpan(span, err)
+        // Record the error on the span
+        span.RecordError(err)
         return Response{}, err
     }
 

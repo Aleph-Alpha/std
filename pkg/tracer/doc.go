@@ -1,73 +1,103 @@
-// Package tracer provides a simple, consistent API for distributed tracing in Go applications
-// using OpenTelemetry standards. It handles span creation, propagation, attribute management,
-// and trace exporting with minimal configuration.
+// Package tracer provides distributed tracing functionality using OpenTelemetry.
 //
-// The package includes:
+// The tracer package offers a simplified interface for implementing distributed tracing
+// in Go applications. It abstracts away the complexity of OpenTelemetry to provide
+// a clean, easy-to-use API for creating and managing trace spans.
+//
+// Core Features:
 //   - Simple span creation and management
 //   - Error recording and status tracking
-//   - Automatic trace context propagation across service boundaries
-//   - Flexible attribute recording with type support
-//   - Integration with Uber FX for dependency injection
+//   - Customizable span attributes
+//   - Cross-service trace context propagation
+//   - Integration with OpenTelemetry backends
 //
-// # Basic Usage
+// Basic Usage:
 //
-// Initialize the tracer:
-//
-//	cfg := tracer.Config{
-//	    ServiceName: "user-service",
-//	    AppEnv: "production",
-//	    EnableExport: true,
-//	}
-//	tracerClient := tracer.NewClient(cfg, logger)
-//
-// Create spans for operations:
-//
-//	ctx, span := tracerClient.StartSpan(ctx, "fetch-user-data")
-//	defer span.End()
-//
-// Record errors when they occur:
-//
-//	if err != nil {
-//	    tracerClient.RecordErrorOnSpan(span, err)
-//	    return nil, err
-//	}
-//
-// Add attributes to provide context:
-//
-//	tracerClient.SetAttributes(span, map[string]interface{}{
-//	    "user.id": userID,
-//	    "request.size": size,
-//	    "cache.hit": true,
-//	})
-//
-// # Distributed Tracing
-//
-// For outgoing requests, extract trace context:
-//
-//	headers := tracerClient.GetCarrier(ctx)
-//	// Add headers to outgoing HTTP request or message
-//
-// For incoming requests, import trace context:
-//
-//	// Extract headers from incoming HTTP request or message
-//	ctx = tracerClient.SetCarrierOnContext(ctx, headers)
-//
-// # Uber FX Integration
-//
-// To use with Uber FX, import the module in your application:
-//
-//	app := fx.New(
-//	    tracer.FXModule,
-//	    // other modules...
+//	import (
+//		"context"
+//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
+//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
 //	)
 //
-// This will automatically set up the tracer and manage its lifecycle.
+//	// Create a logger
+//	log, _ := logger.NewLogger(logger.Config{Level: "info"})
 //
-// # Best Practices
+//	// Create a tracer
+//	tracerClient := tracer.NewClient(tracer.Config{
+//		ServiceName:  "my-service",
+//		AppEnv:       "development",
+//		EnableExport: true,
+//	}, log)
 //
-// 1. Always end spans with defer span.End()
-// 2. Create spans for significant operations, not every function call
-// 3. Add attributes that provide business context to aid troubleshooting
-// 4. Propagate context through your call stack to maintain the trace
-// 5. Record errors on spans to correlate exceptions with traces
+//	// Create a span
+//	ctx, span := tracerClient.StartSpan(ctx, "process-request")
+//	defer span.End()
+//
+//	// Add attributes to the span
+//	span.SetAttributes(map[string]interface{}{
+//		"user.id": "123",
+//		"request.id": "abc-xyz",
+//	})
+//
+//	// Record errors
+//	if err != nil {
+//		span.RecordError(err)
+//		return nil, err
+//	}
+//
+// Distributed Tracing Across Services:
+//
+//	// In the sending service
+//	ctx, span := tracer.StartSpan(ctx, "send-request")
+//	defer span.End()
+//
+//	// Extract trace context for an outgoing HTTP request
+//	traceHeaders := tracer.GetCarrier(ctx)
+//	for key, value := range traceHeaders {
+//		req.Header.Set(key, value)
+//	}
+//
+//	// In the receiving service
+//	func httpHandler(w http.ResponseWriter, r *http.Request) {
+//		// Extract headers from the request
+//		headers := make(map[string]string)
+//		for key, values := range r.Header {
+//			if len(values) > 0 {
+//				headers[key] = values[0]
+//			}
+//		}
+//
+//		// Create a context with the trace information
+//		ctx := tracer.SetCarrierOnContext(r.Context(), headers)
+//
+//		// Create a child span in this service
+//		ctx, span := tracer.StartSpan(ctx, "handle-request")
+//		defer span.End()
+//		// ...
+//	}
+//
+// FX Module Integration:
+//
+// This package provides an fx module for easy integration:
+//
+//	app := fx.New(
+//		logger.Module,
+//		tracer.Module,
+//		// ... other modules
+//	)
+//	app.Run()
+//
+// Best Practices:
+//
+//   - Create spans for significant operations in your code
+//   - Always defer span.End() immediately after creating a span
+//   - Use descriptive span names that identify the operation
+//   - Add relevant attributes to provide context
+//   - Record errors when operations fail
+//   - Ensure trace context is properly propagated between services
+//
+// Thread Safety:
+//
+// All methods on the Tracer type and Span interface are safe for concurrent use
+// by multiple goroutines.
 package tracer

@@ -9,102 +9,120 @@ import (
 	traceSpan "go.opentelemetry.io/otel/trace"
 )
 
-// RecordErrorOnSpan records an error on a span and sets its status to error.
-// This method is used to indicate that a span represents a failed operation,
-// which helps with error tracing and monitoring in observability systems.
+// Span represents a trace span for tracking operations in distributed systems.
+// It provides methods for ending the span, recording errors, and setting attributes.
 //
-// Parameters:
-//   - span: The span on which to record the error
-//   - err: The error to record on the span
+// The Span interface abstracts the underlying OpenTelemetry implementation details,
+// providing a clean API for application code to interact with spans without
+// direct dependencies on the tracing library.
 //
-// Example:
+// Spans represent a single operation or unit of work in your application. They form
+// a hierarchy where a parent span can have multiple child spans, creating a trace
+// that shows the flow of operations and their relationships.
 //
-//	ctx, span := tracer.StartSpan(ctx, "fetch-user-data")
-//	defer span.End()
+// To use a span effectively:
+// 1. Always call End() when the operation completes (typically with defer)
+// 2. Add attributes that provide context about the operation
+// 3. Record any errors that occur during the operation
 //
-//	data, err := fetchUserData(ctx, userID)
-//	if err != nil {
-//	    // Record the error on the span to track it in traces
-//	    tracer.RecordErrorOnSpan(span, err)
-//	    return nil, err
-//	}
-//
-//	return data, nil
-func (t *Tracer) RecordErrorOnSpan(span traceSpan.Span, err error) {
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
+// Spans created with StartSpan() automatically inherit the parent span from the context
+// if one exists, creating a proper span hierarchy.
+type Span interface {
+	// End completes the span and sends it to configured exporters.
+	// End should be called when the operation being traced is complete.
+	// It's recommended to defer this call immediately after obtaining the span.
+	//
+	// Example:
+	//   ctx, span := tracer.StartSpan(ctx, "operation-name")
+	//   defer span.End()
+	End()
+
+	// SetAttributes adds key-value pairs of attributes to the span.
+	// These attributes provide additional context about the operation.
+	// The method supports various data types including strings, integers,
+	// floating-point numbers, and booleans.
+	//
+	// Example:
+	//   span.SetAttributes(map[string]interface{}{
+	//     "user.id": userID,
+	//     "request.size": size,
+	//     "request.type": "background",
+	//     "priority": 3,
+	//     "retry.enabled": true,
+	//   })
+	SetAttributes(attrs map[string]interface{})
+
+	// RecordError marks the span as having encountered an error and
+	// records the error information within the span. This helps with
+	// error tracing and debugging by clearly identifying which spans
+	// represent failed operations.
+	//
+	// Example:
+	//   result, err := database.Query(ctx, query)
+	//   if err != nil {
+	//     span.RecordError(err)
+	//     return nil, err
+	//   }
+	RecordError(err error)
 }
 
-// StartSpan creates a new span with the given name and returns an updated context
-// containing the span, along with the span itself. This is the primary method for
-// creating spans to trace operations in your application.
-//
-// The created span becomes a child of any span that exists in the provided context.
-// If no span exists in the context, a new root span is created.
-//
-// Parameters:
-//   - ctx: The parent context, which may contain a parent span
-//   - name: A descriptive name for the operation being traced
-//
-// Returns:
-//   - context.Context: A new context containing the created span
-//   - traceSpan.Span: The created span, which must be ended when the operation completes
-//
-// Example:
-//
-//	func processRequest(ctx context.Context, req Request) (Response, error) {
-//	    // Create a span for this operation
-//	    ctx, span := tracer.StartSpan(ctx, "process-request")
-//	    // Ensure the span is ended when the function returns
-//	    defer span.End()
-//
-//	    // Perform the operation, using the context with the span
-//	    result, err := performWork(ctx, req)
-//	    if err != nil {
-//	        tracer.RecordErrorOnSpan(span, err)
-//	        return Response{}, err
-//	    }
-//
-//	    return result, nil
-//	}
-func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, traceSpan.Span) {
-	tracer := t.tracer.Tracer("")
-	ctx, span := tracer.Start(ctx, name)
-	return ctx, span
+// spanImpl is an internal implementation of the Span interface
+// that wraps an OpenTelemetry span. This type handles the conversion
+// between the simplified API and the underlying OpenTelemetry functionality.
+type spanImpl struct {
+	span traceSpan.Span
 }
 
-// SetAttributes adds one or more attributes to a span with support for different data types.
-// Attributes provide additional context and metadata for spans, making traces more informative
-// for debugging and analysis.
+// End implements the Span interface by ending the underlying OpenTelemetry span.
+// This method should be called when the operation being traced is complete,
+// typically using a deferred call immediately after span creation.
 //
-// Parameters:
-//   - span: The span to add attributes to
-//   - attrs: A map of attribute keys to values. Values can be strings, ints, int64s,
-//     float64s, or booleans. Other types are converted to strings.
+// When End is called:
+// - The span's end time is recorded
+// - The span is marked as complete
+// - The span data is submitted to configured exporters
+// - Any resources associated with the span are released
 //
-// Supported value types:
-//   - string: Stored as string attributes
-//   - int/int64: Stored as integer attributes
-//   - float64: Stored as floating-point attributes
-//   - bool: Stored as boolean attributes
-//   - other types: Converted to strings using fmt.Sprint
+// After calling End, no further operations should be performed on the span,
+// as its data has already been finalized and submitted for processing.
 //
-// Example:
+// Example usage:
 //
-//	ctx, span := tracer.StartSpan(ctx, "process-payment")
-//	defer span.End()
+//	ctx, span := tracer.StartSpan(ctx, "operation-name")
+//	defer span.End() // Ensures the span is properly ended when the function returns
+func (s *spanImpl) End() {
+	s.span.End()
+}
+
+// SetAttributes implements the Span interface by adding attributes to the span.
+// Attributes provide additional context about the operation being traced,
+// making it easier to filter, analyze, and understand trace data.
 //
-//	// Add attributes to provide context about the operation
-//	tracer.SetAttributes(span, map[string]interface{}{
-//	    "user.id": userID,
-//	    "payment.amount": amount,
-//	    "payment.currency": "USD",
-//	    "payment.method": "credit_card",
-//	    "request.id": requestID,
+// This method accepts a map of key-value pairs and automatically handles
+// type conversion for common Go types:
+// - string: Stored as string attributes
+// - int/int64: Stored as integer attributes
+// - float64: Stored as floating-point attributes
+// - bool: Stored as boolean attributes
+// - Other types: Converted to strings using fmt.Sprint
+//
+// If the attributes map is empty, the method returns immediately without
+// making any changes to the span.
+//
+// The method converts the Go values to OpenTelemetry attribute values
+// internally, handling all the necessary type conversions.
+//
+// Example usage:
+//
+//	span.SetAttributes(map[string]interface{}{
+//	    "user.id": "usr_12345",
+//	    "request.size_bytes": 1024,
+//	    "items.count": 5,
+//	    "checkout.total": 29.99,
+//	    "premium.customer": true,
+//	    "cart.items": cartItems, // Complex type automatically converted to string
 //	})
-//
-//	// Perform the payment processing...
-func (t *Tracer) SetAttributes(span traceSpan.Span, attrs map[string]interface{}) {
+func (s *spanImpl) SetAttributes(attrs map[string]interface{}) {
 	if len(attrs) == 0 {
 		return
 	}
@@ -129,16 +147,112 @@ func (t *Tracer) SetAttributes(span traceSpan.Span, attrs map[string]interface{}
 		}
 	}
 
-	span.SetAttributes(attributes...)
+	s.span.SetAttributes(attributes...)
+}
+
+// RecordError implements the Span interface by recording an error on the span.
+// This method performs two important actions:
+// 1. Records the error event on the span with its details
+// 2. Sets the span's status to Error with the error message as the description
+//
+// Recording errors on spans provides crucial context for debugging and
+// monitoring, making it clear which operations failed and why. This
+// information appears in trace visualizations and can be used for
+// filtering and alerting.
+//
+// The error's message is used as the status description, providing immediate
+// visibility into what went wrong without needing to examine the error events.
+//
+// This method should be called whenever an error occurs during the operation
+// represented by the span, typically just before returning the error to the caller.
+//
+// Example usage:
+//
+//	result, err := database.Query(ctx, queryString)
+//	if err != nil {
+//	    span.RecordError(err) // Record the error before returning it
+//	    return nil, fmt.Errorf("database query failed: %w", err)
+//	}
+//
+// In trace visualizations, spans with recorded errors are typically highlighted,
+// making it easy to identify problematic operations at a glance.
+func (s *spanImpl) RecordError(err error) {
+	s.span.RecordError(err)
+	s.span.SetStatus(codes.Error, err.Error())
+}
+
+// StartSpan creates a new span with the given name and returns an updated context
+// containing the span, along with a Span interface. This is the primary method for
+// creating spans to trace operations in your application.
+//
+// The created span becomes a child of any span that exists in the provided context.
+// If no span exists in the context, a new root span is created. This automatically
+// builds a hierarchy of spans that reflects the structure of your application's operations.
+//
+// Parameters:
+//   - ctx: The parent context, which may contain a parent span
+//   - name: A descriptive name for the operation being traced (e.g., "http-request", "db-query")
+//
+// Returns:
+//   - context.Context: A new context containing the created span
+//   - Span: An interface to interact with the span, which must be ended when the operation completes
+//
+// Best practices:
+//   - Use descriptive, consistent naming conventions for spans
+//   - Create spans for operations that are significant for performance or debugging
+//   - For operations with sub-operations, create a parent span for the overall operation
+//     and child spans for each sub-operation
+//   - Always defer span.End() immediately after creating the span
+//
+// Example:
+//
+//	func processRequest(ctx context.Context, req Request) (Response, error) {
+//	    // Create a span for this operation
+//	    ctx, span := tracer.StartSpan(ctx, "process-request")
+//	    // Ensure the span is ended when the function returns
+//	    defer span.End()
+//
+//	    // Add context information to the span
+//	    span.SetAttributes(map[string]interface{}{
+//	        "request.id": req.ID,
+//	        "request.type": req.Type,
+//	        "user.id": req.UserID,
+//	    })
+//
+//	    // Perform the operation, using the context with the span
+//	    result, err := performWork(ctx, req)
+//	    if err != nil {
+//	        // Record the error on the span
+//	        span.RecordError(err)
+//	        return Response{}, err
+//	    }
+//
+//	    return result, nil
+//	}
+func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, Span) {
+	tracer := t.tracer.Tracer("")
+	ctx, otSpan := tracer.Start(ctx, name)
+
+	span := &spanImpl{
+		span: otSpan,
+	}
+
+	return ctx, span
 }
 
 // GetCarrier extracts the current trace context from a context object and returns it as
 // a map that can be transmitted across service boundaries. This is essential for distributed
 // tracing to maintain trace continuity across different services.
 //
-// The returned map contains W3C Trace Context headers that follow the standard format for
-// distributed tracing, making it compatible with other services that support the W3C
+// This method extracts W3C Trace Context headers, which follow the standard format for
+// distributed tracing propagation. Using standardized headers ensures compatibility with
+// other services and observability tools in your infrastructure that support the W3C
 // Trace Context specification.
+//
+// When a trace spans multiple services (e.g., a web service calling a database service),
+// the trace context must be passed between these services to maintain a unified trace.
+// This method facilitates this by extracting that context into a format that can be
+// added to HTTP headers, message queue properties, or other inter-service communication.
 //
 // Parameters:
 //   - ctx: The context containing the current trace information
@@ -181,8 +295,16 @@ func (t *Tracer) GetCarrier(ctx context.Context) map[string]string {
 // This is the complement to GetCarrier and is typically used when receiving requests or messages
 // from other services that include trace headers.
 //
-// This method is crucial for maintaining distributed trace continuity across service boundaries
-// by ensuring that spans created in this service are properly connected to spans from upstream services.
+// This method is crucial for maintaining distributed trace continuity across service boundaries.
+// When a service receives a request from another service that includes trace context headers,
+// this method allows the receiving service to continue the existing trace rather than starting
+// a new one. This creates a complete end-to-end view of the request's journey through your
+// distributed system.
+//
+// The method works with standard W3C Trace Context headers, ensuring compatibility across
+// different services and observability systems. It handles extracting trace IDs, span IDs,
+// and other trace context information from the carrier map and properly initializing the
+// context for continuation of the trace.
 //
 // Parameters:
 //   - ctx: The base context to inject trace information into
@@ -211,6 +333,7 @@ func (t *Tracer) GetCarrier(ctx context.Context) map[string]string {
 //	    ctx := tracer.SetCarrierOnContext(r.Context(), headers)
 //
 //	    // Use this traced context for processing the request
+//	    // Any spans created with this context will be properly connected to the trace
 //	    result, err := processRequest(ctx, r)
 //	    // ...
 //	}
