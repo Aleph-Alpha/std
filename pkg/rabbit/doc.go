@@ -10,6 +10,7 @@
 //   - Consumer interface with automatic acknowledgment handling
 //   - Dead letter queue support
 //   - Integration with the Logger package for structured logging
+//   - Distributed tracing support via message headers
 //
 // Basic Usage:
 //
@@ -24,7 +25,7 @@
 //	log, _ := logger.NewLogger(logger.Config{Level: "info"})
 //
 //	// Create a new RabbitMQ client
-//	, err := rabbit.New(rabbit.Config{
+//	client, err := rabbit.New(rabbit.Config{
 //		Connection: rabbit.ConnectionConfig{
 //			URI: "amqp://guest:guest@localhost:5672/",
 //		},
@@ -44,7 +45,7 @@
 //	// Publish a message
 //	ctx := context.Background()
 //	message := []byte(`{"id": "123", "name": "John"}`)
-//	err = client.Publish(ctx, message)
+//	err = client.Publish(ctx, message, nil)
 //	if err != nil {
 //		log.Error("Failed to publish message", err, nil)
 //	}
@@ -64,6 +65,73 @@
 //
 //		// Acknowledge the message
 //		if err := msg.AckMsg(); err != nil {
+//			log.Error("Failed to acknowledge message", err, nil)
+//		}
+//	}
+//
+// Distributed Tracing with Message Headers:
+//
+// This package supports distributed tracing by allowing you to propagate trace context
+// through message headers, enabling end-to-end visibility across services.
+//
+// Publisher Example (sending trace context):
+//
+//	import (
+//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
+//		// other imports...
+//	)
+//
+//	// Create a tracer client
+//	tracerClient := tracer.NewClient(tracerConfig, log)
+//
+//	// Create a span for the operation that includes publishing
+//	ctx, span := tracerClient.StartSpan(ctx, "process-and-publish")
+//	defer span.End()
+//
+//	// Process data...
+//
+//	// Extract trace context as headers before publishing
+//	traceHeaders := tracerClient.GetCarrier(ctx)
+//
+//	// Publish with trace headers
+//	err = rabbitClient.Publish(ctx, message, traceHeaders)
+//	if err != nil {
+//		span.RecordError(err)
+//		log.Error("Failed to publish message", err, nil)
+//	}
+//
+// Consumer Example (continuing the trace):
+//
+//	msgChan := rabbitClient.Consume(ctx, wg)
+//	for msg := range msgChan {
+//		// Extract trace headers from the message
+//		headers := msg.Header()
+//
+//		// Create a new context with the trace information
+//		ctx = tracerClient.SetCarrierOnContext(ctx, headers)
+//
+//		// Create a span as a child of the incoming trace
+//		ctx, span := tracerClient.StartSpan(ctx, "process-message")
+//		defer span.End()
+//
+//		// Add relevant attributes to the span
+//		span.SetAttributes(map[string]interface{}{
+//			"message.size": len(msg.Body()),
+//			"message.type": "user.created",
+//		})
+//
+//		// Process the message...
+//
+//		if err := processMessage(msg.Body()) {
+//			// Record any errors in the span
+//			span.RecordError(err)
+//			msg.NackMsg(true) // Requeue for retry
+//			continue
+//		}
+//
+//		// Acknowledge successful processing
+//		if err := msg.AckMsg(); err != nil {
+//			span.RecordError(err)
 //			log.Error("Failed to acknowledge message", err, nil)
 //		}
 //	}
