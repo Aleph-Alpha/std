@@ -215,7 +215,7 @@ The function registers two background goroutines: 1. A connection monitor that c
 On application shutdown, it ensures these goroutines are properly terminated and waits for their completion before allowing the application to exit.
 
 <a name="AMQPNotification"></a>
-## type [AMQPNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L175-L208>)
+## type [AMQPNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L178-L211>)
 
 AMQPNotification defines an AMQP notification target. AMQP notifications can be used with systems like RabbitMQ.
 
@@ -257,7 +257,7 @@ type AMQPNotification struct {
 ```
 
 <a name="BaseNotification"></a>
-## type [BaseNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L143-L158>)
+## type [BaseNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L146-L161>)
 
 BaseNotification contains common properties for all notification types. This is embedded in specific notification target types.
 
@@ -351,7 +351,7 @@ type Config struct {
 ```
 
 <a name="ConnectionConfig"></a>
-## type [ConnectionConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L54-L72>)
+## type [ConnectionConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L54-L75>)
 
 ConnectionConfig contains MinIO server connection details. These parameters are required to establish a connection to a MinIO server.
 
@@ -374,11 +374,14 @@ type ConnectionConfig struct {
 
     // Region specifies the S3 region (e.g., "us-east-1")
     Region string
+
+    // AccessBucketCreation determines whether to allow bucket creation if it doesn't exist
+    AccessBucketCreation bool
 }
 ```
 
 <a name="DownloadConfig"></a>
-## type [DownloadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L93-L101>)
+## type [DownloadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L96-L104>)
 
 DownloadConfig defines parameters that control download behavior. These settings optimize memory usage when downloading objects of different sizes.
 
@@ -395,7 +398,7 @@ type DownloadConfig struct {
 ```
 
 <a name="KafkaNotification"></a>
-## type [KafkaNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L228-L240>)
+## type [KafkaNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L231-L243>)
 
 KafkaNotification defines a Kafka notification target. Kafka notifications publish events to a Kafka topic.
 
@@ -416,7 +419,7 @@ type KafkaNotification struct {
 ```
 
 <a name="KafkaSASLAuth"></a>
-## type [KafkaSASLAuth](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L244-L253>)
+## type [KafkaSASLAuth](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L247-L256>)
 
 KafkaSASLAuth contains Kafka SASL authentication details. SASL is used for authenticating with Kafka brokers.
 
@@ -458,7 +461,7 @@ type Logger interface {
 ```
 
 <a name="MQTTNotification"></a>
-## type [MQTTNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L257-L281>)
+## type [MQTTNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L260-L284>)
 
 MQTTNotification defines an MQTT notification target. MQTT notifications publish events to an MQTT broker.
 
@@ -532,7 +535,7 @@ if err != nil {
 ```
 
 <a name="Minio.AbortMultipartUpload"></a>
-### func \(\*Minio\) [AbortMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L407>)
+### func \(\*Minio\) [AbortMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L414>)
 
 ```go
 func (m *Minio) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error
@@ -555,7 +558,7 @@ err := minioClient.AbortMultipartUpload(ctx, "uploads/myfile.zip", uploadID)
 ```
 
 <a name="Minio.CleanupIncompleteUploads"></a>
-### func \(\*Minio\) [CleanupIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L536>)
+### func \(\*Minio\) [CleanupIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L543>)
 
 ```go
 func (m *Minio) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error
@@ -579,7 +582,7 @@ err := minioClient.CleanupIncompleteUploads(ctx, "uploads/", 24*time.Hour)
 ```
 
 <a name="Minio.CompleteMultipartUpload"></a>
-### func \(\*Minio\) [CompleteMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L442>)
+### func \(\*Minio\) [CompleteMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L449>)
 
 ```go
 func (m *Minio) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error
@@ -610,7 +613,7 @@ err := minioClient.CompleteMultipartUpload(
 ```
 
 <a name="Minio.Delete"></a>
-### func \(\*Minio\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L153>)
+### func \(\*Minio\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L157>)
 
 ```go
 func (m *Minio) Delete(ctx context.Context, objectKey string) error
@@ -669,7 +672,7 @@ upload, err := minioClient.GenerateMultipartUploadURLs(
 ```
 
 <a name="Minio.Get"></a>
-### func \(\*Minio\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L76>)
+### func \(\*Minio\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L80>)
 
 ```go
 func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error)
@@ -700,7 +703,7 @@ if err == nil {
 ```
 
 <a name="Minio.ListIncompleteUploads"></a>
-### func \(\*Minio\) [ListIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L506>)
+### func \(\*Minio\) [ListIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L513>)
 
 ```go
 func (m *Minio) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error)
@@ -730,7 +733,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedGet"></a>
-### func \(\*Minio\) [PreSignedGet](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L617>)
+### func \(\*Minio\) [PreSignedGet](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L624>)
 
 ```go
 func (m *Minio) PreSignedGet(ctx context.Context, objectKey string) (string, error)
@@ -758,7 +761,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedHeadObject"></a>
-### func \(\*Minio\) [PreSignedHeadObject](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L587>)
+### func \(\*Minio\) [PreSignedHeadObject](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L594>)
 
 ```go
 func (m *Minio) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error)
@@ -786,7 +789,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedPut"></a>
-### func \(\*Minio\) [PreSignedPut](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L647>)
+### func \(\*Minio\) [PreSignedPut](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_utils.go#L654>)
 
 ```go
 func (m *Minio) PreSignedPut(ctx context.Context, objectKey string) (string, error)
@@ -1053,7 +1056,7 @@ type MultipartUploadInfo struct {
 ```
 
 <a name="NotificationConfig"></a>
-## type [NotificationConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L121-L139>)
+## type [NotificationConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L124-L142>)
 
 NotificationConfig defines the configuration for event notifications. MinIO can send notifications when events occur on buckets \(e.g., object created\).
 
@@ -1080,7 +1083,7 @@ type NotificationConfig struct {
 ```
 
 <a name="PresignedConfig"></a>
-## type [PresignedConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L105-L117>)
+## type [PresignedConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L108-L120>)
 
 PresignedConfig contains configuration options for presigned URLs. Presigned URLs allow temporary access to objects without requiring AWS credentials.
 
@@ -1101,7 +1104,7 @@ type PresignedConfig struct {
 ```
 
 <a name="RedisNotification"></a>
-## type [RedisNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L212-L224>)
+## type [RedisNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L215-L227>)
 
 RedisNotification defines a Redis notification target. Redis notifications publish events to a Redis pub/sub channel or list.
 
@@ -1122,7 +1125,7 @@ type RedisNotification struct {
 ```
 
 <a name="UploadConfig"></a>
-## type [UploadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L76-L89>)
+## type [UploadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L79-L92>)
 
 UploadConfig defines the configuration for upload constraints. These parameters control how objects are uploaded, particularly for large objects.
 
@@ -1144,7 +1147,7 @@ type UploadConfig struct {
 ```
 
 <a name="WebhookNotification"></a>
-## type [WebhookNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L162-L171>)
+## type [WebhookNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L165-L174>)
 
 WebhookNotification defines a webhook notification target. Webhook notifications send HTTP POST requests to a specified endpoint.
 

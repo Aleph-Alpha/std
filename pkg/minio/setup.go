@@ -428,7 +428,7 @@ func (m *Minio) ensureBucketExists(ctx context.Context) error {
 		return fmt.Errorf("failed to check if bucket exists, bucket: %v, err: %w", bucketName, err)
 	}
 
-	if !exists {
+	if !exists && m.cfg.Connection.AccessBucketCreation {
 		m.logger.Info("Bucket does not exist, creating it", nil, map[string]interface{}{
 			"bucket": bucketName,
 			"region": m.cfg.Connection.Region,
@@ -445,6 +445,8 @@ func (m *Minio) ensureBucketExists(ctx context.Context) error {
 		m.logger.Info("Successfully created bucket", nil, map[string]interface{}{
 			"bucket": bucketName,
 		})
+	} else if !exists {
+		return fmt.Errorf("bucket does not exist, please create it manually")
 	}
 
 	return nil

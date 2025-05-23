@@ -147,12 +147,13 @@ func TestNewMinioClient_BucketCreation_Success(t *testing.T) {
 	// Create MinIO client config with the correct structure
 	cfg := Config{
 		Connection: ConnectionConfig{
-			Endpoint:        fmt.Sprintf("%s:%s", host, port),
-			AccessKeyID:     "minio_admin",
-			SecretAccessKey: "minio_admin",
-			UseSSL:          false,
-			BucketName:      "test-bucket",
-			Region:          "us-east-1",
+			Endpoint:             fmt.Sprintf("%s:%s", host, port),
+			AccessKeyID:          "minio_admin",
+			SecretAccessKey:      "minio_admin",
+			UseSSL:               false,
+			BucketName:           "test-bucket",
+			Region:               "us-east-1",
+			AccessBucketCreation: true,
 		},
 		UploadConfig: UploadConfig{
 			MaxObjectSize:      5 * 1024 * 1024 * 1024, // 5 GiB
@@ -202,12 +203,13 @@ func TestNewMinioClient_ConnectionFailure_InvalidEndpoint(t *testing.T) {
 	// Create MinIO client config with an invalid endpoint
 	cfg := Config{
 		Connection: ConnectionConfig{
-			Endpoint:        "invalid-endpoint:9000",
-			AccessKeyID:     "minio_admin",
-			SecretAccessKey: "minio_admin",
-			UseSSL:          false,
-			BucketName:      "test-bucket",
-			Region:          "us-east-1",
+			Endpoint:             "invalid-endpoint:9000",
+			AccessKeyID:          "minio_admin",
+			SecretAccessKey:      "minio_admin",
+			UseSSL:               false,
+			BucketName:           "test-bucket",
+			Region:               "us-east-1",
+			AccessBucketCreation: true,
 		},
 	}
 
@@ -253,12 +255,13 @@ func TestEnsureBucketExists_EmptyBucketName(t *testing.T) {
 	// Create MinIO client config with an empty bucket name
 	cfg := Config{
 		Connection: ConnectionConfig{
-			Endpoint:        fmt.Sprintf("%s:%s", host, port),
-			AccessKeyID:     "minio_admin",
-			SecretAccessKey: "minio_admin",
-			UseSSL:          false,
-			BucketName:      "", // Empty bucket name
-			Region:          "us-east-1",
+			Endpoint:             fmt.Sprintf("%s:%s", host, port),
+			AccessKeyID:          "minio_admin",
+			SecretAccessKey:      "minio_admin",
+			UseSSL:               false,
+			BucketName:           "", // Empty bucket name
+			Region:               "us-east-1",
+			AccessBucketCreation: true,
 		},
 	}
 
@@ -279,6 +282,59 @@ func TestEnsureBucketExists_EmptyBucketName(t *testing.T) {
 	)
 
 	require.Error(t, app.Start(ctx), "bucket name is empty")
+	require.NoError(t, app.Stop(ctx))
+	require.NoError(t, containerInstance.Terminate(ctx))
+}
+
+// TestEnsureBucketExists_NoBucket_NoPermission tests when the bucket doesn't exist and the user doesn't have permission to create it
+func TestEnsureBucketExists_NoBucket_NoPermission(t *testing.T) {
+	// Set up context
+	ctx := context.Background()
+
+	// Start MinIO containerInstance
+	containerInstance, host, port, err := createMinIOContainer(ctx)
+	require.NoError(t, err)
+
+	// Create mock controller and logger
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockLogger := NewMockLogger(ctrl)
+
+	// Set logger expectations
+	mockLogger.EXPECT().Info("Connecting to MinIO", nil, gomock.Any()).Times(1)
+	mockLogger.EXPECT().Info("Creating MinIO Core client", nil, gomock.Any()).Times(1)
+	mockLogger.EXPECT().Error("failed to verify bucket", gomock.Any(), gomock.Any()).Times(1)
+
+	// Create MinIO client config with an empty bucket name
+	cfg := Config{
+		Connection: ConnectionConfig{
+			Endpoint:             fmt.Sprintf("%s:%s", host, port),
+			AccessKeyID:          "minio_admin",
+			SecretAccessKey:      "minio_admin",
+			UseSSL:               false,
+			BucketName:           "hello", // Empty bucket name
+			Region:               "us-east-1",
+			AccessBucketCreation: false,
+		},
+	}
+
+	var client *Minio
+
+	app := fx.New(
+		FXModule,
+		fx.Provide(
+			func() Config {
+				return cfg
+			},
+			func() Logger {
+				return mockLogger
+			},
+		),
+		fx.Populate(&client),
+		fx.NopLogger,
+	)
+
+	require.Error(t, app.Start(ctx), "bucket does not exist, please create it manually")
 	require.NoError(t, app.Stop(ctx))
 	require.NoError(t, containerInstance.Terminate(ctx))
 }
@@ -313,12 +369,13 @@ func TestPut_Success(t *testing.T) {
 	// Create MinIO client config
 	cfg := Config{
 		Connection: ConnectionConfig{
-			Endpoint:        fmt.Sprintf("%s:%s", host, port),
-			AccessKeyID:     "minio_admin",
-			SecretAccessKey: "minio_admin",
-			UseSSL:          false,
-			BucketName:      "test-bucket",
-			Region:          "us-east-1",
+			Endpoint:             fmt.Sprintf("%s:%s", host, port),
+			AccessKeyID:          "minio_admin",
+			SecretAccessKey:      "minio_admin",
+			UseSSL:               false,
+			BucketName:           "test-bucket",
+			Region:               "us-east-1",
+			AccessBucketCreation: true,
 		},
 		UploadConfig: UploadConfig{
 			MinPartSize: 5 * 1024 * 1024, // 5MB
@@ -486,7 +543,7 @@ func TestMinioReconnection(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start MinIO container
+	// Start a MinIO container
 	containerInstance, host, port, err := createMinIOContainer(ctx)
 	require.NoError(t, err)
 
@@ -508,12 +565,13 @@ func TestMinioReconnection(t *testing.T) {
 	// Create MinIO client config with a shorter monitoring interval for testing
 	cfg := Config{
 		Connection: ConnectionConfig{
-			Endpoint:        fmt.Sprintf("%s:%s", host, port),
-			AccessKeyID:     "minio_admin",
-			SecretAccessKey: "minio_admin",
-			UseSSL:          false,
-			BucketName:      "test-bucket",
-			Region:          "us-east-1",
+			Endpoint:             fmt.Sprintf("%s:%s", host, port),
+			AccessKeyID:          "minio_admin",
+			SecretAccessKey:      "minio_admin",
+			UseSSL:               false,
+			BucketName:           "test-bucket",
+			Region:               "us-east-1",
+			AccessBucketCreation: true,
 		},
 		UploadConfig: UploadConfig{
 			MinPartSize: 5 * 1024 * 1024, // 5MB
@@ -737,12 +795,13 @@ func TestPreSignedPut(t *testing.T) {
 			name: "Standard PreSigned URL - Small File",
 			config: Config{
 				Connection: ConnectionConfig{
-					Endpoint:        fmt.Sprintf("%s:%s", host, port),
-					AccessKeyID:     "minio_admin",
-					SecretAccessKey: "minio_admin",
-					UseSSL:          false,
-					BucketName:      "test-bucket",
-					Region:          "us-east-1",
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
 				},
 				PresignedConfig: PresignedConfig{
 					ExpiryDuration: 15 * time.Minute,
@@ -979,12 +1038,13 @@ func TestGenerateMultipartUploadURLs(t *testing.T) {
 			name: "Basic Multipart Upload",
 			config: Config{
 				Connection: ConnectionConfig{
-					Endpoint:        fmt.Sprintf("%s:%s", host, port),
-					AccessKeyID:     "minio_admin",
-					SecretAccessKey: "minio_admin",
-					UseSSL:          false,
-					BucketName:      "test-bucket",
-					Region:          "us-east-1",
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
 				},
 				UploadConfig: UploadConfig{
 					MinPartSize:        5 * 1024 * 1024,               // 5MB
@@ -1039,12 +1099,13 @@ func TestGenerateMultipartUploadURLs(t *testing.T) {
 			name: "Medium File Multipart Upload with Custom Expiry",
 			config: Config{
 				Connection: ConnectionConfig{
-					Endpoint:        fmt.Sprintf("%s:%s", host, port),
-					AccessKeyID:     "minio_admin",
-					SecretAccessKey: "minio_admin",
-					UseSSL:          false,
-					BucketName:      "test-bucket",
-					Region:          "us-east-1",
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
 				},
 				UploadConfig: UploadConfig{
 					MinPartSize:        10 * 1024 * 1024,              // 10MB
@@ -1073,12 +1134,13 @@ func TestGenerateMultipartUploadURLs(t *testing.T) {
 			name: "Large File Multipart Upload",
 			config: Config{
 				Connection: ConnectionConfig{
-					Endpoint:        fmt.Sprintf("%s:%s", host, port),
-					AccessKeyID:     "minio_admin",
-					SecretAccessKey: "minio_admin",
-					UseSSL:          false,
-					BucketName:      "test-bucket",
-					Region:          "us-east-1",
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
 				},
 				UploadConfig: UploadConfig{
 					MinPartSize:        16 * 1024 * 1024,              // 16MB
@@ -1104,12 +1166,13 @@ func TestGenerateMultipartUploadURLs(t *testing.T) {
 			name: "With Custom Base URL",
 			config: Config{
 				Connection: ConnectionConfig{
-					Endpoint:        fmt.Sprintf("%s:%s", host, port),
-					AccessKeyID:     "minio_admin",
-					SecretAccessKey: "minio_admin",
-					UseSSL:          false,
-					BucketName:      "test-bucket",
-					Region:          "us-east-1",
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					Region:               "us-east-1",
+					AccessBucketCreation: true,
 				},
 				UploadConfig: UploadConfig{
 					MinPartSize:        5 * 1024 * 1024,               // 5MB
@@ -1138,11 +1201,12 @@ func TestGenerateMultipartUploadURLs(t *testing.T) {
 			name: "Error - Empty Object Key",
 			config: Config{
 				Connection: ConnectionConfig{
-					Endpoint:        fmt.Sprintf("%s:%s", host, port),
-					AccessKeyID:     "minio_admin",
-					SecretAccessKey: "minio_admin",
-					UseSSL:          false,
-					BucketName:      "test-bucket",
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					AccessBucketCreation: true,
 				},
 				UploadConfig: UploadConfig{
 					MinPartSize:        5 * 1024 * 1024,
@@ -1159,11 +1223,12 @@ func TestGenerateMultipartUploadURLs(t *testing.T) {
 			name: "Error - Exceeds Maximum Object Size",
 			config: Config{
 				Connection: ConnectionConfig{
-					Endpoint:        fmt.Sprintf("%s:%s", host, port),
-					AccessKeyID:     "minio_admin",
-					SecretAccessKey: "minio_admin",
-					UseSSL:          false,
-					BucketName:      "test-bucket",
+					Endpoint:             fmt.Sprintf("%s:%s", host, port),
+					AccessKeyID:          "minio_admin",
+					SecretAccessKey:      "minio_admin",
+					UseSSL:               false,
+					BucketName:           "test-bucket",
+					AccessBucketCreation: true,
 				},
 				UploadConfig: UploadConfig{
 					MinPartSize:        5 * 1024 * 1024,

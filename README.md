@@ -106,7 +106,7 @@ DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLE
 
 # Go Packages Documentation
 
-Generated on Fri May 23 12:22:01 CEST 2025
+Generated on Fri May 23 16:13:25 CEST 2025
 
 ## Packages
 - [tracer](docs/pkg/tracer.md)

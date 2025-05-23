@@ -17,6 +17,7 @@ Core Features:
 - Consumer interface with automatic acknowledgment handling
 - Dead letter queue support
 - Integration with the Logger package for structured logging
+- Distributed tracing support via message headers
 
 Basic Usage:
 
@@ -32,7 +33,7 @@ import (
 log, _ := logger.NewLogger(logger.Config{Level: "info"})
 
 // Create a new RabbitMQ client
-, err := rabbit.New(rabbit.Config{
+client, err := rabbit.New(rabbit.Config{
 	Connection: rabbit.ConnectionConfig{
 		URI: "amqp://guest:guest@localhost:5672/",
 	},
@@ -52,7 +53,7 @@ defer client.Close()
 // Publish a message
 ctx := context.Background()
 message := []byte(`{"id": "123", "name": "John"}`)
-err = client.Publish(ctx, message)
+err = client.Publish(ctx, message, nil)
 if err != nil {
 	log.Error("Failed to publish message", err, nil)
 }
@@ -72,6 +73,76 @@ for msg := range msgChan {
 
 	// Acknowledge the message
 	if err := msg.AckMsg(); err != nil {
+		log.Error("Failed to acknowledge message", err, nil)
+	}
+}
+```
+
+Distributed Tracing with Message Headers:
+
+This package supports distributed tracing by allowing you to propagate trace context through message headers, enabling end\-to\-end visibility across services.
+
+Publisher Example \(sending trace context\):
+
+```
+import (
+	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
+	// other imports...
+)
+
+// Create a tracer client
+tracerClient := tracer.NewClient(tracerConfig, log)
+
+// Create a span for the operation that includes publishing
+ctx, span := tracerClient.StartSpan(ctx, "process-and-publish")
+defer span.End()
+
+// Process data...
+
+// Extract trace context as headers before publishing
+traceHeaders := tracerClient.GetCarrier(ctx)
+
+// Publish with trace headers
+err = rabbitClient.Publish(ctx, message, traceHeaders)
+if err != nil {
+	span.RecordError(err)
+	log.Error("Failed to publish message", err, nil)
+}
+```
+
+Consumer Example \(continuing the trace\):
+
+```
+msgChan := rabbitClient.Consume(ctx, wg)
+for msg := range msgChan {
+	// Extract trace headers from the message
+	headers := msg.Header()
+
+	// Create a new context with the trace information
+	ctx = tracerClient.SetCarrierOnContext(ctx, headers)
+
+	// Create a span as a child of the incoming trace
+	ctx, span := tracerClient.StartSpan(ctx, "process-message")
+	defer span.End()
+
+	// Add relevant attributes to the span
+	span.SetAttributes(map[string]interface{}{
+		"message.size": len(msg.Body()),
+		"message.type": "user.created",
+	})
+
+	// Process the message...
+
+	if err := processMessage(msg.Body()) {
+		// Record any errors in the span
+		span.RecordError(err)
+		msg.NackMsg(true) // Requeue for retry
+		continue
+	}
+
+	// Acknowledge successful processing
+	if err := msg.AckMsg(); err != nil {
+		span.RecordError(err)
 		log.Error("Failed to acknowledge message", err, nil)
 	}
 }
@@ -134,6 +205,7 @@ Package rabbit is a generated GoMock package.
 - [type ConsumerMessage](<#ConsumerMessage>)
   - [func \(rb \*ConsumerMessage\) AckMsg\(\) error](<#ConsumerMessage.AckMsg>)
   - [func \(rb \*ConsumerMessage\) Body\(\) \[\]byte](<#ConsumerMessage.Body>)
+  - [func \(rb \*ConsumerMessage\) Header\(\) map\[string\]interface\{\}](<#ConsumerMessage.Header>)
   - [func \(rb \*ConsumerMessage\) NackMsg\(requeue bool\) error](<#ConsumerMessage.NackMsg>)
 - [type DeadLetter](<#DeadLetter>)
 - [type Logger](<#Logger>)
@@ -156,7 +228,7 @@ Package rabbit is a generated GoMock package.
   - [func NewClient\(cfg Config, logger Logger\) \*Rabbit](<#NewClient>)
   - [func \(rb \*Rabbit\) Consume\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.Consume>)
   - [func \(rb \*Rabbit\) ConsumeDLQ\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.ConsumeDLQ>)
-  - [func \(rb \*Rabbit\) Publish\(ctx context.Context, msg \[\]byte\) error](<#Rabbit.Publish>)
+  - [func \(rb \*Rabbit\) Publish\(ctx context.Context, msg \[\]byte, headers ...map\[string\]interface\{\}\) error](<#Rabbit.Publish>)
 
 
 ## Variables
@@ -312,7 +384,7 @@ type Connection struct {
 ```
 
 <a name="ConsumerMessage"></a>
-## type [ConsumerMessage](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L30-L33>)
+## type [ConsumerMessage](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L47-L50>)
 
 ConsumerMessage implements the Message interface and wraps an AMQP delivery. This struct provides access to the message content and acknowledgment methods.
 
@@ -323,7 +395,7 @@ type ConsumerMessage struct {
 ```
 
 <a name="ConsumerMessage.AckMsg"></a>
-### func \(\*ConsumerMessage\) [AckMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L237>)
+### func \(\*ConsumerMessage\) [AckMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L296>)
 
 ```go
 func (rb *ConsumerMessage) AckMsg() error
@@ -334,7 +406,7 @@ AckMsg acknowledges the message, informing RabbitMQ that the message has been su
 Returns an error if the acknowledgment fails.
 
 <a name="ConsumerMessage.Body"></a>
-### func \(\*ConsumerMessage\) [Body](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L254>)
+### func \(\*ConsumerMessage\) [Body](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L313>)
 
 ```go
 func (rb *ConsumerMessage) Body() []byte
@@ -342,8 +414,51 @@ func (rb *ConsumerMessage) Body() []byte
 
 Body returns the message payload as a byte slice.
 
+<a name="ConsumerMessage.Header"></a>
+### func \(\*ConsumerMessage\) [Header](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L351>)
+
+```go
+func (rb *ConsumerMessage) Header() map[string]interface{}
+```
+
+Header returns the headers associated with the message. Message headers provide metadata about the message and can contain application\-specific information set by the message publisher.
+
+Headers are a map of key\-value pairs where the keys are strings and values can be of various types. Common uses for headers include:
+
+- Message type identification
+- Content format specification
+- Routing information
+- Tracing context propagation
+- Custom application metadata
+
+Returns:
+
+- map\[string\]interface\{\}: A map containing the message headers
+
+Example:
+
+```
+msgChan := rabbitClient.Consume(ctx, wg)
+for msg := range msgChan {
+    // Access message headers
+    headers := msg.Header()
+
+    // Check for specific headers
+    if contentType, ok := headers["content-type"].(string); ok {
+        fmt.Printf("Content type: %s\n", contentType)
+    }
+
+    // Access trace context from headers for distributed tracing
+    if traceID, ok := headers["trace-id"].(string); ok {
+        ctx = tracer.SetTraceID(ctx, traceID)
+    }
+
+    // Process the message...
+}
+```
+
 <a name="ConsumerMessage.NackMsg"></a>
-### func \(\*ConsumerMessage\) [NackMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L249>)
+### func \(\*ConsumerMessage\) [NackMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L308>)
 
 ```go
 func (rb *ConsumerMessage) NackMsg(requeue bool) error
@@ -406,7 +521,7 @@ type Logger interface {
 ```
 
 <a name="Message"></a>
-## type [Message](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L14-L26>)
+## type [Message](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L14-L43>)
 
 Message defines the interface for consumed messages from RabbitMQ. This interface abstracts the underlying AMQP message structure and provides methods for acknowledging or rejecting messages.
 
@@ -423,6 +538,23 @@ type Message interface {
 
     // Body returns the message payload as a byte slice.
     Body() []byte
+
+    // Header returns the headers associated with the message.
+    // Message headers provide metadata about the message and can contain
+    // application-specific information set by the message publisher.
+    //
+    // Headers are a map of key-value pairs where the keys are strings
+    // and values can be of various types. Common uses for headers include:
+    //   - Message type identification
+    //   - Content format specification
+    //   - Routing information
+    //   - Tracing context propagation
+    //   - Custom application metadata
+    //
+    // For distributed tracing with OpenTelemetry, headers can carry trace
+    // context between services, enabling end-to-end tracing across
+    // message-based communication.
+    Header() map[string]interface{}
 }
 ```
 
@@ -595,7 +727,7 @@ defer client.Close()
 ```
 
 <a name="Rabbit.Consume"></a>
-### func \(\*Rabbit\) [Consume](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L141>)
+### func \(\*Rabbit\) [Consume](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L158>)
 
 ```go
 func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -630,7 +762,7 @@ for msg := range msgChan {
 ```
 
 <a name="Rabbit.ConsumeDLQ"></a>
-### func \(\*Rabbit\) [ConsumeDLQ](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L170>)
+### func \(\*Rabbit\) [ConsumeDLQ](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L187>)
 
 ```go
 func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -663,10 +795,10 @@ for msg := range dlqChan {
 ```
 
 <a name="Rabbit.Publish"></a>
-### func \(\*Rabbit\) [Publish](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L194>)
+### func \(\*Rabbit\) [Publish](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L246>)
 
 ```go
-func (rb *Rabbit) Publish(ctx context.Context, msg []byte) error
+func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error
 ```
 
 Publish sends a message to the RabbitMQ exchange specified in the configuration. This method is thread\-safe and respects context cancellation.
@@ -675,6 +807,14 @@ Parameters:
 
 - ctx: Context for cancellation control
 - msg: Message payload as a byte slice
+- header: Optional message headers as a map of key\-value pairs; can be used for metadata and distributed tracing propagation
+
+The headers parameter is particularly useful for distributed tracing, allowing trace context to be propagated across service boundaries through message queues. When using with the tracer package, you can extract trace headers and include them in the message:
+
+```
+traceHeaders := tracerClient.GetCarrier(ctx)
+err := rabbitClient.Publish(ctx, message, traceHeaders)
+```
 
 Returns an error if publishing fails or if the context is canceled.
 
@@ -684,12 +824,40 @@ Example:
 ctx := context.Background()
 message := []byte("Hello, RabbitMQ!")
 
-err := rabbitClient.Publish(ctx, message)
+// Basic publishing without headers
+err := rabbitClient.Publish(ctx, message, nil)
 if err != nil {
     log.Printf("Failed to publish message: %v", err)
 } else {
     log.Println("Message published successfully")
 }
+```
+
+Example with distributed tracing:
+
+```
+// Create a span for the publish operation
+ctx, span := tracer.StartSpan(ctx, "publish-message")
+defer span.End()
+
+// Add relevant attributes to the span
+span.SetAttributes(map[string]interface{}{
+    "message.size": len(message),
+    "routing.key": rabbitClient.Config().Channel.RoutingKey,
+})
+
+// Extract trace context to include in the message headers
+traceHeaders := tracerClient.GetCarrier(ctx)
+
+// Publish the message with trace headers
+err := rabbitClient.Publish(ctx, message, traceHeaders)
+if err != nil {
+    span.RecordError(err)
+    log.Printf("Failed to publish message: %v", err)
+    return err
+}
+
+log.Println("Message published successfully with trace context")
 ```
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

@@ -281,7 +281,11 @@ func (m *Minio) GenerateMultipartUploadURLs(
 
 	// Initiate multipart upload
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		if m.cfg.UploadConfig.DefaultContentType != "" {
+			contentType = m.cfg.UploadConfig.DefaultContentType
+		} else {
+			contentType = UploadDefaultContentType
+		}
 	}
 
 	uploadID, err := m.initiateMultipartUpload(ctx, objectKey, contentType)
