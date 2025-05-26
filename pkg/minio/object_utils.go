@@ -139,6 +139,73 @@ func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error) {
 	return result, nil
 }
 
+// StreamGet downloads a file from MinIO and sends chunks through a channel
+func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error) {
+	dataCh := make(chan []byte)
+	errCh := make(chan error, 1) // buffered to avoid goroutine leaks
+
+	go func() {
+		defer close(dataCh)
+		defer close(errCh)
+
+		// Get the object
+		reader, err := m.Client.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
+		if err != nil {
+			errCh <- fmt.Errorf("failed to get object: %w", err)
+			return
+		}
+		defer func() {
+			if err := reader.Close(); err != nil {
+				m.logger.Error("failed to close object reader", err, nil)
+			}
+		}()
+
+		// Read the object in chunks
+		buffer := make([]byte, chunkSize)
+		for {
+			// Check if context is done
+			select {
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			default:
+				// Continue processing
+			}
+
+			// Read a chunk
+			n, err := reader.Read(buffer)
+
+			if n > 0 {
+				// Create a copy of the data to send through the channel
+				// This is important, so the buffer can be reused for the next read
+				chunk := make([]byte, n)
+				copy(chunk, buffer[:n])
+
+				// Send the chunk through the channel
+				select {
+				case dataCh <- chunk:
+					// Chunk sent successfully
+				case <-ctx.Done():
+					errCh <- ctx.Err()
+					return
+				}
+			}
+
+			// Handle the end of a file or errors
+			if err != nil {
+				if err == io.EOF {
+					// Normal end of a file, not an error
+					return
+				}
+				errCh <- fmt.Errorf("error reading object: %w", err)
+				return
+			}
+		}
+	}()
+
+	return dataCh, errCh
+}
+
 // Delete removes an object from the specified bucket.
 // This method permanently deletes the object from MinIO storage.
 //
