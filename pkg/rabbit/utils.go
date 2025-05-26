@@ -23,6 +23,23 @@ type Message interface {
 
 	// Body returns the message payload as a byte slice.
 	Body() []byte
+
+	// Header returns the headers associated with the message.
+	// Message headers provide metadata about the message and can contain
+	// application-specific information set by the message publisher.
+	//
+	// Headers are a map of key-value pairs where the keys are strings
+	// and values can be of various types. Common uses for headers include:
+	//   - Message type identification
+	//   - Content format specification
+	//   - Routing information
+	//   - Tracing context propagation
+	//   - Custom application metadata
+	//
+	// For distributed tracing with OpenTelemetry, headers can carry trace
+	// context between services, enabling end-to-end tracing across
+	// message-based communication.
+	Header() map[string]interface{}
 }
 
 // ConsumerMessage implements the Message interface and wraps an AMQP delivery.
@@ -177,6 +194,15 @@ func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Mes
 // Parameters:
 //   - ctx: Context for cancellation control
 //   - msg: Message payload as a byte slice
+//   - header: Optional message headers as a map of key-value pairs; can be used for metadata
+//     and distributed tracing propagation
+//
+// The headers parameter is particularly useful for distributed tracing, allowing trace
+// context to be propagated across service boundaries through message queues. When using
+// with the tracer package, you can extract trace headers and include them in the message:
+//
+//	traceHeaders := tracerClient.GetCarrier(ctx)
+//	err := rabbitClient.Publish(ctx, message, traceHeaders)
 //
 // Returns an error if publishing fails or if the context is canceled.
 //
@@ -185,26 +211,59 @@ func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Mes
 //	ctx := context.Background()
 //	message := []byte("Hello, RabbitMQ!")
 //
-//	err := rabbitClient.Publish(ctx, message)
+//	// Basic publishing without headers
+//	err := rabbitClient.Publish(ctx, message, nil)
 //	if err != nil {
 //	    log.Printf("Failed to publish message: %v", err)
 //	} else {
 //	    log.Println("Message published successfully")
 //	}
-func (rb *Rabbit) Publish(ctx context.Context, msg []byte) error {
-
+//
+// Example with distributed tracing:
+//
+//	// Create a span for the publish operation
+//	ctx, span := tracer.StartSpan(ctx, "publish-message")
+//	defer span.End()
+//
+//	// Add relevant attributes to the span
+//	span.SetAttributes(map[string]interface{}{
+//	    "message.size": len(message),
+//	    "routing.key": rabbitClient.Config().Channel.RoutingKey,
+//	})
+//
+//	// Extract trace context to include in the message headers
+//	traceHeaders := tracerClient.GetCarrier(ctx)
+//
+//	// Publish the message with trace headers
+//	err := rabbitClient.Publish(ctx, message, traceHeaders)
+//	if err != nil {
+//	    span.RecordError(err)
+//	    log.Printf("Failed to publish message: %v", err)
+//	    return err
+//	}
+//
+//	log.Println("Message published successfully with trace context")
+func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error {
 	select {
 	case <-ctx.Done():
 		rb.logger.Error("context error for publishing msg into rabbit", ctx.Err(), nil)
 		return ctx.Err()
 	default:
+		// Initialize header variable
+		var header map[string]interface{}
+
+		// If headers were provided, use the first one
+		if len(headers) > 0 {
+			header = headers[0]
+		}
+
 		rb.mu.RLock()
 		err := rb.Channel.Publish(rb.cfg.Channel.ExchangeName,
 			rb.cfg.Channel.RoutingKey,
 			false,
 			false,
 			amqp.Publishing{
-				//Headers:         nil,
+				Headers:     header,
 				ContentType: rb.cfg.Channel.ContentType,
 				//ContentEncoding: "",
 				//DeliveryMode:    0,
@@ -253,4 +312,42 @@ func (rb *ConsumerMessage) NackMsg(requeue bool) error {
 // Body returns the message payload as a byte slice.
 func (rb *ConsumerMessage) Body() []byte {
 	return rb.body
+}
+
+// Header returns the headers associated with the message.
+// Message headers provide metadata about the message and can contain
+// application-specific information set by the message publisher.
+//
+// Headers are a map of key-value pairs where the keys are strings
+// and values can be of various types. Common uses for headers include:
+//   - Message type identification
+//   - Content format specification
+//   - Routing information
+//   - Tracing context propagation
+//   - Custom application metadata
+//
+// Returns:
+//   - map[string]interface{}: A map containing the message headers
+//
+// Example:
+//
+//	msgChan := rabbitClient.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    // Access message headers
+//	    headers := msg.Header()
+//
+//	    // Check for specific headers
+//	    if contentType, ok := headers["content-type"].(string); ok {
+//	        fmt.Printf("Content type: %s\n", contentType)
+//	    }
+//
+//	    // Access trace context from headers for distributed tracing
+//	    if traceID, ok := headers["trace-id"].(string); ok {
+//	        ctx = tracer.SetTraceID(ctx, traceID)
+//	    }
+//
+//	    // Process the message...
+//	}
+func (rb *ConsumerMessage) Header() map[string]interface{} {
+	return rb.delivery.Headers
 }

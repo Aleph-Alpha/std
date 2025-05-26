@@ -27,6 +27,11 @@ const (
 	// MaxObjectSize is the maximum size (5 TiB) for a single object in MinIO/S3.
 	// This is a limit imposed by the S3 specification.
 	MaxObjectSize int64 = 5 * 1024 * 1024 * 1024 * 1024
+
+	// UploadDefaultContentType is the default MIME type to use for uploaded objects.
+	UploadDefaultContentType string = "application/octet-stream"
+
+	MultipartDownloadDefaultPartSize int64 = 5 * 1024 * 1024
 )
 
 // Config defines the top-level configuration for MinIO.
@@ -69,6 +74,9 @@ type ConnectionConfig struct {
 
 	// Region specifies the S3 region (e.g., "us-east-1")
 	Region string
+
+	// AccessBucketCreation determines whether to allow bucket creation if it doesn't exist
+	AccessBucketCreation bool
 }
 
 // UploadConfig defines the configuration for upload constraints.
@@ -86,6 +94,9 @@ type UploadConfig struct {
 	// switches to multipart mode for better performance
 	// Default: 50 MiB
 	MultipartThreshold int64
+
+	// DefaultContentType is the default MIME type to use for uploaded objects
+	DefaultContentType string
 }
 
 // DownloadConfig defines parameters that control download behavior.
@@ -98,6 +109,9 @@ type DownloadConfig struct {
 	// InitialBufferSize is the starting buffer size in bytes for downloading large files
 	// This affects memory usage when downloading large objects
 	InitialBufferSize int
+
+	// DefaultMultipartDownload is the default size of parts to download at each part
+	DefaultMultipartDownload int
 }
 
 // PresignedConfig contains configuration options for presigned URLs.
