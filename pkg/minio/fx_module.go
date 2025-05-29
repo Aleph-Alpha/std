@@ -6,14 +6,6 @@ import (
 	"sync"
 )
 
-type MinioLifeCycleParams struct {
-	fx.In
-
-	Lifecycle fx.Lifecycle
-	Minio     *Minio
-	Logger    Logger
-}
-
 // FXModule is an fx.Module that provides and configures the MinIO client.
 // This module registers the MinIO client with the Fx dependency injection framework,
 // making it available to other components in the application.
@@ -30,10 +22,29 @@ type MinioLifeCycleParams struct {
 //	)
 var FXModule = fx.Module("minio",
 	fx.Provide(
-		NewClient,
+		NewMinioClientWithDI,
 	),
 	fx.Invoke(RegisterLifecycle),
 )
+
+type MinioParams struct {
+	fx.In
+
+	Config
+	Logger
+}
+
+func NewMinioClientWithDI(params MinioParams) (*Minio, error) {
+	return NewClient(params.Config, params.Logger)
+}
+
+type MinioLifeCycleParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Minio     *Minio
+	Logger    Logger
+}
 
 // RegisterLifecycle registers the MinIO client with the fx lifecycle system.
 // This function sets up proper initialization and graceful shutdown of the MinIO client,
@@ -78,12 +89,7 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 		OnStop: func(ctx context.Context) error {
 
 			params.Logger.Info("closing minio client...", nil, nil)
-			params.Minio.closeShutdownOnce.Do(func() {
-				close(params.Minio.shutdownSignal)
-			})
-			params.Minio.closeReconnectOnce.Do(func() {
-				close(params.Minio.reconnectSignal)
-			})
+			params.Minio.GracefulShutdown()
 
 			wg.Wait()
 			return nil
@@ -91,6 +97,33 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 	})
 }
 
+// GracefulShutdown safely terminates all MinIO client operations and closes associated resources.
+// This method ensures a clean shutdown process by using sync.Once to guarantee each channel
+// is closed exactly once, preventing "close of closed channel" panics that could occur when
+// multiple shutdown paths execute concurrently.
+//
+// The shutdown process:
+// 1. Safely closes the shutdownSignal channel to notify all monitoring goroutines to stop
+// 2. Safely closes the reconnectSignal channel to terminate any reconnection attempts
+//
+// This method is designed to be called from multiple potential places (such as application
+// shutdown hooks, context cancellation handlers, or defer statements) without causing
+// resource management issues. The use of sync.Once ensures that even if called multiple times,
+// each cleanup operation happens exactly once.
+//
+// Example usage:
+//
+//	// In application shutdown code
+//	func shutdownApp() {
+//	    minioClient.GracefulShutdown()
+//	    // other cleanup...
+//	}
+//
+//	// Or with defer
+//	func processFiles() {
+//	    defer minioClient.GracefulShutdown()
+//	    // processing logic...
+//	}
 func (m *Minio) GracefulShutdown() {
 	m.closeShutdownOnce.Do(func() {
 		close(m.shutdownSignal)
