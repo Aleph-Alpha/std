@@ -54,6 +54,8 @@ type Rabbit struct {
 
 	// shutdownSignal is closed when the client is being shut down
 	shutdownSignal chan struct{}
+
+	closeShutdownOnce sync.Once
 }
 
 // NewClient creates and initializes a new RabbitMQ client with the provided configuration.
@@ -263,6 +265,9 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 //
 // This provides resilience against network issues and RabbitMQ server restarts.
 func (rb *Rabbit) RetryConnection(logger Logger, cfg Config) {
+	defer rb.closeShutdownOnce.Do(func() {
+		close(rb.shutdownSignal)
+	})
 outerLoop:
 	for {
 		errChan := make(chan *amqp.Error, 1)

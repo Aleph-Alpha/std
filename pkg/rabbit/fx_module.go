@@ -133,7 +133,9 @@ func RegisterRabbitLifecycle(params RabbitLifecycleParams) {
 // Any errors during shutdown are logged but not propagated, as they typically
 // cannot be handled at this stage of application shutdown.
 func (rb *Rabbit) GracefulShutdown() {
-	close(rb.shutdownSignal)
+	rb.closeShutdownOnce.Do(func() {
+		close(rb.shutdownSignal)
+	})
 	rb.mu.Lock()
 
 	rb.logger.Info("closing rabbit channel...", nil, nil)
