@@ -250,8 +250,8 @@ func TestPostgresWithFXModule(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check if postgres was populated
-	if postgres == nil || postgres.client == nil {
-		t.Fatal("Failed to initialize Postgres client - connection likely failed")
+	if postgres == nil || postgres.Client == nil {
+		t.Fatal("Failed to initialize Postgres Client - connection likely failed")
 	}
 
 	// Verify the connection is working using the DB() method

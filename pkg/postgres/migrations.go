@@ -106,7 +106,7 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 	}
 
 	// Execute GORM's AutoMigrate
-	if err := p.client.AutoMigrate(models...); err != nil {
+	if err := p.Client.AutoMigrate(models...); err != nil {
 		return err
 	}
 
@@ -121,7 +121,7 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 		Status:     "success",
 	}
 
-	if err := p.client.Create(&record).Error; err != nil {
+	if err := p.Client.Create(&record).Error; err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
 
@@ -132,7 +132,7 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 // This internal method is called before any migration operation to make sure
 // the system can track which migrations have been applied.
 func (p *Postgres) ensureMigrationHistoryTable() error {
-	return p.client.AutoMigrate(&MigrationHistoryRecord{})
+	return p.Client.AutoMigrate(&MigrationHistoryRecord{})
 }
 
 // MigrateUp applies all pending migrations from the specified directory.
@@ -159,7 +159,7 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 
 	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
-	if err := p.client.Find(&applied).Error; err != nil {
+	if err := p.Client.Find(&applied).Error; err != nil {
 		return fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
@@ -190,7 +190,7 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 		var status, errorMsg string
 
 		// Start a transaction
-		tx := p.client.WithContext(ctx).Begin()
+		tx := p.Client.WithContext(ctx).Begin()
 		if tx.Error != nil {
 			return fmt.Errorf("failed to start transaction: %w", tx.Error)
 		}
@@ -252,7 +252,7 @@ func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error 
 
 	// Get the last applied migration
 	var lastMigration MigrationHistoryRecord
-	if err := p.client.Order("id DESC").First(&lastMigration).Error; err != nil {
+	if err := p.Client.Order("id DESC").First(&lastMigration).Error; err != nil {
 		return fmt.Errorf("failed to get last migration: %w", err)
 	}
 
@@ -275,7 +275,7 @@ func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error 
 	}
 
 	// Start a transaction
-	tx := p.client.WithContext(ctx).Begin()
+	tx := p.Client.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return fmt.Errorf("failed to start transaction: %w", tx.Error)
 	}
@@ -388,7 +388,7 @@ func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string)
 
 	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
-	if err := p.client.WithContext(ctx).Find(&applied).Error; err != nil {
+	if err := p.Client.WithContext(ctx).Find(&applied).Error; err != nil {
 		return nil, fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
