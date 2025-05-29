@@ -198,7 +198,7 @@ Package rabbit is a generated GoMock package.
 ## Index
 
 - [Variables](<#variables>)
-- [func RegisterRabbitLifecycle\(lc fx.Lifecycle, client \*Rabbit, logger Logger, cfg Config\)](<#RegisterRabbitLifecycle>)
+- [func RegisterRabbitLifecycle\(params RabbitLifecycleParams\)](<#RegisterRabbitLifecycle>)
 - [type Channel](<#Channel>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
@@ -225,10 +225,15 @@ Package rabbit is a generated GoMock package.
   - [func \(mr \*MockLoggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Info>)
   - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
 - [type Rabbit](<#Rabbit>)
-  - [func NewClient\(cfg Config, logger Logger\) \*Rabbit](<#NewClient>)
+  - [func NewClient\(config Config, logger Logger\) \*Rabbit](<#NewClient>)
+  - [func NewClientWithDI\(params RabbitParams\) \*Rabbit](<#NewClientWithDI>)
   - [func \(rb \*Rabbit\) Consume\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.Consume>)
   - [func \(rb \*Rabbit\) ConsumeDLQ\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.ConsumeDLQ>)
+  - [func \(rb \*Rabbit\) GracefulShutdown\(\)](<#Rabbit.GracefulShutdown>)
   - [func \(rb \*Rabbit\) Publish\(ctx context.Context, msg \[\]byte, headers ...map\[string\]interface\{\}\) error](<#Rabbit.Publish>)
+  - [func \(rb \*Rabbit\) RetryConnection\(logger Logger, cfg Config\)](<#Rabbit.RetryConnection>)
+- [type RabbitLifecycleParams](<#RabbitLifecycleParams>)
+- [type RabbitParams](<#RabbitParams>)
 
 
 ## Variables
@@ -249,17 +254,17 @@ app := fx.New(
 ```go
 var FXModule = fx.Module("rabbit",
     fx.Provide(
-        NewClient,
+        NewClientWithDI,
     ),
     fx.Invoke(RegisterRabbitLifecycle),
 )
 ```
 
 <a name="RegisterRabbitLifecycle"></a>
-## func [RegisterRabbitLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L48>)
+## func [RegisterRabbitLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L99>)
 
 ```go
-func RegisterRabbitLifecycle(lc fx.Lifecycle, client *Rabbit, logger Logger, cfg Config)
+func RegisterRabbitLifecycle(params RabbitLifecycleParams)
 ```
 
 RegisterRabbitLifecycle registers the RabbitMQ client with the fx lifecycle system. This function sets up proper initialization and graceful shutdown of the RabbitMQ client, including starting the connection monitoring goroutine.
@@ -689,7 +694,7 @@ func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
 Warn indicates an expected call of Warn.
 
 <a name="Rabbit"></a>
-## type [Rabbit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L38-L57>)
+## type [Rabbit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L38-L59>)
 
 Rabbit represents a client for interacting with RabbitMQ. It manages connections, channels, and provides methods for publishing and consuming messages with automatic reconnection capabilities.
 
@@ -704,10 +709,10 @@ type Rabbit struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L74>)
+### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L76>)
 
 ```go
-func NewClient(cfg Config, logger Logger) *Rabbit
+func NewClient(config Config, logger Logger) *Rabbit
 ```
 
 NewClient creates and initializes a new RabbitMQ client with the provided configuration. This function establishes the initial connection to RabbitMQ, sets up channels, and configures exchanges and queues as specified in the configuration.
@@ -725,6 +730,41 @@ Example:
 client := rabbit.NewClient(config, myLogger)
 defer client.Close()
 ```
+
+<a name="NewClientWithDI"></a>
+### func [NewClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L67>)
+
+```go
+func NewClientWithDI(params RabbitParams) *Rabbit
+```
+
+NewClientWithDI creates a new RabbitMQ client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where dependencies are automatically provided via the RabbitParams struct.
+
+Parameters:
+
+- params: A RabbitParams struct that contains the Config and Logger instances required to initialize the RabbitMQ client. This struct embeds fx.In to enable automatic injection of these dependencies.
+
+Returns:
+
+- \*Rabbit: A fully initialized RabbitMQ client ready for use.
+
+Example usage with fx:
+
+```
+app := fx.New(
+    rabbit.FXModule,
+    fx.Provide(
+        func() rabbit.Config {
+            return loadRabbitConfig() // Your config loading function
+        },
+        func() rabbit.Logger {
+            return initLogger() // Your logger initialization
+        },
+    ),
+)
+```
+
+Under the hood, this function simply delegates to the standard NewClient function, making it easier to integrate with dependency injection frameworks while maintaining the same initialization logic.
 
 <a name="Rabbit.Consume"></a>
 ### func \(\*Rabbit\) [Consume](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L158>)
@@ -794,6 +834,19 @@ for msg := range dlqChan {
 }
 ```
 
+<a name="Rabbit.GracefulShutdown"></a>
+### func \(\*Rabbit\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L135>)
+
+```go
+func (rb *Rabbit) GracefulShutdown()
+```
+
+GracefulShutdown closes the RabbitMQ client's connections and channels cleanly. This method ensures that all resources are properly released when the application is shutting down.
+
+The shutdown process: 1. Signals all goroutines to stop by closing the shutdownSignal channel 2. Acquires a lock to prevent concurrent access during shutdown 3. Closes the AMQP channel if it exists 4. Closes the AMQP connection if it exists and is not already closed
+
+Any errors during shutdown are logged but not propagated, as they typically cannot be handled at this stage of application shutdown.
+
 <a name="Rabbit.Publish"></a>
 ### func \(\*Rabbit\) [Publish](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L246>)
 
@@ -858,6 +911,59 @@ if err != nil {
 }
 
 log.Println("Message published successfully with trace context")
+```
+
+<a name="Rabbit.RetryConnection"></a>
+### func \(\*Rabbit\) [RetryConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L267>)
+
+```go
+func (rb *Rabbit) RetryConnection(logger Logger, cfg Config)
+```
+
+RetryConnection continuously monitors the RabbitMQ connection and automatically re\-establishes it if it fails. This method is typically run in a goroutine.
+
+Parameters:
+
+- logger: Logger for recording reconnection events and errors
+- cfg: Configuration for establishing new connections
+
+The method will:
+
+- Monitor the connection for closure events
+- Attempt to reconnect when the connection is lost
+- Re\-establish channels and their configurations
+- Continue monitoring until the shutdownSignal is received
+
+This provides resilience against network issues and RabbitMQ server restarts.
+
+<a name="RabbitLifecycleParams"></a>
+## type [RabbitLifecycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L72-L79>)
+
+RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
+
+```go
+type RabbitLifecycleParams struct {
+    fx.In
+
+    Lifecycle fx.Lifecycle
+    Client    *Rabbit
+    Logger    Logger
+    Config    Config
+}
+```
+
+<a name="RabbitParams"></a>
+## type [RabbitParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L31-L36>)
+
+RabbitParams groups the dependencies needed to create a Rabbit client
+
+```go
+type RabbitParams struct {
+    fx.In
+
+    Config Config
+    Logger Logger
+}
 ```
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

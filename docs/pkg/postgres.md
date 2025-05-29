@@ -123,7 +123,7 @@ Package postgres is a generated GoMock package.
 ## Index
 
 - [Variables](<#variables>)
-- [func RegisterPostgresLifecycle\(lifecycle fx.Lifecycle, postgres \*Postgres, logger Logger\)](<#RegisterPostgresLifecycle>)
+- [func RegisterPostgresLifecycle\(params PostgresLifeCycleParams\)](<#RegisterPostgresLifecycle>)
 - [func TranslateError\(err error\) error](<#TranslateError>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
@@ -149,6 +149,7 @@ Package postgres is a generated GoMock package.
   - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
 - [type Postgres](<#Postgres>)
   - [func NewPostgres\(cfg Config, logger Logger\) \*Postgres](<#NewPostgres>)
+  - [func NewPostgresClientWithDI\(params PostgresParams\) \*Postgres](<#NewPostgresClientWithDI>)
   - [func \(p \*Postgres\) AutoMigrate\(models ...interface\{\}\) error](<#Postgres.AutoMigrate>)
   - [func \(p \*Postgres\) Count\(ctx context.Context, model interface\{\}, count \*int64, conditions ...interface\{\}\) error](<#Postgres.Count>)
   - [func \(p \*Postgres\) Create\(ctx context.Context, value interface\{\}\) error](<#Postgres.Create>)
@@ -159,15 +160,20 @@ Package postgres is a generated GoMock package.
   - [func \(p \*Postgres\) Find\(ctx context.Context, dest interface\{\}, conditions ...interface\{\}\) error](<#Postgres.Find>)
   - [func \(p \*Postgres\) First\(ctx context.Context, dest interface\{\}, conditions ...interface\{\}\) error](<#Postgres.First>)
   - [func \(p \*Postgres\) GetMigrationStatus\(ctx context.Context, migrationsDir string\) \(\[\]map\[string\]interface\{\}, error\)](<#Postgres.GetMigrationStatus>)
+  - [func \(p \*Postgres\) GracefulShutdown\(\) error](<#Postgres.GracefulShutdown>)
   - [func \(p \*Postgres\) MigrateDown\(ctx context.Context, migrationsDir string\) error](<#Postgres.MigrateDown>)
   - [func \(p \*Postgres\) MigrateUp\(ctx context.Context, migrationsDir string\) error](<#Postgres.MigrateUp>)
+  - [func \(p \*Postgres\) MonitorConnection\(ctx context.Context\)](<#Postgres.MonitorConnection>)
   - [func \(p \*Postgres\) Query\(ctx context.Context\) \*QueryBuilder](<#Postgres.Query>)
+  - [func \(p \*Postgres\) RetryConnection\(ctx context.Context, logger Logger\)](<#Postgres.RetryConnection>)
   - [func \(p \*Postgres\) Save\(ctx context.Context, value interface\{\}\) error](<#Postgres.Save>)
   - [func \(p \*Postgres\) Transaction\(ctx context.Context, fn func\(pg \*Postgres\) error\) error](<#Postgres.Transaction>)
   - [func \(p \*Postgres\) Update\(ctx context.Context, model interface\{\}, attrs interface\{\}\) error](<#Postgres.Update>)
   - [func \(p \*Postgres\) UpdateColumn\(ctx context.Context, model interface\{\}, columnName string, value interface\{\}\) error](<#Postgres.UpdateColumn>)
   - [func \(p \*Postgres\) UpdateColumns\(ctx context.Context, model interface\{\}, columnValues map\[string\]interface\{\}\) error](<#Postgres.UpdateColumns>)
   - [func \(p \*Postgres\) UpdateWhere\(ctx context.Context, model interface\{\}, attrs interface\{\}, condition string, args ...interface\{\}\) error](<#Postgres.UpdateWhere>)
+- [type PostgresLifeCycleParams](<#PostgresLifeCycleParams>)
+- [type PostgresParams](<#PostgresParams>)
 - [type QueryBuilder](<#QueryBuilder>)
   - [func \(qb \*QueryBuilder\) Count\(count \*int64\) error](<#QueryBuilder.Count>)
   - [func \(qb \*QueryBuilder\) Delete\(value interface\{\}\) error](<#QueryBuilder.Delete>)
@@ -227,17 +233,17 @@ var (
 ```go
 var FXModule = fx.Module("postgres",
     fx.Provide(
-        NewPostgres,
+        NewPostgresClientWithDI,
     ),
     fx.Invoke(RegisterPostgresLifecycle),
 )
 ```
 
 <a name="RegisterPostgresLifecycle"></a>
-## func [RegisterPostgresLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L28>)
+## func [RegisterPostgresLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L88>)
 
 ```go
-func RegisterPostgresLifecycle(lifecycle fx.Lifecycle, postgres *Postgres, logger Logger)
+func RegisterPostgresLifecycle(params PostgresLifeCycleParams)
 ```
 
 RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database component. It sets up: 1. Connection monitoring on the application starts 2. Automatic reconnection mechanism on application start 3. Graceful shutdown of database connections on application stop
@@ -571,24 +577,60 @@ func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
 Warn indicates an expected call of Warn.
 
 <a name="Postgres"></a>
-## type [Postgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L29-L36>)
+## type [Postgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L29-L39>)
 
 Postgres is a thread\-safe wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations. It guards all database operations with a mutex to ensure thread safety and includes mechanisms for graceful shutdown and connection health monitoring.
 
 ```go
 type Postgres struct {
+    Client *gorm.DB
     // contains filtered or unexported fields
 }
 ```
 
 <a name="NewPostgres"></a>
-### func [NewPostgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L42>)
+### func [NewPostgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L45>)
 
 ```go
 func NewPostgres(cfg Config, logger Logger) *Postgres
 ```
 
 NewPostgres creates a new Postgres instance with the provided configuration and Logger. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it logs a fatal error and terminates.
+
+<a name="NewPostgresClientWithDI"></a>
+### func [NewPostgresClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L61>)
+
+```go
+func NewPostgresClientWithDI(params PostgresParams) *Postgres
+```
+
+NewPostgresClientWithDI creates a new Postgres Client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where the Config and Logger dependencies are automatically provided via the PostgresParams struct.
+
+Parameters:
+
+- params: A PostgresParams struct containing the Config and Logger instances required to initialize the Postgres Client. This struct embeds fx.In to enable automatic injection of these dependencies.
+
+Returns:
+
+- \*Postgres: A fully initialized Postgres Client ready for use.
+
+Example usage with fx:
+
+```
+app := fx.New(
+    postgres.FXModule,
+    fx.Provide(
+        func() postgres.Config {
+            return loadPostgresConfig() // Your config loading function
+        },
+        func() postgres.Logger {
+            return initLogger() // Your logger initialization
+        },
+    ),
+)
+```
+
+This function delegates to the standard NewPostgres function, maintaining the same initialization logic while enabling seamless integration with dependency injection.
 
 <a name="Postgres.AutoMigrate"></a>
 ### func \(\*Postgres\) [AutoMigrate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/migrations.go#L99>)
@@ -688,7 +730,7 @@ if err == nil {
 func (p *Postgres) DB() *gorm.DB
 ```
 
-DB returns the underlying GORM DB client instance. This method provides direct access to the database connection while maintaining thread safety through a read lock.
+DB returns the underlying GORM DB Client instance. This method provides direct access to the database connection while maintaining thread safety through a read lock.
 
 Use this method when you need to perform operations not covered by the wrapper methods or when you need to access specific GORM functionality. Note that direct usage bypasses some of the safety mechanisms, so use it with care.
 
@@ -819,6 +861,15 @@ if err == nil {
 }
 ```
 
+<a name="Postgres.GracefulShutdown"></a>
+### func \(\*Postgres\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L131>)
+
+```go
+func (p *Postgres) GracefulShutdown() error
+```
+
+
+
 <a name="Postgres.MigrateDown"></a>
 ### func \(\*Postgres\) [MigrateDown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/migrations.go#L249>)
 
@@ -863,6 +914,17 @@ Example:
 err := db.MigrateUp(ctx, "./migrations")
 ```
 
+<a name="Postgres.MonitorConnection"></a>
+### func \(\*Postgres\) [MonitorConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L149>)
+
+```go
+func (p *Postgres) MonitorConnection(ctx context.Context)
+```
+
+MonitorConnection periodically checks the health of the database connection and triggers reconnection attempts when necessary. It runs as a goroutine that performs health checks at regular intervals \(10 seconds\) and signals the RetryConnection goroutine when a failure is detected.
+
+The function respects context cancellation and shutdown signals, ensuring proper resource cleanup and graceful termination when requested.
+
 <a name="Postgres.Query"></a>
 ### func \(\*Postgres\) [Query](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L26>)
 
@@ -888,6 +950,17 @@ err := db.Query(ctx).
     Limit(10).
     Find(&users)
 ```
+
+<a name="Postgres.RetryConnection"></a>
+### func \(\*Postgres\) [RetryConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L107>)
+
+```go
+func (p *Postgres) RetryConnection(ctx context.Context, logger Logger)
+```
+
+RetryConnection continuously attempts to reconnect to the PostgresSQL database when notified of a connection failure. It operates as a goroutine that waits for signals on retryChanSignal before attempting reconnection. The function respects context cancellation and shutdown signals, ensuring graceful termination when requested.
+
+It implements two nested loops: \- The outer loop waits for retry signals \- The inner loop attempts reconnection until successful
 
 <a name="Postgres.Save"></a>
 ### func \(\*Postgres\) [Save](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L84>)
@@ -1037,6 +1110,39 @@ err := db.UpdateWhere(ctx, &User{},
                       map[string]interface{}{"status": "inactive"},
                       "last_login < ?",
                       time.Now().AddDate(0, -6, 0))
+```
+
+<a name="PostgresLifeCycleParams"></a>
+## type [PostgresLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L72-L78>)
+
+PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management. This struct combines all the components required to properly manage the lifecycle of a Postgres Client within an fx application, including startup, monitoring, and graceful shutdown.
+
+The embedded fx.In marker enables automatic injection of the struct fields from the dependency container when this struct is used as a parameter in lifecycle registration functions.
+
+```go
+type PostgresLifeCycleParams struct {
+    fx.In
+
+    Lifecycle fx.Lifecycle
+    Postgres  *Postgres
+    Logger    Logger
+}
+```
+
+<a name="PostgresParams"></a>
+## type [PostgresParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L26-L31>)
+
+PostgresParams groups the dependencies needed to create a Postgres Client via dependency injection. This struct is designed to work with Uber's fx dependency injection framework and provides the necessary parameters for initializing a Postgres database connection.
+
+The embedded fx.In marker enables automatic injection of the struct fields from the dependency container when this struct is used as a parameter in provider functions.
+
+```go
+type PostgresParams struct {
+    fx.In
+
+    Config Config
+    Logger Logger
+}
 ```
 
 <a name="QueryBuilder"></a>
