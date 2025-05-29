@@ -22,10 +22,51 @@ import (
 //	)
 var FXModule = fx.Module("rabbit",
 	fx.Provide(
-		NewClient,
+		NewClientWithDI,
 	),
 	fx.Invoke(RegisterRabbitLifecycle),
 )
+
+// RabbitParams groups the dependencies needed to create a Rabbit client
+type RabbitParams struct {
+	fx.In
+
+	Config Config
+	Logger Logger
+}
+
+// NewClientWithDI creates a new RabbitMQ client using dependency injection.
+// This function is designed to be used with Uber's fx dependency injection framework
+// where dependencies are automatically provided via the RabbitParams struct.
+//
+// Parameters:
+//   - params: A RabbitParams struct that contains the Config and Logger instances
+//     required to initialize the RabbitMQ client. This struct embeds fx.In to enable
+//     automatic injection of these dependencies.
+//
+// Returns:
+//   - *Rabbit: A fully initialized RabbitMQ client ready for use.
+//
+// Example usage with fx:
+//
+//	app := fx.New(
+//	    rabbit.FXModule,
+//	    fx.Provide(
+//	        func() rabbit.Config {
+//	            return loadRabbitConfig() // Your config loading function
+//	        },
+//	        func() rabbit.Logger {
+//	            return initLogger() // Your logger initialization
+//	        },
+//	    ),
+//	)
+//
+// Under the hood, this function simply delegates to the standard NewClient function,
+// making it easier to integrate with dependency injection frameworks while maintaining
+// the same initialization logic.
+func NewClientWithDI(params RabbitParams) *Rabbit {
+	return NewClient(params.Config, params.Logger)
+}
 
 // RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
 type RabbitLifecycleParams struct {
@@ -64,14 +105,14 @@ func RegisterRabbitLifecycle(params RabbitLifecycleParams) {
 
 			go func(logger Logger, cfg Config) {
 				defer wg.Done()
-				params.Client.retryConnection(logger, cfg)
+				params.Client.RetryConnection(logger, cfg)
 			}(params.Logger, params.Config)
 
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 
-			params.Client.gracefulShutdown()
+			params.Client.GracefulShutdown()
 
 			wg.Wait()
 			return nil
@@ -79,7 +120,7 @@ func RegisterRabbitLifecycle(params RabbitLifecycleParams) {
 	})
 }
 
-// gracefulShutdown closes the RabbitMQ client's connections and channels cleanly.
+// GracefulShutdown closes the RabbitMQ client's connections and channels cleanly.
 // This method ensures that all resources are properly released when the application
 // is shutting down.
 //
@@ -91,7 +132,7 @@ func RegisterRabbitLifecycle(params RabbitLifecycleParams) {
 //
 // Any errors during shutdown are logged but not propagated, as they typically
 // cannot be handled at this stage of application shutdown.
-func (rb *Rabbit) gracefulShutdown() {
+func (rb *Rabbit) GracefulShutdown() {
 	close(rb.shutdownSignal)
 	rb.mu.Lock()
 

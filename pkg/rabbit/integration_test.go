@@ -83,7 +83,7 @@ func TestRabbitMQConsumerContextCancellation(t *testing.T) {
 	mockLog.EXPECT().Info("Connected to Rabbit", gomock.Any(), gomock.Any()).Times(1)
 	mockLog.EXPECT().Error("error in establishing consumer for rabbit", gomock.Any(), gomock.Any()).AnyTimes() // it's possible that the consumer is not created yet
 	mockLog.EXPECT().Info("consumer is shutting down due to context cancellation", gomock.Not(nil), gomock.Any()).Times(1)
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).Times(1)
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).Times(1)
 	mockLog.EXPECT().Info("closing rabbit channel...", gomock.Any(), gomock.Any()).Times(1)
 
 	// Configure RabbitMQ client
@@ -216,7 +216,7 @@ func TestRabbitMQConsumeWithAck_WithReconnection(t *testing.T) {
 	mockLog.EXPECT().Info("Reconnected to RabbitMQ", gomock.Any(), gomock.Any()).MaxTimes(2).Times(1)
 	mockLog.EXPECT().Info("closing rabbit channel...", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Info("Stopping retry loop inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
 
 	cfg := Config{
 		Connection: Connection{
@@ -372,8 +372,8 @@ func TestRabbitMQConsumeWithNackReQueue(t *testing.T) {
 	// Define mock expectations
 	mockLog.EXPECT().Info("Connecting to Rabbit", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Info("Connected to Rabbit", gomock.Any(), gomock.Any()).Times(1)
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
 	mockLog.EXPECT().Info("closing rabbit channel...", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Debug("message consumed from rabbit", gomock.Any(), gomock.Any()).Times(2)
 	mockLog.EXPECT().Info("consumer is shutting down due to shutdown signal", gomock.Any(), gomock.Any()).Times(1)
@@ -515,8 +515,8 @@ func TestRabbitMQConsumeWithAck(t *testing.T) {
 	mockLog.EXPECT().Info("consumer is shutting down due to shutdown signal", gomock.Any(), gomock.Any()).Times(1)
 	mockLog.EXPECT().Debug("message consumed from rabbit", gomock.Any(), gomock.Any()).Times(1)
 
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
 	mockLog.EXPECT().Info("closing rabbit channel...", gomock.Any(), gomock.Any()).MinTimes(1)
 
 	cfg := Config{
@@ -639,8 +639,8 @@ func TestRabbitMQPublish(t *testing.T) {
 	mockLog.EXPECT().Info("Connecting to Rabbit", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Info("Connected to Rabbit", gomock.Any(), gomock.Any()).Times(1)
 
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
 	mockLog.EXPECT().Info("closing rabbit channel...", gomock.Any(), gomock.Any()).MinTimes(1)
 
 	cfg := Config{
@@ -751,8 +751,8 @@ func TestRabbitMQReconnectAfterDisconnect(t *testing.T) {
 
 	mockLog.EXPECT().Info("Connecting to Rabbit", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Info("Connected to Rabbit", gomock.Any(), gomock.Any()).Times(2)
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
 	mockLog.EXPECT().Info("closing rabbit channel...", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Warn("RabbitMQ connection closed, retrying...", gomock.Any(), gomock.Any()).Times(1)
 	mockLog.EXPECT().Error("error in connecting to rabbit", gomock.Any(), gomock.Any()).MinTimes(1)
@@ -842,8 +842,8 @@ func TestRabbitMQDeadLetterQueue(t *testing.T) {
 	mockLog.EXPECT().Info("Connecting to Rabbit", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Info("Connected to Rabbit", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Debug("message consumed from rabbit", gomock.Any(), gomock.Any()).Times(2)
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
-	mockLog.EXPECT().Info("Stopping retryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal", gomock.Any(), gomock.Any()).AnyTimes()
+	mockLog.EXPECT().Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", gomock.Any(), gomock.Any()).AnyTimes()
 	mockLog.EXPECT().Info("closing rabbit channel...", gomock.Any(), gomock.Any()).MinTimes(1)
 	mockLog.EXPECT().Info("consumer is shutting down due to shutdown signal", gomock.Any(), gomock.Any()).Times(2)
 

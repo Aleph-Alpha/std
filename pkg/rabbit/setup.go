@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.uber.org/fx"
 	"os"
 	"sync"
 	"time"
@@ -57,14 +56,6 @@ type Rabbit struct {
 	shutdownSignal chan struct{}
 }
 
-// RabbitParams groups the dependencies needed to create a Rabbit client
-type RabbitParams struct {
-	fx.In
-
-	Config Config
-	Logger Logger
-}
-
 // NewClient creates and initializes a new RabbitMQ client with the provided configuration.
 // This function establishes the initial connection to RabbitMQ, sets up channels,
 // and configures exchanges and queues as specified in the configuration.
@@ -80,22 +71,22 @@ type RabbitParams struct {
 //
 //	client := rabbit.NewClient(config, myLogger)
 //	defer client.Close()
-func NewClient(params RabbitParams) *Rabbit {
-	con, err := newConnection(params.Config, params.Logger)
+func NewClient(config Config, logger Logger) *Rabbit {
+	con, err := newConnection(config, logger)
 	if err != nil {
-		params.Logger.Fatal("error in connecting to rabbit after all retries", nil, nil)
+		logger.Fatal("error in connecting to rabbit after all retries", nil, nil)
 	}
 
-	ch, err := connectToChannel(con, params.Config, params.Logger)
+	ch, err := connectToChannel(con, config, logger)
 	if ch == nil || err != nil {
-		params.Logger.Fatal("error in declaring channel", nil, nil)
+		logger.Fatal("error in declaring channel", nil, nil)
 	}
 
 	return &Rabbit{
-		cfg:            params.Config,
+		cfg:            config,
 		conn:           con,
 		Channel:        ch,
-		logger:         params.Logger,
+		logger:         logger,
 		shutdownSignal: make(chan struct{}),
 	}
 }
@@ -257,7 +248,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 	return ch, nil
 }
 
-// retryConnection continuously monitors the RabbitMQ connection and automatically
+// RetryConnection continuously monitors the RabbitMQ connection and automatically
 // re-establishes it if it fails. This method is typically run in a goroutine.
 //
 // Parameters:
@@ -271,7 +262,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 //   - Continue monitoring until the shutdownSignal is received
 //
 // This provides resilience against network issues and RabbitMQ server restarts.
-func (rb *Rabbit) retryConnection(logger Logger, cfg Config) {
+func (rb *Rabbit) RetryConnection(logger Logger, cfg Config) {
 outerLoop:
 	for {
 		errChan := make(chan *amqp.Error, 1)
@@ -279,7 +270,7 @@ outerLoop:
 
 		select {
 		case <-rb.shutdownSignal:
-			logger.Info("Stopping retryConnection loop due to shutdown signal", nil, nil)
+			logger.Info("Stopping RetryConnection loop due to shutdown signal", nil, nil)
 			return
 
 		case err := <-errChan:
@@ -288,7 +279,7 @@ outerLoop:
 			for {
 				select {
 				case <-rb.shutdownSignal:
-					logger.Info("Stopping retryConnection loop due to shutdown signal inside reconnect", nil, nil)
+					logger.Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", nil, nil)
 					return
 				default:
 					newConn, err := newConnection(cfg, logger)
