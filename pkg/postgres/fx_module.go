@@ -12,7 +12,7 @@ import (
 // the database connection.
 var FXModule = fx.Module("postgres",
 	fx.Provide(
-		NewMinioClientWithDI,
+		NewPostgresClientWithDI,
 	),
 	fx.Invoke(RegisterPostgresLifecycle),
 )
@@ -30,7 +30,7 @@ type PostgresParams struct {
 	Logger Logger
 }
 
-// NewMinioClientWithDI creates a new Postgres Client using dependency injection.
+// NewPostgresClientWithDI creates a new Postgres Client using dependency injection.
 // This function is designed to be used with Uber's fx dependency injection framework
 // where the Config and Logger dependencies are automatically provided via the PostgresParams struct.
 //
@@ -58,7 +58,7 @@ type PostgresParams struct {
 //
 // This function delegates to the standard NewPostgres function, maintaining the same
 // initialization logic while enabling seamless integration with dependency injection.
-func NewMinioClientWithDI(params PostgresParams) *Postgres {
+func NewPostgresClientWithDI(params PostgresParams) *Postgres {
 	return NewPostgres(params.Config, params.Logger)
 }
 
