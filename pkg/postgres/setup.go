@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"go.uber.org/fx"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"sync"
@@ -35,20 +36,27 @@ type Postgres struct {
 	retryChanSignal chan error
 }
 
+type PostgresParams struct {
+	fx.In
+
+	Config Config
+	Logger Logger
+}
+
 // NewPostgres creates a new Postgres instance with the provided configuration and Logger.
 // It establishes the initial database connection and sets up the internal state
 // for connection monitoring and recovery. If the initial connection fails,
 // it logs a fatal error and terminates.
-func NewPostgres(cfg Config, logger Logger) *Postgres {
-	conn, err := connectToPostgres(logger, cfg)
+func NewPostgres(params PostgresParams) *Postgres {
+	conn, err := connectToPostgres(params.Logger, params.Config)
 	if err != nil {
-		logger.Fatal("error in connecting to postgres after all retries", nil, nil)
+		params.Logger.Fatal("error in connecting to postgres after all retries", nil, nil)
 	}
 
 	return &Postgres{
 		client:          conn,
-		cfg:             cfg,
-		logger:          logger,
+		cfg:             params.Config,
+		logger:          params.Logger,
 		mu:              &sync.RWMutex{},
 		shutdownSignal:  make(chan struct{}),
 		retryChanSignal: make(chan error, 1),
@@ -101,7 +109,7 @@ func connectToPostgres(logger Logger, postgresConfig Config) (*gorm.DB, error) {
 // It implements two nested loops:
 // - The outer loop waits for retry signals
 // - The inner loop attempts reconnection until successful
-func (p *Postgres) retryConnection(ctx context.Context, logger Logger, cfg Config) {
+func (p *Postgres) retryConnection(ctx context.Context, logger Logger) {
 outerLoop:
 	for {
 		select {
@@ -119,7 +127,7 @@ outerLoop:
 				case <-ctx.Done():
 					return
 				default:
-					newConn, err := connectToPostgres(logger, cfg)
+					newConn, err := connectToPostgres(logger, p.cfg)
 					if err != nil {
 						logger.Error("Reconnection failed", err, nil)
 						time.Sleep(time.Second)

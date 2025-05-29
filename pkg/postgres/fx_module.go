@@ -6,6 +6,14 @@ import (
 	"sync"
 )
 
+type PostgresLifeCycleParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Postgres  *Postgres
+	Logger    Logger
+}
+
 // FXModule is an fx module that provides the Postgres database component.
 // It registers the Postgres constructor for dependency injection
 // and sets up lifecycle hooks to properly initialize and shut down
@@ -25,30 +33,30 @@ var FXModule = fx.Module("postgres",
 //
 // The function uses a WaitGroup to ensure that all goroutines complete
 // before the application terminates.
-func RegisterPostgresLifecycle(lifecycle fx.Lifecycle, postgres *Postgres, logger Logger) {
+func RegisterPostgresLifecycle(params PostgresLifeCycleParams) {
 	wg := &sync.WaitGroup{}
-	lifecycle.Append(fx.Hook{
+	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				postgres.monitorConnection(ctx)
+				params.Postgres.monitorConnection(ctx)
 			}()
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				postgres.retryConnection(ctx, logger, postgres.cfg)
+				params.Postgres.retryConnection(ctx, params.Logger)
 			}()
 
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			close(postgres.shutdownSignal)
+			close(params.Postgres.shutdownSignal)
 			wg.Wait()
 
 			// Close the database connection
-			sqlDB, err := postgres.DB().DB()
+			sqlDB, err := params.Postgres.DB().DB()
 			if err == nil {
 				err := sqlDB.Close()
 				if err != nil {

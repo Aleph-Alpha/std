@@ -515,6 +515,9 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 	db = postgres.DB() // Get the DB again in case it was updated
 	err = db.Raw("SELECT 1").Scan(&result).Error
 	assert.NoError(t, err)
+
+	err = app.Stop(ctx)
+	require.NoError(t, err)
 }
 
 // TestErrorHandling tests the error handling and translation
@@ -647,6 +650,9 @@ func TestAdvancedQueryOperations(t *testing.T) {
 	t.Run("GroupByHavingClauses", testGroupByHavingClauses(ctx, postgres))
 	t.Run("WindowFunctions", testWindowFunctions(ctx, postgres))
 	t.Run("CTEExpressions", testCTEExpressions(ctx, postgres))
+
+	err = app.Stop(ctx)
+	require.NoError(t, err)
 }
 
 // seedTestData creates test data for all tests
@@ -1764,10 +1770,27 @@ func TestTransactionHandling(t *testing.T) {
 	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	// Create Postgres instance
-	postgres := NewPostgres(containerInstance.Config, mockLogger)
-	require.NotNil(t, postgres)
-	require.NotNil(t, postgres.client)
+	var postgres *Postgres
+
+	// Create a test app using the existing FXModule
+	app := fxtest.New(t,
+		// Provide dependencies with the correct containerInstance config
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+			func() Logger {
+				return mockLogger
+			},
+		),
+		// Use the existing FXModule
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	// Start the application
+	err = app.Start(ctx)
+	require.NoError(t, err)
 
 	// Get the DB and auto-migrate schemas
 	db := postgres.DB()
@@ -1781,6 +1804,9 @@ func TestTransactionHandling(t *testing.T) {
 	// Run subtests
 	t.Run("BasicTransactionCommit", testBasicTransactionCommit(ctx, postgres))
 	t.Run("TransactionRollback", testTransactionRollback(ctx, postgres))
+
+	err = app.Stop(ctx)
+	require.NoError(t, err)
 }
 
 // setupTestAccounts creates test accounts for transaction tests
