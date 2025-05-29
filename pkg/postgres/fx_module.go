@@ -104,10 +104,13 @@ func RegisterPostgresLifecycle(params PostgresLifeCycleParams) {
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			close(params.Postgres.shutdownSignal)
+			params.Postgres.closeShutdownOnce.Do(func() {
+				close(params.Postgres.shutdownSignal)
+			})
+
 			wg.Wait()
 
-			params.Postgres.closeOnce.Do(func() {
+			params.Postgres.closeRetryChanOnce.Do(func() {
 				close(params.Postgres.retryChanSignal)
 			})
 
@@ -126,10 +129,14 @@ func RegisterPostgresLifecycle(params PostgresLifeCycleParams) {
 }
 
 func (p *Postgres) GracefulShutdown() error {
-	close(p.shutdownSignal)
-	p.closeOnce.Do(func() {
+	p.closeShutdownOnce.Do(func() {
+		close(p.shutdownSignal)
+	})
+
+	p.closeRetryChanOnce.Do(func() {
 		close(p.retryChanSignal)
 	})
+
 	p.mu.Lock()
 	// Close the database connection
 	sqlDB, err := p.DB().DB()

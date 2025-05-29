@@ -33,7 +33,9 @@ type Postgres struct {
 	mu              *sync.RWMutex
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
-	closeOnce       sync.Once
+
+	closeRetryChanOnce sync.Once
+	closeShutdownOnce  sync.Once
 }
 
 // NewPostgres creates a new Postgres instance with the provided configuration and Logger.
@@ -145,7 +147,7 @@ outerLoop:
 // The function respects context cancellation and shutdown signals, ensuring
 // proper resource cleanup and graceful termination when requested.
 func (p *Postgres) MonitorConnection(ctx context.Context) {
-	defer p.closeOnce.Do(func() {
+	defer p.closeRetryChanOnce.Do(func() {
 		close(p.retryChanSignal)
 	})
 
