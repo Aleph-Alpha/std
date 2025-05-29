@@ -78,10 +78,25 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 		OnStop: func(ctx context.Context) error {
 
 			params.Logger.Info("closing minio client...", nil, nil)
-			close(params.Minio.shutdownSignal)
+			params.Minio.closeShutdownOnce.Do(func() {
+				close(params.Minio.shutdownSignal)
+			})
+			params.Minio.closeReconnectOnce.Do(func() {
+				close(params.Minio.reconnectSignal)
+			})
 
 			wg.Wait()
 			return nil
 		},
+	})
+}
+
+func (m *Minio) GracefulShutdown() {
+	m.closeShutdownOnce.Do(func() {
+		close(m.shutdownSignal)
+	})
+
+	m.closeReconnectOnce.Do(func() {
+		close(m.reconnectSignal)
 	})
 }

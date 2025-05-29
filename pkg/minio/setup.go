@@ -60,6 +60,9 @@ type Minio struct {
 
 	// bufferPool manages reusable byte buffers to reduce memory allocations
 	bufferPool *BufferPool
+
+	closeShutdownOnce  sync.Once
+	closeReconnectOnce sync.Once
 }
 
 // BufferPool implements a pool of bytes.Buffers to reduce memory allocations.
@@ -189,7 +192,9 @@ func NewClient(params MinioParams) (*Minio, error) {
 // Parameters:
 //   - ctx: Context for controlling the monitor's lifecycle
 func (m *Minio) monitorConnection(ctx context.Context) {
-	defer close(m.reconnectSignal)
+	defer m.closeReconnectOnce.Do(func() {
+		close(m.reconnectSignal)
+	})
 	ticker := time.NewTicker(connectionHealthCheckInterval)
 	defer ticker.Stop()
 
