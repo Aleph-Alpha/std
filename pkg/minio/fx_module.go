@@ -6,6 +6,14 @@ import (
 	"sync"
 )
 
+type MinioLifeCycleParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Minio     *Minio
+	Logger    Logger
+}
+
 // FXModule is an fx.Module that provides and configures the MinIO client.
 // This module registers the MinIO client with the Fx dependency injection framework,
 // making it available to other components in the application.
@@ -42,35 +50,35 @@ var FXModule = fx.Module("minio",
 //
 // On application shutdown, it ensures these goroutines are properly terminated
 // and waits for their completion before allowing the application to exit.
-func RegisterLifecycle(lc fx.Lifecycle, mi *Minio, logger Logger) {
+func RegisterLifecycle(params MinioLifeCycleParams) {
 
-	if mi == nil {
-		logger.Fatal("MinIO client is nil, cannot register lifecycle hooks", nil, nil)
+	if params.Minio == nil {
+		params.Logger.Fatal("MinIO client is nil, cannot register lifecycle hooks", nil, nil)
 		return
 	}
 
 	wg := &sync.WaitGroup{}
-	lc.Append(fx.Hook{
+	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				mi.monitorConnection(ctx)
+				params.Minio.monitorConnection(ctx)
 			}()
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				mi.retryConnection(ctx)
+				params.Minio.retryConnection(ctx)
 			}()
 
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 
-			logger.Info("closing minio client...", nil, nil)
-			close(mi.shutdownSignal)
+			params.Logger.Info("closing minio client...", nil, nil)
+			close(params.Minio.shutdownSignal)
 
 			wg.Wait()
 			return nil

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"go.uber.org/fx"
 	"sync"
 	"time"
 
@@ -100,6 +101,13 @@ func (bp *BufferPool) Put(b *bytes.Buffer) {
 	bp.pool.Put(b)
 }
 
+type MinioParams struct {
+	fx.In
+
+	Config
+	Logger
+}
+
 // NewClient creates and validates a new MinIO client.
 // It establishes connections to both the standard and core MinIO APIs,
 // validates the connection, and ensures the configured bucket exists.
@@ -116,26 +124,26 @@ func (bp *BufferPool) Put(b *bytes.Buffer) {
 //	if err != nil {
 //	    return fmt.Errorf("failed to initialize MinIO client: %w", err)
 //	}
-func NewClient(cfg Config, logger Logger) (*Minio, error) {
+func NewClient(params MinioParams) (*Minio, error) {
 	// Create the standard client
-	client, err := connectToMinio(cfg, logger)
+	client, err := connectToMinio(params.Config, params.Logger)
 	if err != nil {
-		logger.Error("failed to connect to minio", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
-			"bucket":   cfg.Connection.BucketName,
+		params.Logger.Error("failed to connect to minio", err, map[string]interface{}{
+			"endpoint": params.Config.Connection.Endpoint,
+			"region":   params.Config.Connection.Region,
+			"secure":   params.Config.Connection.UseSSL,
+			"bucket":   params.Config.Connection.BucketName,
 		})
 		return nil, err
 	}
 
 	// Create the core client using the same connection parameters
-	coreClient, err := connectToMinioCore(cfg, logger)
+	coreClient, err := connectToMinioCore(params.Config, params.Logger)
 	if err != nil {
-		logger.Error("failed to create core minio client", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
+		params.Logger.Error("failed to create core minio client", err, map[string]interface{}{
+			"endpoint": params.Config.Connection.Endpoint,
+			"region":   params.Config.Connection.Region,
+			"secure":   params.Config.Connection.UseSSL,
 		})
 		return nil, err
 	}
@@ -143,8 +151,8 @@ func NewClient(cfg Config, logger Logger) (*Minio, error) {
 	minioClient := &Minio{
 		Client:          client,
 		CoreClient:      coreClient,
-		cfg:             cfg,
-		logger:          logger,
+		cfg:             params.Config,
+		logger:          params.Logger,
 		shutdownSignal:  make(chan struct{}),
 		reconnectSignal: make(chan error),
 		bufferPool:      NewBufferPool(),
@@ -153,20 +161,20 @@ func NewClient(cfg Config, logger Logger) (*Minio, error) {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := minioClient.validateConnection(timeoutCtx); err != nil {
-		logger.Error("failed to validate minio connection", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
-			"bucket":   cfg.Connection.BucketName,
+		params.Logger.Error("failed to validate minio connection", err, map[string]interface{}{
+			"endpoint": params.Config.Connection.Endpoint,
+			"region":   params.Config.Connection.Region,
+			"secure":   params.Config.Connection.UseSSL,
+			"bucket":   params.Config.Connection.BucketName,
 		})
 		return nil, err
 	}
 	if err := minioClient.ensureBucketExists(timeoutCtx); err != nil {
-		logger.Error("failed to verify bucket", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
-			"bucket":   cfg.Connection.BucketName,
+		params.Logger.Error("failed to verify bucket", err, map[string]interface{}{
+			"endpoint": params.Config.Connection.Endpoint,
+			"region":   params.Config.Connection.Region,
+			"secure":   params.Config.Connection.UseSSL,
+			"bucket":   params.Config.Connection.BucketName,
 		})
 		return nil, err
 	}
