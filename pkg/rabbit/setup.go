@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.uber.org/fx"
 	"os"
 	"sync"
 	"time"
@@ -56,6 +57,14 @@ type Rabbit struct {
 	shutdownSignal chan struct{}
 }
 
+// RabbitParams groups the dependencies needed to create a Rabbit client
+type RabbitParams struct {
+	fx.In
+
+	Config Config
+	Logger Logger
+}
+
 // NewClient creates and initializes a new RabbitMQ client with the provided configuration.
 // This function establishes the initial connection to RabbitMQ, sets up channels,
 // and configures exchanges and queues as specified in the configuration.
@@ -71,22 +80,22 @@ type Rabbit struct {
 //
 //	client := rabbit.NewClient(config, myLogger)
 //	defer client.Close()
-func NewClient(cfg Config, logger Logger) *Rabbit {
-	con, err := newConnection(cfg, logger)
+func NewClient(params RabbitParams) *Rabbit {
+	con, err := newConnection(params.Config, params.Logger)
 	if err != nil {
-		logger.Fatal("error in connecting to rabbit after all retries", nil, nil)
+		params.Logger.Fatal("error in connecting to rabbit after all retries", nil, nil)
 	}
 
-	ch, err := connectToChannel(con, cfg, logger)
+	ch, err := connectToChannel(con, params.Config, params.Logger)
 	if ch == nil || err != nil {
-		logger.Fatal("error in declaring channel", nil, nil)
+		params.Logger.Fatal("error in declaring channel", nil, nil)
 	}
 
 	return &Rabbit{
-		cfg:            cfg,
+		cfg:            params.Config,
 		conn:           con,
 		Channel:        ch,
-		logger:         logger,
+		logger:         params.Logger,
 		shutdownSignal: make(chan struct{}),
 	}
 }

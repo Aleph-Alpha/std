@@ -27,6 +27,16 @@ var FXModule = fx.Module("rabbit",
 	fx.Invoke(RegisterRabbitLifecycle),
 )
 
+// RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
+type RabbitLifecycleParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Client    *Rabbit
+	Logger    Logger
+	Config    Config
+}
+
 // RegisterRabbitLifecycle registers the RabbitMQ client with the fx lifecycle system.
 // This function sets up proper initialization and graceful shutdown of the RabbitMQ client,
 // including starting the connection monitoring goroutine.
@@ -45,23 +55,23 @@ var FXModule = fx.Module("rabbit",
 //
 // This ensures that the RabbitMQ client remains available throughout the application's
 // lifetime and is properly cleaned up during shutdown.
-func RegisterRabbitLifecycle(lc fx.Lifecycle, client *Rabbit, logger Logger, cfg Config) {
+func RegisterRabbitLifecycle(params RabbitLifecycleParams) {
 	wg := &sync.WaitGroup{}
 
-	lc.Append(fx.Hook{
+	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			wg.Add(1)
 
 			go func(logger Logger, cfg Config) {
 				defer wg.Done()
-				client.retryConnection(logger, cfg)
-			}(logger, cfg)
+				params.Client.retryConnection(logger, cfg)
+			}(params.Logger, params.Config)
 
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 
-			client.gracefulShutdown()
+			params.Client.gracefulShutdown()
 
 			wg.Wait()
 			return nil
