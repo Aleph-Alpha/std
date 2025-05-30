@@ -22,7 +22,7 @@ func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...int
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Find(dest, conditions...).Error
+	return p.Client.WithContext(ctx).Find(dest, conditions...).Error
 }
 
 // First retrieves the first record that matches the given conditions.
@@ -43,7 +43,7 @@ func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...in
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).First(dest, conditions...).Error
+	return p.Client.WithContext(ctx).First(dest, conditions...).Error
 }
 
 // Create inserts a new record into the database.
@@ -64,7 +64,7 @@ func (p *Postgres) Create(ctx context.Context, value interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Create(value).Error
+	return p.Client.WithContext(ctx).Create(value).Error
 }
 
 // Save updates the database record if the primary key exists,
@@ -85,7 +85,7 @@ func (p *Postgres) Save(ctx context.Context, value interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Save(value).Error
+	return p.Client.WithContext(ctx).Save(value).Error
 }
 
 // Update updates records that match the given model's non-zero fields.
@@ -107,7 +107,7 @@ func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interfac
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Model(model).Updates(attrs).Error
+	return p.Client.WithContext(ctx).Model(model).Updates(attrs).Error
 }
 
 // UpdateColumn updates a single column's value for records that match the given model.
@@ -130,7 +130,7 @@ func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnNa
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Model(model).Update(columnName, value).Error
+	return p.Client.WithContext(ctx).Model(model).Update(columnName, value).Error
 }
 
 // UpdateColumns updates multiple columns with name/value pairs for records that match the given model.
@@ -154,7 +154,7 @@ func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnV
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Model(model).Updates(columnValues).Error
+	return p.Client.WithContext(ctx).Model(model).Updates(columnValues).Error
 }
 
 // Delete removes records that match the given value and conditions from the database.
@@ -179,7 +179,7 @@ func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Delete(value, conditions...).Error
+	return p.Client.WithContext(ctx).Delete(value, conditions...).Error
 }
 
 // Exec executes raw SQL directly against the database.
@@ -201,7 +201,7 @@ func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Exec(sql, values...).Error
+	return p.Client.WithContext(ctx).Exec(sql, values...).Error
 }
 
 // Count determines the number of records that match the given conditions.
@@ -223,7 +223,7 @@ func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, c
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Model(model).Where(conditions[0], conditions[1:]...).Count(count).Error
+	return p.Client.WithContext(ctx).Model(model).Where(conditions[0], conditions[1:]...).Count(count).Error
 }
 
 // UpdateWhere updates records that match the specified WHERE condition.
@@ -249,5 +249,5 @@ func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs int
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Model(model).Where(condition, args...).Updates(attrs).Error
+	return p.Client.WithContext(ctx).Model(model).Where(condition, args...).Updates(attrs).Error
 }

@@ -5,14 +5,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// cloneWithTx returns a shallow copy of Postgres with tx as the DB client.
+// cloneWithTx returns a shallow copy of Postgres with tx as the DB Client.
 // This internal helper method creates a new Postgres instance that shares most
-// properties with the original but uses the provided transaction as its database client.
+// properties with the original but uses the provided transaction as its database Client.
 // It enables transaction-scoped operations while maintaining the connection monitoring
 // and safety features of the Postgres wrapper.
 func (p *Postgres) cloneWithTx(tx *gorm.DB) *Postgres {
 	return &Postgres{
-		client:          tx,
+		Client:          tx,
 		cfg:             p.cfg,
 		logger:          p.logger,
 		mu:              p.mu, // shared mutex is fine
@@ -40,7 +40,7 @@ func (p *Postgres) Transaction(ctx context.Context, fn func(pg *Postgres) error)
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.client.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return p.Client.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		pgWithTx := p.cloneWithTx(tx)
 		return fn(pgWithTx)
 	})

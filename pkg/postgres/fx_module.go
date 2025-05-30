@@ -12,10 +12,70 @@ import (
 // the database connection.
 var FXModule = fx.Module("postgres",
 	fx.Provide(
-		NewPostgres,
+		NewPostgresClientWithDI,
 	),
 	fx.Invoke(RegisterPostgresLifecycle),
 )
+
+// PostgresParams groups the dependencies needed to create a Postgres Client via dependency injection.
+// This struct is designed to work with Uber's fx dependency injection framework and provides
+// the necessary parameters for initializing a Postgres database connection.
+//
+// The embedded fx.In marker enables automatic injection of the struct fields from the
+// dependency container when this struct is used as a parameter in provider functions.
+type PostgresParams struct {
+	fx.In
+
+	Config Config
+	Logger Logger
+}
+
+// NewPostgresClientWithDI creates a new Postgres Client using dependency injection.
+// This function is designed to be used with Uber's fx dependency injection framework
+// where the Config and Logger dependencies are automatically provided via the PostgresParams struct.
+//
+// Parameters:
+//   - params: A PostgresParams struct containing the Config and Logger instances
+//     required to initialize the Postgres Client. This struct embeds fx.In to enable
+//     automatic injection of these dependencies.
+//
+// Returns:
+//   - *Postgres: A fully initialized Postgres Client ready for use.
+//
+// Example usage with fx:
+//
+//	app := fx.New(
+//	    postgres.FXModule,
+//	    fx.Provide(
+//	        func() postgres.Config {
+//	            return loadPostgresConfig() // Your config loading function
+//	        },
+//	        func() postgres.Logger {
+//	            return initLogger() // Your logger initialization
+//	        },
+//	    ),
+//	)
+//
+// This function delegates to the standard NewPostgres function, maintaining the same
+// initialization logic while enabling seamless integration with dependency injection.
+func NewPostgresClientWithDI(params PostgresParams) *Postgres {
+	return NewPostgres(params.Config, params.Logger)
+}
+
+// PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management.
+// This struct combines all the components required to properly manage the lifecycle
+// of a Postgres Client within an fx application, including startup, monitoring,
+// and graceful shutdown.
+//
+// The embedded fx.In marker enables automatic injection of the struct fields from the
+// dependency container when this struct is used as a parameter in lifecycle registration functions.
+type PostgresLifeCycleParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Postgres  *Postgres
+	Logger    Logger
+}
 
 // RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database component.
 // It sets up:
@@ -25,30 +85,37 @@ var FXModule = fx.Module("postgres",
 //
 // The function uses a WaitGroup to ensure that all goroutines complete
 // before the application terminates.
-func RegisterPostgresLifecycle(lifecycle fx.Lifecycle, postgres *Postgres, logger Logger) {
+func RegisterPostgresLifecycle(params PostgresLifeCycleParams) {
 	wg := &sync.WaitGroup{}
-	lifecycle.Append(fx.Hook{
+	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				postgres.monitorConnection(ctx)
+				params.Postgres.MonitorConnection(ctx)
 			}()
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				postgres.retryConnection(ctx, logger, postgres.cfg)
+				params.Postgres.RetryConnection(ctx, params.Logger)
 			}()
 
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			close(postgres.shutdownSignal)
+			params.Postgres.closeShutdownOnce.Do(func() {
+				close(params.Postgres.shutdownSignal)
+			})
+
 			wg.Wait()
 
+			params.Postgres.closeRetryChanOnce.Do(func() {
+				close(params.Postgres.retryChanSignal)
+			})
+
 			// Close the database connection
-			sqlDB, err := postgres.DB().DB()
+			sqlDB, err := params.Postgres.DB().DB()
 			if err == nil {
 				err := sqlDB.Close()
 				if err != nil {
@@ -59,4 +126,26 @@ func RegisterPostgresLifecycle(lifecycle fx.Lifecycle, postgres *Postgres, logge
 			return nil
 		},
 	})
+}
+
+func (p *Postgres) GracefulShutdown() error {
+	p.closeShutdownOnce.Do(func() {
+		close(p.shutdownSignal)
+	})
+
+	p.closeRetryChanOnce.Do(func() {
+		close(p.retryChanSignal)
+	})
+
+	p.mu.Lock()
+	// Close the database connection
+	sqlDB, err := p.DB().DB()
+	if err == nil {
+		err := sqlDB.Close()
+		if err != nil {
+			return err
+		}
+	}
+	p.mu.Unlock()
+	return nil
 }

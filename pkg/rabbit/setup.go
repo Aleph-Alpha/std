@@ -54,6 +54,8 @@ type Rabbit struct {
 
 	// shutdownSignal is closed when the client is being shut down
 	shutdownSignal chan struct{}
+
+	closeShutdownOnce sync.Once
 }
 
 // NewClient creates and initializes a new RabbitMQ client with the provided configuration.
@@ -71,19 +73,19 @@ type Rabbit struct {
 //
 //	client := rabbit.NewClient(config, myLogger)
 //	defer client.Close()
-func NewClient(cfg Config, logger Logger) *Rabbit {
-	con, err := newConnection(cfg, logger)
+func NewClient(config Config, logger Logger) *Rabbit {
+	con, err := newConnection(config, logger)
 	if err != nil {
 		logger.Fatal("error in connecting to rabbit after all retries", nil, nil)
 	}
 
-	ch, err := connectToChannel(con, cfg, logger)
+	ch, err := connectToChannel(con, config, logger)
 	if ch == nil || err != nil {
 		logger.Fatal("error in declaring channel", nil, nil)
 	}
 
 	return &Rabbit{
-		cfg:            cfg,
+		cfg:            config,
 		conn:           con,
 		Channel:        ch,
 		logger:         logger,
@@ -248,7 +250,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 	return ch, nil
 }
 
-// retryConnection continuously monitors the RabbitMQ connection and automatically
+// RetryConnection continuously monitors the RabbitMQ connection and automatically
 // re-establishes it if it fails. This method is typically run in a goroutine.
 //
 // Parameters:
@@ -262,7 +264,10 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 //   - Continue monitoring until the shutdownSignal is received
 //
 // This provides resilience against network issues and RabbitMQ server restarts.
-func (rb *Rabbit) retryConnection(logger Logger, cfg Config) {
+func (rb *Rabbit) RetryConnection(logger Logger, cfg Config) {
+	defer rb.closeShutdownOnce.Do(func() {
+		close(rb.shutdownSignal)
+	})
 outerLoop:
 	for {
 		errChan := make(chan *amqp.Error, 1)
@@ -270,7 +275,7 @@ outerLoop:
 
 		select {
 		case <-rb.shutdownSignal:
-			logger.Info("Stopping retryConnection loop due to shutdown signal", nil, nil)
+			logger.Info("Stopping RetryConnection loop due to shutdown signal", nil, nil)
 			return
 
 		case err := <-errChan:
@@ -279,7 +284,7 @@ outerLoop:
 			for {
 				select {
 				case <-rb.shutdownSignal:
-					logger.Info("Stopping retryConnection loop due to shutdown signal inside reconnect", nil, nil)
+					logger.Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", nil, nil)
 					return
 				default:
 					newConn, err := newConnection(cfg, logger)

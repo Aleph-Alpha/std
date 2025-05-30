@@ -26,7 +26,7 @@ import (
 func (p *Postgres) Query(ctx context.Context) *QueryBuilder {
 	p.mu.RLock() // Will be released when Done() is called
 	return &QueryBuilder{
-		db:      p.client.WithContext(ctx),
+		db:      p.Client.WithContext(ctx),
 		release: p.mu.RUnlock,
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// DB returns the underlying GORM DB client instance.
+// DB returns the underlying GORM DB Client instance.
 // This method provides direct access to the database connection while
 // maintaining thread safety through a read lock.
 //
@@ -14,5 +14,5 @@ import (
 func (p *Postgres) DB() *gorm.DB {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.client
+	return p.Client
 }

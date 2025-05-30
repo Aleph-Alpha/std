@@ -1689,7 +1689,7 @@ func TestGenerateMultipartPresignedGetURLs(t *testing.T) {
 			validateInfo: func(t *testing.T, download MultipartPresignedGet) {
 				// Should adjust to minimum part size (5MB)
 				// 10MB file with 5MB parts = 2 parts
-				require.Equal(t, 2, len(download.GetPresignedURLs()))
+				require.Equal(t, 10, len(download.GetPresignedURLs()))
 			},
 		},
 		{

@@ -59,6 +59,9 @@ type Minio struct {
 
 	// bufferPool manages reusable byte buffers to reduce memory allocations
 	bufferPool *BufferPool
+
+	closeShutdownOnce  sync.Once
+	closeReconnectOnce sync.Once
 }
 
 // BufferPool implements a pool of bytes.Buffers to reduce memory allocations.
@@ -116,26 +119,26 @@ func (bp *BufferPool) Put(b *bytes.Buffer) {
 //	if err != nil {
 //	    return fmt.Errorf("failed to initialize MinIO client: %w", err)
 //	}
-func NewClient(cfg Config, logger Logger) (*Minio, error) {
+func NewClient(config Config, logger Logger) (*Minio, error) {
 	// Create the standard client
-	client, err := connectToMinio(cfg, logger)
+	client, err := connectToMinio(config, logger)
 	if err != nil {
 		logger.Error("failed to connect to minio", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
-			"bucket":   cfg.Connection.BucketName,
+			"endpoint": config.Connection.Endpoint,
+			"region":   config.Connection.Region,
+			"secure":   config.Connection.UseSSL,
+			"bucket":   config.Connection.BucketName,
 		})
 		return nil, err
 	}
 
 	// Create the core client using the same connection parameters
-	coreClient, err := connectToMinioCore(cfg, logger)
+	coreClient, err := connectToMinioCore(config, logger)
 	if err != nil {
 		logger.Error("failed to create core minio client", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
+			"endpoint": config.Connection.Endpoint,
+			"region":   config.Connection.Region,
+			"secure":   config.Connection.UseSSL,
 		})
 		return nil, err
 	}
@@ -143,7 +146,7 @@ func NewClient(cfg Config, logger Logger) (*Minio, error) {
 	minioClient := &Minio{
 		Client:          client,
 		CoreClient:      coreClient,
-		cfg:             cfg,
+		cfg:             config,
 		logger:          logger,
 		shutdownSignal:  make(chan struct{}),
 		reconnectSignal: make(chan error),
@@ -154,19 +157,19 @@ func NewClient(cfg Config, logger Logger) (*Minio, error) {
 	defer cancel()
 	if err := minioClient.validateConnection(timeoutCtx); err != nil {
 		logger.Error("failed to validate minio connection", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
-			"bucket":   cfg.Connection.BucketName,
+			"endpoint": config.Connection.Endpoint,
+			"region":   config.Connection.Region,
+			"secure":   config.Connection.UseSSL,
+			"bucket":   config.Connection.BucketName,
 		})
 		return nil, err
 	}
 	if err := minioClient.ensureBucketExists(timeoutCtx); err != nil {
 		logger.Error("failed to verify bucket", err, map[string]interface{}{
-			"endpoint": cfg.Connection.Endpoint,
-			"region":   cfg.Connection.Region,
-			"secure":   cfg.Connection.UseSSL,
-			"bucket":   cfg.Connection.BucketName,
+			"endpoint": config.Connection.Endpoint,
+			"region":   config.Connection.Region,
+			"secure":   config.Connection.UseSSL,
+			"bucket":   config.Connection.BucketName,
 		})
 		return nil, err
 	}
@@ -181,7 +184,9 @@ func NewClient(cfg Config, logger Logger) (*Minio, error) {
 // Parameters:
 //   - ctx: Context for controlling the monitor's lifecycle
 func (m *Minio) monitorConnection(ctx context.Context) {
-	defer close(m.reconnectSignal)
+	defer m.closeReconnectOnce.Do(func() {
+		close(m.reconnectSignal)
+	})
 	ticker := time.NewTicker(connectionHealthCheckInterval)
 	defer ticker.Stop()
 
@@ -221,6 +226,9 @@ func (m *Minio) monitorConnection(ctx context.Context) {
 // Parameters:
 //   - ctx: Context for controlling the retry loop's lifecycle
 func (m *Minio) retryConnection(ctx context.Context) {
+	defer m.closeShutdownOnce.Do(func() {
+		close(m.shutdownSignal)
+	})
 outerLoop:
 	for {
 		select {

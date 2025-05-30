@@ -174,7 +174,7 @@ Package minio is a generated GoMock package.
 
 - [Constants](<#constants>)
 - [Variables](<#variables>)
-- [func RegisterLifecycle\(lc fx.Lifecycle, mi \*Minio, logger Logger\)](<#RegisterLifecycle>)
+- [func RegisterLifecycle\(params MinioLifeCycleParams\)](<#RegisterLifecycle>)
 - [type AMQPNotification](<#AMQPNotification>)
 - [type BaseNotification](<#BaseNotification>)
 - [type BufferPool](<#BufferPool>)
@@ -189,7 +189,8 @@ Package minio is a generated GoMock package.
 - [type Logger](<#Logger>)
 - [type MQTTNotification](<#MQTTNotification>)
 - [type Minio](<#Minio>)
-  - [func NewClient\(cfg Config, logger Logger\) \(\*Minio, error\)](<#NewClient>)
+  - [func NewClient\(config Config, logger Logger\) \(\*Minio, error\)](<#NewClient>)
+  - [func NewMinioClientWithDI\(params MinioParams\) \(\*Minio, error\)](<#NewMinioClientWithDI>)
   - [func \(m \*Minio\) AbortMultipartUpload\(ctx context.Context, objectKey, uploadID string\) error](<#Minio.AbortMultipartUpload>)
   - [func \(m \*Minio\) CleanupIncompleteUploads\(ctx context.Context, prefix string, olderThan time.Duration\) error](<#Minio.CleanupIncompleteUploads>)
   - [func \(m \*Minio\) CompleteMultipartUpload\(ctx context.Context, objectKey, uploadID string, partNumbers \[\]int, etags \[\]string\) error](<#Minio.CompleteMultipartUpload>)
@@ -197,11 +198,15 @@ Package minio is a generated GoMock package.
   - [func \(m \*Minio\) GenerateMultipartPresignedGetURLs\(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration\) \(MultipartPresignedGet, error\)](<#Minio.GenerateMultipartPresignedGetURLs>)
   - [func \(m \*Minio\) GenerateMultipartUploadURLs\(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration\) \(MultipartUpload, error\)](<#Minio.GenerateMultipartUploadURLs>)
   - [func \(m \*Minio\) Get\(ctx context.Context, objectKey string\) \(\[\]byte, error\)](<#Minio.Get>)
+  - [func \(m \*Minio\) GracefulShutdown\(\)](<#Minio.GracefulShutdown>)
   - [func \(m \*Minio\) ListIncompleteUploads\(ctx context.Context, prefix string\) \(\[\]minio.ObjectMultipartInfo, error\)](<#Minio.ListIncompleteUploads>)
   - [func \(m \*Minio\) PreSignedGet\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedGet>)
   - [func \(m \*Minio\) PreSignedHeadObject\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedHeadObject>)
   - [func \(m \*Minio\) PreSignedPut\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedPut>)
   - [func \(m \*Minio\) Put\(ctx context.Context, objectKey string, reader io.Reader, size ...int64\) \(int64, error\)](<#Minio.Put>)
+  - [func \(m \*Minio\) StreamGet\(ctx context.Context, objectKey string, chunkSize int\) \(\<\-chan \[\]byte, \<\-chan error\)](<#Minio.StreamGet>)
+- [type MinioLifeCycleParams](<#MinioLifeCycleParams>)
+- [type MinioParams](<#MinioParams>)
 - [type MockLogger](<#MockLogger>)
   - [func NewMockLogger\(ctrl \*gomock.Controller\) \*MockLogger](<#NewMockLogger>)
   - [func \(m \*MockLogger\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Debug>)
@@ -267,17 +272,17 @@ app := fx.New(
 ```go
 var FXModule = fx.Module("minio",
     fx.Provide(
-        NewClient,
+        NewMinioClientWithDI,
     ),
     fx.Invoke(RegisterLifecycle),
 )
 ```
 
 <a name="RegisterLifecycle"></a>
-## func [RegisterLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L45>)
+## func [RegisterLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L64>)
 
 ```go
-func RegisterLifecycle(lc fx.Lifecycle, mi *Minio, logger Logger)
+func RegisterLifecycle(params MinioLifeCycleParams)
 ```
 
 RegisterLifecycle registers the MinIO client with the fx lifecycle system. This function sets up proper initialization and graceful shutdown of the MinIO client, including starting and stopping the connection monitoring goroutines.
@@ -359,7 +364,7 @@ type BaseNotification struct {
 ```
 
 <a name="BufferPool"></a>
-## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L66-L69>)
+## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L69-L72>)
 
 BufferPool implements a pool of bytes.Buffers to reduce memory allocations. It's used for temporary buffer operations when reading or writing objects.
 
@@ -370,7 +375,7 @@ type BufferPool struct {
 ```
 
 <a name="NewBufferPool"></a>
-### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L75>)
+### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L78>)
 
 ```go
 func NewBufferPool() *BufferPool
@@ -381,7 +386,7 @@ NewBufferPool creates a new BufferPool instance. The pool will create new bytes.
 Returns a configured BufferPool ready for use.
 
 <a name="BufferPool.Get"></a>
-### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L90>)
+### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L93>)
 
 ```go
 func (bp *BufferPool) Get() *bytes.Buffer
@@ -392,7 +397,7 @@ Get returns a buffer from the pool. The returned buffer may be newly allocated o
 Returns a \*bytes.Buffer that should be returned to the pool when no longer needed.
 
 <a name="BufferPool.Put"></a>
-### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L99>)
+### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L102>)
 
 ```go
 func (bp *BufferPool) Put(b *bytes.Buffer)
@@ -575,7 +580,7 @@ type MQTTNotification struct {
 ```
 
 <a name="Minio"></a>
-## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L38-L62>)
+## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L38-L65>)
 
 Minio represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and thread\-safety.
 
@@ -591,10 +596,10 @@ type Minio struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L119>)
+### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L122>)
 
 ```go
-func NewClient(cfg Config, logger Logger) (*Minio, error)
+func NewClient(config Config, logger Logger) (*Minio, error)
 ```
 
 NewClient creates and validates a new MinIO client. It establishes connections to both the standard and core MinIO APIs, validates the connection, and ensures the configured bucket exists.
@@ -614,6 +619,15 @@ if err != nil {
     return fmt.Errorf("failed to initialize MinIO client: %w", err)
 }
 ```
+
+<a name="NewMinioClientWithDI"></a>
+### func [NewMinioClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L37>)
+
+```go
+func NewMinioClientWithDI(params MinioParams) (*Minio, error)
+```
+
+
 
 <a name="Minio.AbortMultipartUpload"></a>
 ### func \(\*Minio\) [AbortMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L418>)
@@ -694,7 +708,7 @@ err := minioClient.CompleteMultipartUpload(
 ```
 
 <a name="Minio.Delete"></a>
-### func \(\*Minio\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L157>)
+### func \(\*Minio\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L224>)
 
 ```go
 func (m *Minio) Delete(ctx context.Context, objectKey string) error
@@ -812,6 +826,35 @@ data, err := minioClient.Get(ctx, "documents/report.pdf")
 if err == nil {
     fmt.Printf("Downloaded %d bytes\n", len(data))
     ioutil.WriteFile("report.pdf", data, 0644)
+}
+```
+
+<a name="Minio.GracefulShutdown"></a>
+### func \(\*Minio\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L127>)
+
+```go
+func (m *Minio) GracefulShutdown()
+```
+
+GracefulShutdown safely terminates all MinIO client operations and closes associated resources. This method ensures a clean shutdown process by using sync.Once to guarantee each channel is closed exactly once, preventing "close of closed channel" panics that could occur when multiple shutdown paths execute concurrently.
+
+The shutdown process: 1. Safely closes the shutdownSignal channel to notify all monitoring goroutines to stop 2. Safely closes the reconnectSignal channel to terminate any reconnection attempts
+
+This method is designed to be called from multiple potential places \(such as application shutdown hooks, context cancellation handlers, or defer statements\) without causing resource management issues. The use of sync.Once ensures that even if called multiple times, each cleanup operation happens exactly once.
+
+Example usage:
+
+```
+// In application shutdown code
+func shutdownApp() {
+    minioClient.GracefulShutdown()
+    // other cleanup...
+}
+
+// Or with defer
+func processFiles() {
+    defer minioClient.GracefulShutdown()
+    // processing logic...
 }
 ```
 
@@ -960,6 +1003,44 @@ fileInfo, _ := file.Stat()
 size, err := minioClient.Put(ctx, "documents/document.pdf", file, fileInfo.Size())
 if err == nil {
     fmt.Printf("Uploaded %d bytes\n", size)
+}
+```
+
+<a name="Minio.StreamGet"></a>
+### func \(\*Minio\) [StreamGet](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L143>)
+
+```go
+func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error)
+```
+
+StreamGet downloads a file from MinIO and sends chunks through a channel
+
+<a name="MinioLifeCycleParams"></a>
+## type [MinioLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L41-L47>)
+
+
+
+```go
+type MinioLifeCycleParams struct {
+    fx.In
+
+    Lifecycle fx.Lifecycle
+    Minio     *Minio
+    Logger    Logger
+}
+```
+
+<a name="MinioParams"></a>
+## type [MinioParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L30-L35>)
+
+
+
+```go
+type MinioParams struct {
+    fx.In
+
+    Config
+    Logger
 }
 ```
 
