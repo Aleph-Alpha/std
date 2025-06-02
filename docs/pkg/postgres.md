@@ -124,10 +124,10 @@ Package postgres is a generated GoMock package.
 
 - [Variables](<#variables>)
 - [func RegisterPostgresLifecycle\(params PostgresLifeCycleParams\)](<#RegisterPostgresLifecycle>)
-- [func TranslateError\(err error\) error](<#TranslateError>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
 - [type ConnectionDetails](<#ConnectionDetails>)
+- [type ErrorCategory](<#ErrorCategory>)
 - [type Logger](<#Logger>)
 - [type Migration](<#Migration>)
 - [type MigrationDirection](<#MigrationDirection>)
@@ -159,8 +159,12 @@ Package postgres is a generated GoMock package.
   - [func \(p \*Postgres\) Exec\(ctx context.Context, sql string, values ...interface\{\}\) error](<#Postgres.Exec>)
   - [func \(p \*Postgres\) Find\(ctx context.Context, dest interface\{\}, conditions ...interface\{\}\) error](<#Postgres.Find>)
   - [func \(p \*Postgres\) First\(ctx context.Context, dest interface\{\}, conditions ...interface\{\}\) error](<#Postgres.First>)
+  - [func \(p \*Postgres\) GetErrorCategory\(err error\) ErrorCategory](<#Postgres.GetErrorCategory>)
   - [func \(p \*Postgres\) GetMigrationStatus\(ctx context.Context, migrationsDir string\) \(\[\]map\[string\]interface\{\}, error\)](<#Postgres.GetMigrationStatus>)
   - [func \(p \*Postgres\) GracefulShutdown\(\) error](<#Postgres.GracefulShutdown>)
+  - [func \(p \*Postgres\) IsCritical\(err error\) bool](<#Postgres.IsCritical>)
+  - [func \(p \*Postgres\) IsRetryable\(err error\) bool](<#Postgres.IsRetryable>)
+  - [func \(p \*Postgres\) IsTemporary\(err error\) bool](<#Postgres.IsTemporary>)
   - [func \(p \*Postgres\) MigrateDown\(ctx context.Context, migrationsDir string\) error](<#Postgres.MigrateDown>)
   - [func \(p \*Postgres\) MigrateUp\(ctx context.Context, migrationsDir string\) error](<#Postgres.MigrateUp>)
   - [func \(p \*Postgres\) MonitorConnection\(ctx context.Context\)](<#Postgres.MonitorConnection>)
@@ -168,6 +172,7 @@ Package postgres is a generated GoMock package.
   - [func \(p \*Postgres\) RetryConnection\(ctx context.Context, logger Logger\)](<#Postgres.RetryConnection>)
   - [func \(p \*Postgres\) Save\(ctx context.Context, value interface\{\}\) error](<#Postgres.Save>)
   - [func \(p \*Postgres\) Transaction\(ctx context.Context, fn func\(pg \*Postgres\) error\) error](<#Postgres.Transaction>)
+  - [func \(p \*Postgres\) TranslateError\(err error\) error](<#Postgres.TranslateError>)
   - [func \(p \*Postgres\) Update\(ctx context.Context, model interface\{\}, attrs interface\{\}\) error](<#Postgres.Update>)
   - [func \(p \*Postgres\) UpdateColumn\(ctx context.Context, model interface\{\}, columnName string, value interface\{\}\) error](<#Postgres.UpdateColumn>)
   - [func \(p \*Postgres\) UpdateColumns\(ctx context.Context, model interface\{\}, columnValues map\[string\]interface\{\}\) error](<#Postgres.UpdateColumns>)
@@ -241,6 +246,141 @@ var (
 
     // ErrInvalidData is returned when the data being saved doesn't meet validation rules
     ErrInvalidData = errors.New("invalid data")
+
+    // ErrConnectionFailed is returned when database connection cannot be established
+    ErrConnectionFailed = errors.New("database connection failed")
+
+    // ErrTransactionFailed is returned when a transaction fails to commit or rollback
+    ErrTransactionFailed = errors.New("transaction failed")
+
+    // ErrQueryTimeout is returned when a query exceeds the allowed timeout
+    ErrQueryTimeout = errors.New("query timeout exceeded")
+
+    // ErrInvalidQuery is returned when the SQL query is malformed or invalid
+    ErrInvalidQuery = errors.New("invalid query")
+
+    // ErrPermissionDenied is returned when the user lacks necessary permissions
+    ErrPermissionDenied = errors.New("permission denied")
+
+    // ErrTableNotFound is returned when trying to access a non-existent table
+    ErrTableNotFound = errors.New("table not found")
+
+    // ErrColumnNotFound is returned when trying to access a non-existent column
+    ErrColumnNotFound = errors.New("column not found")
+
+    // ErrConstraintViolation is returned for general constraint violations
+    ErrConstraintViolation = errors.New("constraint violation")
+
+    // ErrCheckConstraintViolation is returned when a check constraint is violated
+    ErrCheckConstraintViolation = errors.New("check constraint violation")
+
+    // ErrNotNullViolation is returned when trying to insert null into a not-null column
+    ErrNotNullViolation = errors.New("not null constraint violation")
+
+    // ErrDataTooLong is returned when data exceeds column length limits
+    ErrDataTooLong = errors.New("data too long for column")
+
+    // ErrDeadlock is returned when a deadlock is detected during transaction
+    ErrDeadlock = errors.New("deadlock detected")
+
+    // ErrLockTimeout is returned when unable to acquire lock within timeout
+    ErrLockTimeout = errors.New("lock acquisition timeout")
+
+    // ErrInvalidDataType is returned when data type conversion fails
+    ErrInvalidDataType = errors.New("invalid data type")
+
+    // ErrDivisionByZero is returned for division by zero operations
+    ErrDivisionByZero = errors.New("division by zero")
+
+    // ErrNumericOverflow is returned when numeric operation causes overflow
+    ErrNumericOverflow = errors.New("numeric value overflow")
+
+    // ErrDiskFull is returned when database storage is full
+    ErrDiskFull = errors.New("disk full")
+
+    // ErrTooManyConnections is returned when connection pool is exhausted
+    ErrTooManyConnections = errors.New("too many connections")
+
+    // ErrInvalidJSON is returned when JSON data is malformed
+    ErrInvalidJSON = errors.New("invalid JSON data")
+
+    // ErrIndexCorruption is returned when database index is corrupted
+    ErrIndexCorruption = errors.New("index corruption detected")
+
+    // ErrConfigurationError is returned for database configuration issues
+    ErrConfigurationError = errors.New("database configuration error")
+
+    // ErrUnsupportedOperation is returned for operations not supported by the database
+    ErrUnsupportedOperation = errors.New("unsupported operation")
+
+    // ErrMigrationFailed is returned when database migration fails
+    ErrMigrationFailed = errors.New("migration failed")
+
+    // ErrBackupFailed is returned when database backup operation fails
+    ErrBackupFailed = errors.New("backup operation failed")
+
+    // ErrRestoreFailed is returned when database restore operation fails
+    ErrRestoreFailed = errors.New("restore operation failed")
+
+    // ErrSchemaValidation is returned when schema validation fails
+    ErrSchemaValidation = errors.New("schema validation failed")
+
+    // ErrSerializationFailure is returned when transaction serialization fails
+    ErrSerializationFailure = errors.New("serialization failure")
+
+    // ErrInsufficientPrivileges is returned when user lacks required privileges
+    ErrInsufficientPrivileges = errors.New("insufficient privileges")
+
+    // ErrInvalidPassword is returned for authentication failures
+    ErrInvalidPassword = errors.New("invalid password")
+
+    // ErrAccountLocked is returned when user account is locked
+    ErrAccountLocked = errors.New("account locked")
+
+    // ErrDatabaseNotFound is returned when specified database doesn't exist
+    ErrDatabaseNotFound = errors.New("database not found")
+
+    // ErrSchemaNotFound is returned when specified schema doesn't exist
+    ErrSchemaNotFound = errors.New("schema not found")
+
+    // ErrFunctionNotFound is returned when specified function doesn't exist
+    ErrFunctionNotFound = errors.New("function not found")
+
+    // ErrTriggerNotFound is returned when specified trigger doesn't exist
+    ErrTriggerNotFound = errors.New("trigger not found")
+
+    // ErrIndexNotFound is returned when specified index doesn't exist
+    ErrIndexNotFound = errors.New("index not found")
+
+    // ErrViewNotFound is returned when specified view doesn't exist
+    ErrViewNotFound = errors.New("view not found")
+
+    // ErrSequenceNotFound is returned when specified sequence doesn't exist
+    ErrSequenceNotFound = errors.New("sequence not found")
+
+    // ErrInvalidCursor is returned when cursor operation fails
+    ErrInvalidCursor = errors.New("invalid cursor")
+
+    // ErrCursorNotFound is returned when specified cursor doesn't exist
+    ErrCursorNotFound = errors.New("cursor not found")
+
+    // ErrStatementTimeout is returned when statement execution exceeds timeout
+    ErrStatementTimeout = errors.New("statement timeout")
+
+    // ErrIdleInTransaction is returned when transaction is idle too long
+    ErrIdleInTransaction = errors.New("idle in transaction timeout")
+
+    // ErrConnectionLost is returned when database connection is lost
+    ErrConnectionLost = errors.New("connection lost")
+
+    // ErrProtocolViolation is returned for database protocol violations
+    ErrProtocolViolation = errors.New("protocol violation")
+
+    // ErrInternalError is returned for internal database errors
+    ErrInternalError = errors.New("internal database error")
+
+    // ErrSystemError is returned for system-level database errors
+    ErrSystemError = errors.New("system error")
 )
 ```
 
@@ -265,17 +405,6 @@ func RegisterPostgresLifecycle(params PostgresLifeCycleParams)
 RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database component. It sets up: 1. Connection monitoring on the application starts 2. Automatic reconnection mechanism on application start 3. Graceful shutdown of database connections on application stop
 
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
-
-<a name="TranslateError"></a>
-## func [TranslateError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L31>)
-
-```go
-func TranslateError(err error) error
-```
-
-TranslateError converts GORM/database\-specific errors into standardized application errors. This function provides abstraction from the underlying database implementation details, allowing application code to handle errors in a database\-agnostic way.
-
-It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Config"></a>
 ## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/configs.go#L7-L13>)
@@ -343,6 +472,33 @@ type ConnectionDetails struct {
     // Default is 0 (unlimited).
     ConnMaxLifetime time.Duration
 }
+```
+
+<a name="ErrorCategory"></a>
+## type [ErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L889>)
+
+ErrorCategory represents different categories of database errors
+
+```go
+type ErrorCategory int
+```
+
+<a name="CategoryUnknown"></a>
+
+```go
+const (
+    CategoryUnknown ErrorCategory = iota
+    CategoryConnection
+    CategoryQuery
+    CategoryData
+    CategoryConstraint
+    CategoryPermission
+    CategoryTransaction
+    CategoryResource
+    CategorySystem
+    CategorySchema
+    CategoryOperation
+)
 ```
 
 <a name="Logger"></a>
@@ -850,6 +1006,15 @@ var user User
 err := db.First(ctx, &user, "email = ?", "user@example.com")
 ```
 
+<a name="Postgres.GetErrorCategory"></a>
+### func \(\*Postgres\) [GetErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L906>)
+
+```go
+func (p *Postgres) GetErrorCategory(err error) ErrorCategory
+```
+
+GetErrorCategory returns the category of the given error
+
 <a name="Postgres.GetMigrationStatus"></a>
 ### func \(\*Postgres\) [GetMigrationStatus](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/migrations.go#L385>)
 
@@ -885,6 +1050,33 @@ func (p *Postgres) GracefulShutdown() error
 ```
 
 
+
+<a name="Postgres.IsCritical"></a>
+### func \(\*Postgres\) [IsCritical](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L979>)
+
+```go
+func (p *Postgres) IsCritical(err error) bool
+```
+
+IsCritical returns true if the error indicates a serious system problem
+
+<a name="Postgres.IsRetryable"></a>
+### func \(\*Postgres\) [IsRetryable](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L934>)
+
+```go
+func (p *Postgres) IsRetryable(err error) bool
+```
+
+IsRetryable returns true if the error might be resolved by retrying the operation
+
+<a name="Postgres.IsTemporary"></a>
+### func \(\*Postgres\) [IsTemporary](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L958>)
+
+```go
+func (p *Postgres) IsTemporary(err error) bool
+```
+
+IsTemporary returns true if the error is likely temporary and might resolve itself
 
 <a name="Postgres.MigrateDown"></a>
 ### func \(\*Postgres\) [MigrateDown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/migrations.go#L249>)
@@ -1022,6 +1214,17 @@ err := pg.Transaction(ctx, func(txPg *Postgres) error {
 	return txPg.Create(ctx, userProfile)
 })
 ```
+
+<a name="Postgres.TranslateError"></a>
+### func \(\*Postgres\) [TranslateError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L168>)
+
+```go
+func (p *Postgres) TranslateError(err error) error
+```
+
+TranslateError converts GORM/database\-specific errors into standardized application errors. This function provides abstraction from the underlying database implementation details, allowing application code to handle errors in a database\-agnostic way.
+
+It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Postgres.Update"></a>
 ### func \(\*Postgres\) [Update](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L106>)
