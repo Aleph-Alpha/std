@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
+	"github.com/jackc/pgx/v5/pgconn"
 	"net"
 	"os"
 	"testing"
@@ -566,18 +567,602 @@ func TestErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("TranslateError", func(t *testing.T) {
+		// Test nil error
 		assert.Equal(t, nil, postgres.TranslateError(nil))
+
+		// Test GORM errors
 		assert.Equal(t, ErrRecordNotFound, postgres.TranslateError(gorm.ErrRecordNotFound))
 		assert.Equal(t, ErrDuplicateKey, postgres.TranslateError(gorm.ErrDuplicatedKey))
 		assert.Equal(t, ErrForeignKey, postgres.TranslateError(gorm.ErrForeignKeyViolated))
 		assert.Equal(t, ErrInvalidData, postgres.TranslateError(gorm.ErrInvalidData))
+		assert.Equal(t, ErrTransactionFailed, postgres.TranslateError(gorm.ErrInvalidTransaction))
+		assert.Equal(t, ErrUnsupportedOperation, postgres.TranslateError(gorm.ErrNotImplemented))
+		assert.Equal(t, ErrInvalidQuery, postgres.TranslateError(gorm.ErrMissingWhereClause))
+		assert.Equal(t, ErrUnsupportedOperation, postgres.TranslateError(gorm.ErrUnsupportedRelation))
+		assert.Equal(t, ErrConstraintViolation, postgres.TranslateError(gorm.ErrPrimaryKeyRequired))
+		assert.Equal(t, ErrInvalidData, postgres.TranslateError(gorm.ErrModelValueRequired))
+		assert.Equal(t, ErrColumnNotFound, postgres.TranslateError(gorm.ErrInvalidField))
+		assert.Equal(t, ErrInvalidData, postgres.TranslateError(gorm.ErrEmptySlice))
+		assert.Equal(t, ErrUnsupportedOperation, postgres.TranslateError(gorm.ErrDryRunModeUnsupported))
+		assert.Equal(t, ErrConfigurationError, postgres.TranslateError(gorm.ErrInvalidDB))
+		assert.Equal(t, ErrInvalidData, postgres.TranslateError(gorm.ErrInvalidValue))
+		assert.Equal(t, ErrDataTooLong, postgres.TranslateError(gorm.ErrInvalidValueOfLength))
 
-		// Test custom error
+		// Test error message patterns
+		connectionRefusedErr := fmt.Errorf("connection refused")
+		assert.Equal(t, ErrConnectionFailed, postgres.TranslateError(connectionRefusedErr))
+
+		connectionResetErr := fmt.Errorf("connection reset by peer")
+		assert.Equal(t, ErrConnectionLost, postgres.TranslateError(connectionResetErr))
+
+		tooManyClientsErr := fmt.Errorf("too many clients already")
+		assert.Equal(t, ErrTooManyConnections, postgres.TranslateError(tooManyClientsErr))
+
+		timeoutErr := fmt.Errorf("operation timeout")
+		assert.Equal(t, ErrQueryTimeout, postgres.TranslateError(timeoutErr))
+
+		statementTimeoutErr := fmt.Errorf("canceling statement due to statement timeout")
+		assert.Equal(t, ErrStatementTimeout, postgres.TranslateError(statementTimeoutErr))
+
+		deadlockErr := fmt.Errorf("deadlock detected")
+		assert.Equal(t, ErrDeadlock, postgres.TranslateError(deadlockErr))
+
+		lockTimeoutErr := fmt.Errorf("lock timeout exceeded")
+		assert.Equal(t, ErrLockTimeout, postgres.TranslateError(lockTimeoutErr))
+
+		valueTooLongErr := fmt.Errorf("value too long for type character")
+		assert.Equal(t, ErrDataTooLong, postgres.TranslateError(valueTooLongErr))
+
+		invalidJSONErr := fmt.Errorf("invalid json format")
+		assert.Equal(t, ErrInvalidJSON, postgres.TranslateError(invalidJSONErr))
+
+		divisionByZeroErr := fmt.Errorf("division by zero")
+		assert.Equal(t, ErrDivisionByZero, postgres.TranslateError(divisionByZeroErr))
+
+		relationNotExistErr := fmt.Errorf("relation \"users\" does not exist")
+		assert.Equal(t, ErrTableNotFound, postgres.TranslateError(relationNotExistErr))
+
+		columnNotExistErr := fmt.Errorf("column \"invalid_column\" does not exist")
+		assert.Equal(t, ErrColumnNotFound, postgres.TranslateError(columnNotExistErr))
+
+		functionNotExistErr := fmt.Errorf("function my_function() does not exist")
+		assert.Equal(t, ErrFunctionNotFound, postgres.TranslateError(functionNotExistErr))
+
+		permissionDeniedErr := fmt.Errorf("permission denied for table users")
+		assert.Equal(t, ErrPermissionDenied, postgres.TranslateError(permissionDeniedErr))
+
+		insufficientPrivilegeErr := fmt.Errorf("insufficient privilege")
+		assert.Equal(t, ErrInsufficientPrivileges, postgres.TranslateError(insufficientPrivilegeErr))
+
+		diskFullErr := fmt.Errorf("disk full")
+		assert.Equal(t, ErrDiskFull, postgres.TranslateError(diskFullErr))
+
+		indexCorruptionErr := fmt.Errorf("index corruption detected")
+		assert.Equal(t, ErrIndexCorruption, postgres.TranslateError(indexCorruptionErr))
+
+		// Test custom error (should return unchanged)
 		customErr := fmt.Errorf("custom error")
 		assert.Equal(t, customErr, postgres.TranslateError(customErr))
 	})
 
+	t.Run("GetErrorCategory", func(t *testing.T) {
+		// Connection errors
+		assert.Equal(t, CategoryConnection, postgres.GetErrorCategory(ErrConnectionFailed))
+		assert.Equal(t, CategoryConnection, postgres.GetErrorCategory(ErrConnectionLost))
+		assert.Equal(t, CategoryConnection, postgres.GetErrorCategory(ErrTooManyConnections))
+
+		// Query errors
+		assert.Equal(t, CategoryQuery, postgres.GetErrorCategory(ErrInvalidQuery))
+		assert.Equal(t, CategoryQuery, postgres.GetErrorCategory(ErrQueryTimeout))
+		assert.Equal(t, CategoryQuery, postgres.GetErrorCategory(ErrStatementTimeout))
+		assert.Equal(t, CategoryQuery, postgres.GetErrorCategory(ErrInvalidCursor))
+		assert.Equal(t, CategoryQuery, postgres.GetErrorCategory(ErrCursorNotFound))
+
+		// Data errors
+		assert.Equal(t, CategoryData, postgres.GetErrorCategory(ErrInvalidData))
+		assert.Equal(t, CategoryData, postgres.GetErrorCategory(ErrDataTooLong))
+		assert.Equal(t, CategoryData, postgres.GetErrorCategory(ErrInvalidDataType))
+		assert.Equal(t, CategoryData, postgres.GetErrorCategory(ErrInvalidJSON))
+		assert.Equal(t, CategoryData, postgres.GetErrorCategory(ErrDivisionByZero))
+		assert.Equal(t, CategoryData, postgres.GetErrorCategory(ErrNumericOverflow))
+
+		// Constraint errors
+		assert.Equal(t, CategoryConstraint, postgres.GetErrorCategory(ErrDuplicateKey))
+		assert.Equal(t, CategoryConstraint, postgres.GetErrorCategory(ErrForeignKey))
+		assert.Equal(t, CategoryConstraint, postgres.GetErrorCategory(ErrConstraintViolation))
+		assert.Equal(t, CategoryConstraint, postgres.GetErrorCategory(ErrCheckConstraintViolation))
+		assert.Equal(t, CategoryConstraint, postgres.GetErrorCategory(ErrNotNullViolation))
+
+		// Permission errors
+		assert.Equal(t, CategoryPermission, postgres.GetErrorCategory(ErrPermissionDenied))
+		assert.Equal(t, CategoryPermission, postgres.GetErrorCategory(ErrInsufficientPrivileges))
+		assert.Equal(t, CategoryPermission, postgres.GetErrorCategory(ErrInvalidPassword))
+		assert.Equal(t, CategoryPermission, postgres.GetErrorCategory(ErrAccountLocked))
+
+		// Transaction errors
+		assert.Equal(t, CategoryTransaction, postgres.GetErrorCategory(ErrTransactionFailed))
+		assert.Equal(t, CategoryTransaction, postgres.GetErrorCategory(ErrDeadlock))
+		assert.Equal(t, CategoryTransaction, postgres.GetErrorCategory(ErrSerializationFailure))
+		assert.Equal(t, CategoryTransaction, postgres.GetErrorCategory(ErrIdleInTransaction))
+
+		// Resource errors
+		assert.Equal(t, CategoryResource, postgres.GetErrorCategory(ErrDiskFull))
+		assert.Equal(t, CategoryResource, postgres.GetErrorCategory(ErrLockTimeout))
+
+		// System errors
+		assert.Equal(t, CategorySystem, postgres.GetErrorCategory(ErrInternalError))
+		assert.Equal(t, CategorySystem, postgres.GetErrorCategory(ErrSystemError))
+		assert.Equal(t, CategorySystem, postgres.GetErrorCategory(ErrIndexCorruption))
+		assert.Equal(t, CategorySystem, postgres.GetErrorCategory(ErrProtocolViolation))
+		assert.Equal(t, CategorySystem, postgres.GetErrorCategory(ErrConfigurationError))
+
+		// Schema errors
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrTableNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrColumnNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrDatabaseNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrSchemaNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrFunctionNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrTriggerNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrIndexNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrViewNotFound))
+		assert.Equal(t, CategorySchema, postgres.GetErrorCategory(ErrSequenceNotFound))
+
+		// Operation errors
+		assert.Equal(t, CategoryOperation, postgres.GetErrorCategory(ErrUnsupportedOperation))
+		assert.Equal(t, CategoryOperation, postgres.GetErrorCategory(ErrMigrationFailed))
+		assert.Equal(t, CategoryOperation, postgres.GetErrorCategory(ErrBackupFailed))
+		assert.Equal(t, CategoryOperation, postgres.GetErrorCategory(ErrRestoreFailed))
+		assert.Equal(t, CategoryOperation, postgres.GetErrorCategory(ErrSchemaValidation))
+
+		// Unknown errors
+		customErr := fmt.Errorf("some unknown error")
+		assert.Equal(t, CategoryUnknown, postgres.GetErrorCategory(customErr))
+	})
+
+	t.Run("IsRetryable", func(t *testing.T) {
+		// Retryable errors
+		retryableErrors := []error{
+			ErrConnectionFailed,
+			ErrConnectionLost,
+			ErrQueryTimeout,
+			ErrStatementTimeout,
+			ErrDeadlock,
+			ErrLockTimeout,
+			ErrSerializationFailure,
+			ErrTooManyConnections,
+			ErrIdleInTransaction,
+			ErrProtocolViolation,
+			ErrInternalError,
+		}
+
+		for _, err := range retryableErrors {
+			assert.True(t, postgres.IsRetryable(err), "Error %v should be retryable", err)
+		}
+
+		// Non-retryable errors
+		nonRetryableErrors := []error{
+			ErrPermissionDenied,
+			ErrInvalidData,
+			ErrDuplicateKey,
+			ErrForeignKey,
+			ErrTableNotFound,
+			ErrColumnNotFound,
+		}
+
+		for _, err := range nonRetryableErrors {
+			assert.False(t, postgres.IsRetryable(err), "Error %v should not be retryable", err)
+		}
+	})
+
+	t.Run("IsTemporary", func(t *testing.T) {
+		// Temporary errors
+		temporaryErrors := []error{
+			ErrConnectionLost,
+			ErrQueryTimeout,
+			ErrStatementTimeout,
+			ErrLockTimeout,
+			ErrTooManyConnections,
+			ErrDiskFull,
+			ErrIdleInTransaction,
+			ErrSerializationFailure,
+		}
+
+		for _, err := range temporaryErrors {
+			assert.True(t, postgres.IsTemporary(err), "Error %v should be temporary", err)
+		}
+
+		// Non-temporary errors
+		nonTemporaryErrors := []error{
+			ErrPermissionDenied,
+			ErrInvalidData,
+			ErrDuplicateKey,
+			ErrForeignKey,
+			ErrTableNotFound,
+			ErrColumnNotFound,
+		}
+
+		for _, err := range nonTemporaryErrors {
+			assert.False(t, postgres.IsTemporary(err), "Error %v should not be temporary", err)
+		}
+	})
+
+	t.Run("IsCritical", func(t *testing.T) {
+		// Critical errors
+		criticalErrors := []error{
+			ErrIndexCorruption,
+			ErrSystemError,
+			ErrConfigurationError,
+			ErrProtocolViolation,
+			ErrDiskFull,
+			ErrInternalError,
+		}
+
+		for _, err := range criticalErrors {
+			assert.True(t, postgres.IsCritical(err), "Error %v should be critical", err)
+		}
+
+		// Non-critical errors
+		nonCriticalErrors := []error{
+			ErrPermissionDenied,
+			ErrInvalidData,
+			ErrDuplicateKey,
+			ErrForeignKey,
+			ErrTableNotFound,
+			ErrColumnNotFound,
+			ErrQueryTimeout,
+		}
+
+		for _, err := range nonCriticalErrors {
+			assert.False(t, postgres.IsCritical(err), "Error %v should not be critical", err)
+		}
+	})
+
+	t.Run("PostgreSQLErrorTranslation", func(t *testing.T) {
+		// Create mock PostgreSQL errors using pgconn.PgError
+		tests := []struct {
+			name        string
+			pgErrorCode string
+			expectedErr error
+		}{
+			{"unique_violation", "23505", ErrDuplicateKey},
+			{"foreign_key_violation", "23503", ErrForeignKey},
+			{"not_null_violation", "23502", ErrNotNullViolation},
+			{"check_violation", "23514", ErrCheckConstraintViolation},
+			{"deadlock_detected", "40P01", ErrDeadlock},
+			{"serialization_failure", "40001", ErrSerializationFailure},
+			{"connection_exception", "08000", ErrConnectionFailed},
+			{"connection_failure", "08006", ErrConnectionLost},
+			{"undefined_table", "42P01", ErrTableNotFound},
+			{"undefined_column", "42703", ErrColumnNotFound},
+			{"undefined_function", "42883", ErrFunctionNotFound},
+			{"insufficient_privilege", "42501", ErrInsufficientPrivileges},
+			{"invalid_password", "28P01", ErrInvalidPassword},
+			{"disk_full", "53100", ErrDiskFull},
+			{"too_many_connections", "53300", ErrTooManyConnections},
+			{"division_by_zero", "22012", ErrDivisionByZero},
+			{"numeric_value_out_of_range", "22003", ErrNumericOverflow},
+			{"string_data_right_truncation", "22001", ErrDataTooLong},
+			{"invalid_json_text", "22032", ErrInvalidJSON},
+			{"query_canceled", "57014", ErrQueryTimeout},
+			{"statement_timeout", "57014", ErrQueryTimeout}, // Same code as query_canceled
+			{"internal_error", "XX000", ErrInternalError},
+			{"index_corrupted", "XX002", ErrIndexCorruption},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// Create a mock pgconn.PgError
+				pgErr := &pgconn.PgError{
+					Code:    tt.pgErrorCode,
+					Message: tt.name,
+				}
+
+				translatedErr := postgres.translatePostgreSQLError(pgErr)
+				assert.Equal(t, tt.expectedErr, translatedErr,
+					"Expected error %v for PostgreSQL code %s, got %v",
+					tt.expectedErr, tt.pgErrorCode, translatedErr)
+			})
+		}
+	})
+
+	t.Run("RealDatabaseErrors", func(t *testing.T) {
+		// Create test_users table first to test record not found vs table not found
+		err := postgres.Exec(ctx, `
+			CREATE TABLE IF NOT EXISTS test_users (
+				id SERIAL PRIMARY KEY,
+				name VARCHAR(100),
+				email VARCHAR(100),
+				deleted_at TIMESTAMP
+			)
+		`)
+		require.NoError(t, err)
+
+		// Test record not found (table exists but no matching record)
+		var user TestUser
+		err = postgres.First(ctx, &user, "id = ?", 99999)
+		translatedErr := postgres.TranslateError(err)
+		assert.Equal(t, ErrRecordNotFound, translatedErr)
+
+		// Create a test table for constraint testing
+		err = postgres.Exec(ctx, `
+			CREATE TABLE IF NOT EXISTS test_constraints (
+				id SERIAL PRIMARY KEY,
+				email VARCHAR(100) UNIQUE NOT NULL,
+				name VARCHAR(50) NOT NULL,
+				age INTEGER CHECK (age >= 0)
+			)
+		`)
+		require.NoError(t, err)
+
+		// Test duplicate key violation
+		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
+			"test@example.com", "Test User", 25)
+		require.NoError(t, err)
+
+		// Try to insert duplicate email
+		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
+			"test@example.com", "Another User", 30)
+		translatedErr = postgres.TranslateError(err)
+		assert.Equal(t, ErrDuplicateKey, translatedErr)
+
+		// Test not null violation
+		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, age) VALUES (?, ?)",
+			"test2@example.com", 25)
+		translatedErr = postgres.TranslateError(err)
+		assert.Equal(t, ErrNotNullViolation, translatedErr)
+
+		// Test check constraint violation
+		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
+			"test3@example.com", "Test User 3", -5)
+		translatedErr = postgres.TranslateError(err)
+		assert.Equal(t, ErrCheckConstraintViolation, translatedErr)
+
+		// Test table not found
+		err = postgres.Exec(ctx, "SELECT * FROM non_existent_table")
+		translatedErr = postgres.TranslateError(err)
+		assert.Equal(t, ErrTableNotFound, translatedErr)
+
+		// Test column not found
+		err = postgres.Exec(ctx, "SELECT non_existent_column FROM test_constraints")
+		translatedErr = postgres.TranslateError(err)
+		assert.Equal(t, ErrColumnNotFound, translatedErr)
+
+		// Test invalid SQL syntax
+		err = postgres.Exec(ctx, "INVALID SQL STATEMENT")
+		translatedErr = postgres.TranslateError(err)
+		assert.Equal(t, ErrInvalidQuery, translatedErr)
+
+		// Clean up
+		err = postgres.Exec(ctx, "DROP TABLE IF EXISTS test_constraints")
+		require.NoError(t, err)
+		err = postgres.Exec(ctx, "DROP TABLE IF EXISTS test_users")
+		require.NoError(t, err)
+	})
+
 	require.NoError(t, app.Stop(ctx))
+}
+
+// Additional test helper functions for specific error scenarios
+func TestErrorCategoriesComprehensive(t *testing.T) {
+	ctx := context.Background()
+	containerInstance, err := setupPostgresContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate containerInstance: %s", err)
+		}
+	}()
+
+	// Create mock controller and Logger
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockLogger := NewMockLogger(ctrl)
+
+	// Set up expected Logger calls
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Get the Postgres instance to test it
+	var postgres *Postgres
+
+	// Create a test app using the existing FXModule
+	app := fxtest.New(t,
+		// Provide dependencies with the correct containerInstance config
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+			func() Logger {
+				return mockLogger
+			},
+		),
+		// Use the existing FXModule
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	// Start the application
+	err = app.Start(ctx)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		err      error
+		category ErrorCategory
+	}{
+		// Connection category
+		{"ConnectionFailed", ErrConnectionFailed, CategoryConnection},
+		{"ConnectionLost", ErrConnectionLost, CategoryConnection},
+		{"TooManyConnections", ErrTooManyConnections, CategoryConnection},
+
+		// Query category
+		{"InvalidQuery", ErrInvalidQuery, CategoryQuery},
+		{"QueryTimeout", ErrQueryTimeout, CategoryQuery},
+		{"StatementTimeout", ErrStatementTimeout, CategoryQuery},
+		{"InvalidCursor", ErrInvalidCursor, CategoryQuery},
+		{"CursorNotFound", ErrCursorNotFound, CategoryQuery},
+
+		// Data category
+		{"InvalidData", ErrInvalidData, CategoryData},
+		{"DataTooLong", ErrDataTooLong, CategoryData},
+		{"InvalidDataType", ErrInvalidDataType, CategoryData},
+		{"InvalidJSON", ErrInvalidJSON, CategoryData},
+		{"DivisionByZero", ErrDivisionByZero, CategoryData},
+		{"NumericOverflow", ErrNumericOverflow, CategoryData},
+
+		// Constraint category
+		{"DuplicateKey", ErrDuplicateKey, CategoryConstraint},
+		{"ForeignKey", ErrForeignKey, CategoryConstraint},
+		{"ConstraintViolation", ErrConstraintViolation, CategoryConstraint},
+		{"CheckConstraintViolation", ErrCheckConstraintViolation, CategoryConstraint},
+		{"NotNullViolation", ErrNotNullViolation, CategoryConstraint},
+
+		// Permission category
+		{"PermissionDenied", ErrPermissionDenied, CategoryPermission},
+		{"InsufficientPrivileges", ErrInsufficientPrivileges, CategoryPermission},
+		{"InvalidPassword", ErrInvalidPassword, CategoryPermission},
+		{"AccountLocked", ErrAccountLocked, CategoryPermission},
+
+		// Transaction category
+		{"TransactionFailed", ErrTransactionFailed, CategoryTransaction},
+		{"Deadlock", ErrDeadlock, CategoryTransaction},
+		{"SerializationFailure", ErrSerializationFailure, CategoryTransaction},
+		{"IdleInTransaction", ErrIdleInTransaction, CategoryTransaction},
+
+		// Resource category
+		{"DiskFull", ErrDiskFull, CategoryResource},
+		{"LockTimeout", ErrLockTimeout, CategoryResource},
+
+		// System category
+		{"InternalError", ErrInternalError, CategorySystem},
+		{"SystemError", ErrSystemError, CategorySystem},
+		{"IndexCorruption", ErrIndexCorruption, CategorySystem},
+		{"ProtocolViolation", ErrProtocolViolation, CategorySystem},
+		{"ConfigurationError", ErrConfigurationError, CategorySystem},
+
+		// Schema category
+		{"TableNotFound", ErrTableNotFound, CategorySchema},
+		{"ColumnNotFound", ErrColumnNotFound, CategorySchema},
+		{"DatabaseNotFound", ErrDatabaseNotFound, CategorySchema},
+		{"SchemaNotFound", ErrSchemaNotFound, CategorySchema},
+		{"FunctionNotFound", ErrFunctionNotFound, CategorySchema},
+		{"TriggerNotFound", ErrTriggerNotFound, CategorySchema},
+		{"IndexNotFound", ErrIndexNotFound, CategorySchema},
+		{"ViewNotFound", ErrViewNotFound, CategorySchema},
+		{"SequenceNotFound", ErrSequenceNotFound, CategorySchema},
+
+		// Operation category
+		{"UnsupportedOperation", ErrUnsupportedOperation, CategoryOperation},
+		{"MigrationFailed", ErrMigrationFailed, CategoryOperation},
+		{"BackupFailed", ErrBackupFailed, CategoryOperation},
+		{"RestoreFailed", ErrRestoreFailed, CategoryOperation},
+		{"SchemaValidation", ErrSchemaValidation, CategoryOperation},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			category := postgres.GetErrorCategory(tt.err)
+			assert.Equal(t, tt.category, category,
+				"Expected category %v for error %v, got %v",
+				tt.category, tt.err, category)
+		})
+	}
+}
+
+func TestErrorClassificationFunctions(t *testing.T) {
+	ctx := context.Background()
+	containerInstance, err := setupPostgresContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate containerInstance: %s", err)
+		}
+	}()
+
+	// Create mock controller and Logger
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockLogger := NewMockLogger(ctrl)
+
+	// Set up expected Logger calls
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Get the Postgres instance to test it
+	var postgres *Postgres
+
+	// Create a test app using the existing FXModule
+	app := fxtest.New(t,
+		// Provide dependencies with the correct containerInstance config
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+			func() Logger {
+				return mockLogger
+			},
+		),
+		// Use the existing FXModule
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	// Start the application
+	err = app.Start(ctx)
+	require.NoError(t, err)
+
+	t.Run("AllErrorsClassified", func(t *testing.T) {
+		// Ensure all defined errors are properly classified
+		allErrors := []error{
+			ErrRecordNotFound, ErrDuplicateKey, ErrForeignKey, ErrInvalidData,
+			ErrConnectionFailed, ErrTransactionFailed, ErrQueryTimeout, ErrInvalidQuery,
+			ErrPermissionDenied, ErrTableNotFound, ErrColumnNotFound, ErrConstraintViolation,
+			ErrCheckConstraintViolation, ErrNotNullViolation, ErrDataTooLong, ErrDeadlock,
+			ErrLockTimeout, ErrInvalidDataType, ErrDivisionByZero, ErrNumericOverflow,
+			ErrDiskFull, ErrTooManyConnections, ErrInvalidJSON, ErrIndexCorruption,
+			ErrConfigurationError, ErrUnsupportedOperation, ErrMigrationFailed,
+			ErrBackupFailed, ErrRestoreFailed, ErrSchemaValidation, ErrSerializationFailure,
+			ErrInsufficientPrivileges, ErrInvalidPassword, ErrAccountLocked,
+			ErrDatabaseNotFound, ErrSchemaNotFound, ErrFunctionNotFound, ErrTriggerNotFound,
+			ErrIndexNotFound, ErrViewNotFound, ErrSequenceNotFound, ErrInvalidCursor,
+			ErrCursorNotFound, ErrStatementTimeout, ErrIdleInTransaction, ErrConnectionLost,
+			ErrProtocolViolation, ErrInternalError, ErrSystemError,
+		}
+
+		for _, err := range allErrors {
+			category := postgres.GetErrorCategory(err)
+			assert.NotEqual(t, CategoryUnknown, category,
+				"Error %v should have a defined category", err)
+		}
+	})
+
+	t.Run("RetryableErrorsValidation", func(t *testing.T) {
+		// Validate that only appropriate errors are marked as retryable
+		retryableErrors := []error{
+			ErrConnectionFailed, ErrConnectionLost, ErrQueryTimeout, ErrStatementTimeout,
+			ErrDeadlock, ErrLockTimeout, ErrSerializationFailure, ErrTooManyConnections,
+			ErrIdleInTransaction, ErrProtocolViolation, ErrInternalError,
+		}
+
+		for _, err := range retryableErrors {
+			assert.True(t, postgres.IsRetryable(err), "Error %v should be retryable", err)
+		}
+
+		// These should NOT be retryable
+		nonRetryableErrors := []error{
+			ErrPermissionDenied, ErrInvalidData, ErrDuplicateKey, ErrForeignKey,
+			ErrTableNotFound, ErrColumnNotFound, ErrCheckConstraintViolation,
+			ErrNotNullViolation, ErrInvalidPassword, ErrAccountLocked,
+		}
+
+		for _, err := range nonRetryableErrors {
+			assert.False(t, postgres.IsRetryable(err), "Error %v should NOT be retryable", err)
+		}
+	})
 }
 
 // Test models for advanced query operations
