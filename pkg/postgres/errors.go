@@ -28,7 +28,7 @@ var (
 //
 // It maps common database errors to the standardized error types defined above.
 // If an error doesn't match any known type, it's returned unchanged.
-func TranslateError(err error) error {
+func (p *Postgres) TranslateError(err error) error {
 	if err == nil {
 		return nil
 	}

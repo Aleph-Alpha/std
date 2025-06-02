@@ -124,7 +124,6 @@ Package postgres is a generated GoMock package.
 
 - [Variables](<#variables>)
 - [func RegisterPostgresLifecycle\(params PostgresLifeCycleParams\)](<#RegisterPostgresLifecycle>)
-- [func TranslateError\(err error\) error](<#TranslateError>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
 - [type ConnectionDetails](<#ConnectionDetails>)
@@ -168,6 +167,7 @@ Package postgres is a generated GoMock package.
   - [func \(p \*Postgres\) RetryConnection\(ctx context.Context, logger Logger\)](<#Postgres.RetryConnection>)
   - [func \(p \*Postgres\) Save\(ctx context.Context, value interface\{\}\) error](<#Postgres.Save>)
   - [func \(p \*Postgres\) Transaction\(ctx context.Context, fn func\(pg \*Postgres\) error\) error](<#Postgres.Transaction>)
+  - [func \(p \*Postgres\) TranslateError\(err error\) error](<#Postgres.TranslateError>)
   - [func \(p \*Postgres\) Update\(ctx context.Context, model interface\{\}, attrs interface\{\}\) error](<#Postgres.Update>)
   - [func \(p \*Postgres\) UpdateColumn\(ctx context.Context, model interface\{\}, columnName string, value interface\{\}\) error](<#Postgres.UpdateColumn>)
   - [func \(p \*Postgres\) UpdateColumns\(ctx context.Context, model interface\{\}, columnValues map\[string\]interface\{\}\) error](<#Postgres.UpdateColumns>)
@@ -265,17 +265,6 @@ func RegisterPostgresLifecycle(params PostgresLifeCycleParams)
 RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database component. It sets up: 1. Connection monitoring on the application starts 2. Automatic reconnection mechanism on application start 3. Graceful shutdown of database connections on application stop
 
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
-
-<a name="TranslateError"></a>
-## func [TranslateError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L31>)
-
-```go
-func TranslateError(err error) error
-```
-
-TranslateError converts GORM/database\-specific errors into standardized application errors. This function provides abstraction from the underlying database implementation details, allowing application code to handle errors in a database\-agnostic way.
-
-It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Config"></a>
 ## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/configs.go#L7-L13>)
@@ -1022,6 +1011,17 @@ err := pg.Transaction(ctx, func(txPg *Postgres) error {
 	return txPg.Create(ctx, userProfile)
 })
 ```
+
+<a name="Postgres.TranslateError"></a>
+### func \(\*Postgres\) [TranslateError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/errors.go#L31>)
+
+```go
+func (p *Postgres) TranslateError(err error) error
+```
+
+TranslateError converts GORM/database\-specific errors into standardized application errors. This function provides abstraction from the underlying database implementation details, allowing application code to handle errors in a database\-agnostic way.
+
+It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Postgres.Update"></a>
 ### func \(\*Postgres\) [Update](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L106>)

@@ -412,7 +412,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		// Test record didn't find an error
 		var user TestUser
 		err := postgres.First(ctx, &user, "name = ?", "NonExistentUser")
-		translatedErr := TranslateError(err)
+		translatedErr := postgres.TranslateError(err)
 		assert.ErrorIs(t, translatedErr, ErrRecordNotFound)
 
 		// Create a table with a unique constraint
@@ -522,17 +522,62 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 
 // TestErrorHandling tests the error handling and translation
 func TestErrorHandling(t *testing.T) {
+	ctx := context.Background()
+	containerInstance, err := setupPostgresContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate containerInstance: %s", err)
+		}
+	}()
+
+	// Create mock controller and Logger
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockLogger := NewMockLogger(ctrl)
+
+	// Set up expected Logger calls
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Get the Postgres instance to test it
+	var postgres *Postgres
+
+	// Create a test app using the existing FXModule
+	app := fxtest.New(t,
+		// Provide dependencies with the correct containerInstance config
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+			func() Logger {
+				return mockLogger
+			},
+		),
+		// Use the existing FXModule
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	// Start the application
+	err = app.Start(ctx)
+	require.NoError(t, err)
+
 	t.Run("TranslateError", func(t *testing.T) {
-		assert.Equal(t, nil, TranslateError(nil))
-		assert.Equal(t, ErrRecordNotFound, TranslateError(gorm.ErrRecordNotFound))
-		assert.Equal(t, ErrDuplicateKey, TranslateError(gorm.ErrDuplicatedKey))
-		assert.Equal(t, ErrForeignKey, TranslateError(gorm.ErrForeignKeyViolated))
-		assert.Equal(t, ErrInvalidData, TranslateError(gorm.ErrInvalidData))
+		assert.Equal(t, nil, postgres.TranslateError(nil))
+		assert.Equal(t, ErrRecordNotFound, postgres.TranslateError(gorm.ErrRecordNotFound))
+		assert.Equal(t, ErrDuplicateKey, postgres.TranslateError(gorm.ErrDuplicatedKey))
+		assert.Equal(t, ErrForeignKey, postgres.TranslateError(gorm.ErrForeignKeyViolated))
+		assert.Equal(t, ErrInvalidData, postgres.TranslateError(gorm.ErrInvalidData))
 
 		// Test custom error
 		customErr := fmt.Errorf("custom error")
-		assert.Equal(t, customErr, TranslateError(customErr))
+		assert.Equal(t, customErr, postgres.TranslateError(customErr))
 	})
+
+	require.NoError(t, app.Stop(ctx))
 }
 
 // Test models for advanced query operations
