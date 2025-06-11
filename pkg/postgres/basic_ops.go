@@ -88,26 +88,40 @@ func (p *Postgres) Save(ctx context.Context, value interface{}) error {
 	return p.Client.WithContext(ctx).Save(value).Error
 }
 
-// Update updates records that match the given model's non-zero fields.
-// It only updates the fields provided in attrs and only affects records
-// that match the model's primary key or query conditions.
+// Update updates records that match the given model's non-zero fields or primary key.
+// It only updates the fields provided in attrs and only affects records that match
+// the model's primary key or query conditions.
 //
 // Parameters:
 //   - ctx: Context for the database operation
-//   - model: The model or query conditions to find records to update
-//   - attrs: Map, struct, or name/value pairs for the fields to update
+//   - model: The model instance with primary key set, or struct with query conditions
+//   - attrs: Map, struct, or individual field values to update
 //
-// Returns an error if the update fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the update operation
+//   - error: Error if the update fails, nil on success
+//
+// Note: The current implementation has a bug where it executes the query twice.
+// This should be fixed to execute only once and return both values properly.
 //
 // Example:
 //
 //	// Update user with ID=1
-//	err := db.Update(ctx, &User{ID: 1}, map[string]interface{}{"name": "New Name", "age": 30})
-func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) error {
+//	rowsAffected, err := db.Update(ctx, &User{ID: 1}, map[string]interface{}{
+//	    "name": "New Name",
+//	    "age": 30,
+//	})
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Updated %d rows\n", rowsAffected)
+func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.Client.WithContext(ctx).Model(model).Updates(attrs).Error
+	result := p.Client.WithContext(ctx).Model(model).Updates(attrs)
+
+	return result.RowsAffected, result.Error
 }
 
 // UpdateColumn updates a single column's value for records that match the given model.
@@ -116,21 +130,29 @@ func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interfac
 //
 // Parameters:
 //   - ctx: Context for the database operation
-//   - model: The model or query conditions to find records to update
+//   - model: The model instance with primary key set, or struct with query conditions
 //   - columnName: Name of the column to update
 //   - value: New value for the column
 //
-// Returns an error if the update fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the update operation
+//   - error: Error if the update fails, nil on success
 //
 // Example:
 //
 //	// Set status to "inactive" for user with ID=1
-//	err := db.UpdateColumn(ctx, &User{ID: 1}, "status", "inactive")
-func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) error {
+//	rowsAffected, err := db.UpdateColumn(ctx, &User{ID: 1}, "status", "inactive")
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Updated %d rows\n", rowsAffected)
+func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.Client.WithContext(ctx).Model(model).Update(columnName, value).Error
+	result := p.Client.WithContext(ctx).Model(model).Update(columnName, value)
+
+	return result.RowsAffected, result.Error
 }
 
 // UpdateColumns updates multiple columns with name/value pairs for records that match the given model.
@@ -138,23 +160,31 @@ func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnNa
 //
 // Parameters:
 //   - ctx: Context for the database operation
-//   - model: The model or query conditions to find records to update
+//   - model: The model instance with primary key set, or struct with query conditions
 //   - columnValues: Map of column names to their new values
 //
-// Returns an error if the update fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the update operation
+//   - error: Error if the update fails, nil on success
 //
 // Example:
 //
 //	// Update multiple fields for user with ID=1
-//	err := db.UpdateColumns(ctx, &User{ID: 1}, map[string]interface{}{
+//	rowsAffected, err := db.UpdateColumns(ctx, &User{ID: 1}, map[string]interface{}{
 //	    "status": "inactive",
 //	    "last_login": time.Now(),
 //	})
-func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) error {
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Updated %d rows\n", rowsAffected)
+func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.Client.WithContext(ctx).Model(model).Updates(columnValues).Error
+	result := p.Client.WithContext(ctx).Model(model).Updates(columnValues)
+
+	return result.RowsAffected, result.Error
 }
 
 // Delete removes records that match the given value and conditions from the database.
@@ -165,21 +195,29 @@ func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnV
 //   - value: The model to delete or a slice for batch delete
 //   - conditions: Additional conditions to filter records to delete
 //
-// Return an error if the deletion fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the delete operation
+//   - error: Error if the deletion fails, nil on success
 //
 // Example:
 //
 //	// Delete user with ID=1
-//	err := db.Delete(ctx, &User{}, "id = ?", 1)
+//	rowsAffected, err := db.Delete(ctx, &User{}, "id = ?", 1)
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Deleted %d rows\n", rowsAffected)
 //
 //	// Or with a model instance
 //	user := User{ID: 1}
-//	err := db.Delete(ctx, &user)
-func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) error {
+//	rowsAffected, err := db.Delete(ctx, &user)
+func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.Client.WithContext(ctx).Delete(value, conditions...).Error
+	result := p.Client.WithContext(ctx).Delete(value, conditions...)
+
+	return result.RowsAffected, result.Error
 }
 
 // Exec executes raw SQL directly against the database.
@@ -188,20 +226,28 @@ func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...
 //
 // Parameters:
 //   - ctx: Context for the database operation
-//   - SQL: The SQL statement to execute
+//   - sql: The SQL statement to execute
 //   - values: Parameters for the SQL statement
 //
-// Returns an error if the execution fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the SQL execution
+//   - error: Error if the execution fails, nil on success
 //
 // Example:
 //
-//	err := db.Exec(ctx, "UPDATE users SET status = ? WHERE last_login < ?",
-//	               "inactive", time.Now().AddDate(0, -6, 0))
-func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) error {
+//	rowsAffected, err := db.Exec(ctx, "UPDATE users SET status = ? WHERE last_login < ?",
+//	                             "inactive", time.Now().AddDate(0, -6, 0))
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Updated %d users\n", rowsAffected)
+func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.Client.WithContext(ctx).Exec(sql, values...).Error
+	result := p.Client.WithContext(ctx).Exec(sql, values...)
+
+	return result.RowsAffected, result.Error
 }
 
 // Count determines the number of records that match the given conditions.
@@ -236,18 +282,26 @@ func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, c
 //   - condition: WHERE condition as a string
 //   - args: Arguments for the WHERE condition
 //
-// Returns an error if the update fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the update operation
+//   - error: Error if the update fails, nil on success
 //
 // Example:
 //
 //	// Update all users who haven't logged in for 6 months
-//	err := db.UpdateWhere(ctx, &User{},
-//	                      map[string]interface{}{"status": "inactive"},
-//	                      "last_login < ?",
-//	                      time.Now().AddDate(0, -6, 0))
-func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) error {
+//	rowsAffected, err := db.UpdateWhere(ctx, &User{},
+//	                                    map[string]interface{}{"status": "inactive"},
+//	                                    "last_login < ?",
+//	                                    time.Now().AddDate(0, -6, 0))
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
+func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.Client.WithContext(ctx).Model(model).Where(condition, args...).Updates(attrs).Error
+	result := p.Client.WithContext(ctx).Model(model).Where(condition, args...).Updates(attrs)
+
+	return result.RowsAffected, result.Error
 }

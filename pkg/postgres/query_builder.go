@@ -390,14 +390,23 @@ func (qb *QueryBuilder) Count(count *int64) error {
 // Parameters:
 //   - values: Map or struct with the fields to update
 //
-// Returns an error if the update fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the update operation
+//   - error: Error if the update fails, nil on success
 //
 // Example:
 //
-//	err := qb.Where("expired = ?", true).Updates(map[string]interface{}{"active": false})
-func (qb *QueryBuilder) Updates(values interface{}) error {
+//	rowsAffected, err := qb.Where("expired = ?", true).Updates(map[string]interface{}{"active": false})
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Updated %d rows\n", rowsAffected)
+func (qb *QueryBuilder) Updates(values interface{}) (int64, error) {
 	defer qb.release()
-	return qb.db.Updates(values).Error
+
+	result := qb.db.Updates(values)
+
+	return result.RowsAffected, result.Error
 }
 
 // Delete deletes records that match the query conditions.
@@ -406,14 +415,23 @@ func (qb *QueryBuilder) Updates(values interface{}) error {
 // Parameters:
 //   - value: Model value or pointer to specify what to delete
 //
-// Returns an error if the deletion fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected by the delete operation
+//   - error: Error if the deletion fails, nil on success
 //
 // Example:
 //
-//	err := qb.Where("created_at < ?", time.Now().AddDate(-1, 0, 0)).Delete(&User{})
-func (qb *QueryBuilder) Delete(value interface{}) error {
+//	rowsAffected, err := qb.Where("created_at < ?", time.Now().AddDate(-1, 0, 0)).Delete(&User{})
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Deleted %d rows\n", rowsAffected)
+func (qb *QueryBuilder) Delete(value interface{}) (int64, error) {
 	defer qb.release()
-	return qb.db.Delete(value).Error
+
+	result := qb.db.Delete(value)
+
+	return result.RowsAffected, result.Error
 }
 
 // Pluck queries a single column and scans the results into a slice.
@@ -423,15 +441,24 @@ func (qb *QueryBuilder) Delete(value interface{}) error {
 //   - column: Name of the column to query
 //   - dest: Pointer to a slice where results will be stored
 //
-// Returns an error if the query fails or nil on success.
+// Returns:
+//   - int64: Number of rows found and processed
+//   - error: Error if the query fails, nil on success
 //
 // Example:
 //
 //	var emails []string
-//	err := qb.Where("department = ?", "Engineering").Pluck("email", &emails)
-func (qb *QueryBuilder) Pluck(column string, dest interface{}) error {
+//	rowsFound, err := qb.Where("department = ?", "Engineering").Pluck("email", &emails)
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Found %d email addresses\n", rowsFound)
+func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error) {
 	defer qb.release()
-	return qb.db.Pluck(column, dest).Error
+
+	result := qb.db.Pluck(column, dest)
+
+	return result.RowsAffected, result.Error
 }
 
 // Distinct specifies that the query should return distinct results.
@@ -695,15 +722,24 @@ func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder {
 //   - value: Slice of records to create
 //   - batchSize: Number of records to process in each batch
 //
-// Returns an error if the operation fails or nil on success.
+// Returns:
+//   - int64: Number of rows affected (records created)
+//   - error: Error if the operation fails, nil on success
 //
 // Example:
 //
 //	users := []User{{Name: "John"}, {Name: "Jane"}, {Name: "Bob"}}
-//	err := qb.CreateInBatches(&users, 100)
-func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) error {
+//	rowsAffected, err := qb.CreateInBatches(&users, 100)
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Created %d records\n", rowsAffected)
+func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error) {
 	defer qb.release()
-	return qb.db.CreateInBatches(value, batchSize).Error
+
+	result := qb.db.CreateInBatches(value, batchSize)
+
+	return result.RowsAffected, result.Error
 }
 
 // FirstOrInit finds the first record matching the conditions, or initializes
