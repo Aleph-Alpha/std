@@ -155,8 +155,8 @@ Package postgres is a generated GoMock package.
   - [func \(p \*Postgres\) Create\(ctx context.Context, value interface\{\}\) error](<#Postgres.Create>)
   - [func \(p \*Postgres\) CreateMigration\(migrationsDir, name string, migrationType MigrationType\) \(string, error\)](<#Postgres.CreateMigration>)
   - [func \(p \*Postgres\) DB\(\) \*gorm.DB](<#Postgres.DB>)
-  - [func \(p \*Postgres\) Delete\(ctx context.Context, value interface\{\}, conditions ...interface\{\}\) error](<#Postgres.Delete>)
-  - [func \(p \*Postgres\) Exec\(ctx context.Context, sql string, values ...interface\{\}\) error](<#Postgres.Exec>)
+  - [func \(p \*Postgres\) Delete\(ctx context.Context, value interface\{\}, conditions ...interface\{\}\) \(int64, error\)](<#Postgres.Delete>)
+  - [func \(p \*Postgres\) Exec\(ctx context.Context, sql string, values ...interface\{\}\) \(int64, error\)](<#Postgres.Exec>)
   - [func \(p \*Postgres\) Find\(ctx context.Context, dest interface\{\}, conditions ...interface\{\}\) error](<#Postgres.Find>)
   - [func \(p \*Postgres\) First\(ctx context.Context, dest interface\{\}, conditions ...interface\{\}\) error](<#Postgres.First>)
   - [func \(p \*Postgres\) GetErrorCategory\(err error\) ErrorCategory](<#Postgres.GetErrorCategory>)
@@ -173,17 +173,17 @@ Package postgres is a generated GoMock package.
   - [func \(p \*Postgres\) Save\(ctx context.Context, value interface\{\}\) error](<#Postgres.Save>)
   - [func \(p \*Postgres\) Transaction\(ctx context.Context, fn func\(pg \*Postgres\) error\) error](<#Postgres.Transaction>)
   - [func \(p \*Postgres\) TranslateError\(err error\) error](<#Postgres.TranslateError>)
-  - [func \(p \*Postgres\) Update\(ctx context.Context, model interface\{\}, attrs interface\{\}\) error](<#Postgres.Update>)
-  - [func \(p \*Postgres\) UpdateColumn\(ctx context.Context, model interface\{\}, columnName string, value interface\{\}\) error](<#Postgres.UpdateColumn>)
-  - [func \(p \*Postgres\) UpdateColumns\(ctx context.Context, model interface\{\}, columnValues map\[string\]interface\{\}\) error](<#Postgres.UpdateColumns>)
-  - [func \(p \*Postgres\) UpdateWhere\(ctx context.Context, model interface\{\}, attrs interface\{\}, condition string, args ...interface\{\}\) error](<#Postgres.UpdateWhere>)
+  - [func \(p \*Postgres\) Update\(ctx context.Context, model interface\{\}, attrs interface\{\}\) \(int64, error\)](<#Postgres.Update>)
+  - [func \(p \*Postgres\) UpdateColumn\(ctx context.Context, model interface\{\}, columnName string, value interface\{\}\) \(int64, error\)](<#Postgres.UpdateColumn>)
+  - [func \(p \*Postgres\) UpdateColumns\(ctx context.Context, model interface\{\}, columnValues map\[string\]interface\{\}\) \(int64, error\)](<#Postgres.UpdateColumns>)
+  - [func \(p \*Postgres\) UpdateWhere\(ctx context.Context, model interface\{\}, attrs interface\{\}, condition string, args ...interface\{\}\) \(int64, error\)](<#Postgres.UpdateWhere>)
 - [type PostgresLifeCycleParams](<#PostgresLifeCycleParams>)
 - [type PostgresParams](<#PostgresParams>)
 - [type QueryBuilder](<#QueryBuilder>)
   - [func \(qb \*QueryBuilder\) Clauses\(conds ...clause.Expression\) \*QueryBuilder](<#QueryBuilder.Clauses>)
   - [func \(qb \*QueryBuilder\) Count\(count \*int64\) error](<#QueryBuilder.Count>)
-  - [func \(qb \*QueryBuilder\) CreateInBatches\(value interface\{\}, batchSize int\) error](<#QueryBuilder.CreateInBatches>)
-  - [func \(qb \*QueryBuilder\) Delete\(value interface\{\}\) error](<#QueryBuilder.Delete>)
+  - [func \(qb \*QueryBuilder\) CreateInBatches\(value interface\{\}, batchSize int\) \(int64, error\)](<#QueryBuilder.CreateInBatches>)
+  - [func \(qb \*QueryBuilder\) Delete\(value interface\{\}\) \(int64, error\)](<#QueryBuilder.Delete>)
   - [func \(qb \*QueryBuilder\) Distinct\(args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Distinct>)
   - [func \(qb \*QueryBuilder\) Done\(\)](<#QueryBuilder.Done>)
   - [func \(qb \*QueryBuilder\) Find\(dest interface\{\}\) error](<#QueryBuilder.Find>)
@@ -210,7 +210,7 @@ Package postgres is a generated GoMock package.
   - [func \(qb \*QueryBuilder\) OnConflict\(onConflict clause.OnConflict\) \*QueryBuilder](<#QueryBuilder.OnConflict>)
   - [func \(qb \*QueryBuilder\) Or\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Or>)
   - [func \(qb \*QueryBuilder\) Order\(value interface\{\}\) \*QueryBuilder](<#QueryBuilder.Order>)
-  - [func \(qb \*QueryBuilder\) Pluck\(column string, dest interface\{\}\) error](<#QueryBuilder.Pluck>)
+  - [func \(qb \*QueryBuilder\) Pluck\(column string, dest interface\{\}\) \(int64, error\)](<#QueryBuilder.Pluck>)
   - [func \(qb \*QueryBuilder\) Preload\(query string, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Preload>)
   - [func \(qb \*QueryBuilder\) QueryRow\(\) RowScanner](<#QueryBuilder.QueryRow>)
   - [func \(qb \*QueryBuilder\) QueryRows\(\) \(RowsScanner, error\)](<#QueryBuilder.QueryRows>)
@@ -223,7 +223,7 @@ Package postgres is a generated GoMock package.
   - [func \(qb \*QueryBuilder\) Select\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Select>)
   - [func \(qb \*QueryBuilder\) Table\(name string\) \*QueryBuilder](<#QueryBuilder.Table>)
   - [func \(qb \*QueryBuilder\) Unscoped\(\) \*QueryBuilder](<#QueryBuilder.Unscoped>)
-  - [func \(qb \*QueryBuilder\) Updates\(values interface\{\}\) error](<#QueryBuilder.Updates>)
+  - [func \(qb \*QueryBuilder\) Updates\(values interface\{\}\) \(int64, error\)](<#QueryBuilder.Updates>)
   - [func \(qb \*QueryBuilder\) Where\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Where>)
 - [type RowScanner](<#RowScanner>)
 - [type RowsScanner](<#RowsScanner>)
@@ -822,7 +822,7 @@ Returns an error if any part of the migration process fails.
 This method is useful during development or for simple applications, but for production systems, explicit migrations are recommended.
 
 <a name="Postgres.Count"></a>
-### func \(\*Postgres\) [Count](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L222>)
+### func \(\*Postgres\) [Count](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L268>)
 
 ```go
 func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error
@@ -907,10 +907,10 @@ DB returns the underlying GORM DB Client instance. This method provides direct a
 Use this method when you need to perform operations not covered by the wrapper methods or when you need to access specific GORM functionality. Note that direct usage bypasses some of the safety mechanisms, so use it with care.
 
 <a name="Postgres.Delete"></a>
-### func \(\*Postgres\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L178>)
+### func \(\*Postgres\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L214>)
 
 ```go
-func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) error
+func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error)
 ```
 
 Delete removes records that match the given value and conditions from the database. It respects soft delete if implemented on the model.
@@ -921,24 +921,31 @@ Parameters:
 - value: The model to delete or a slice for batch delete
 - conditions: Additional conditions to filter records to delete
 
-Return an error if the deletion fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the delete operation
+- error: Error if the deletion fails, nil on success
 
 Example:
 
 ```
 // Delete user with ID=1
-err := db.Delete(ctx, &User{}, "id = ?", 1)
+rowsAffected, err := db.Delete(ctx, &User{}, "id = ?", 1)
+if err != nil {
+    return err
+}
+fmt.Printf("Deleted %d rows\n", rowsAffected)
 
 // Or with a model instance
 user := User{ID: 1}
-err := db.Delete(ctx, &user)
+rowsAffected, err := db.Delete(ctx, &user)
 ```
 
 <a name="Postgres.Exec"></a>
-### func \(\*Postgres\) [Exec](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L200>)
+### func \(\*Postgres\) [Exec](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L244>)
 
 ```go
-func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) error
+func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error)
 ```
 
 Exec executes raw SQL directly against the database. This is useful for operations not easily expressed through GORM's API or for performance\-critical code.
@@ -946,16 +953,23 @@ Exec executes raw SQL directly against the database. This is useful for operatio
 Parameters:
 
 - ctx: Context for the database operation
-- SQL: The SQL statement to execute
+- sql: The SQL statement to execute
 - values: Parameters for the SQL statement
 
-Returns an error if the execution fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the SQL execution
+- error: Error if the execution fails, nil on success
 
 Example:
 
 ```
-err := db.Exec(ctx, "UPDATE users SET status = ? WHERE last_login < ?",
-               "inactive", time.Now().AddDate(0, -6, 0))
+rowsAffected, err := db.Exec(ctx, "UPDATE users SET status = ? WHERE last_login < ?",
+                             "inactive", time.Now().AddDate(0, -6, 0))
+if err != nil {
+    return err
+}
+fmt.Printf("Updated %d users\n", rowsAffected)
 ```
 
 <a name="Postgres.Find"></a>
@@ -1227,34 +1241,46 @@ TranslateError converts GORM/database\-specific errors into standardized applica
 It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Postgres.Update"></a>
-### func \(\*Postgres\) [Update](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L106>)
+### func \(\*Postgres\) [Update](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L118>)
 
 ```go
-func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) error
+func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error)
 ```
 
-Update updates records that match the given model's non\-zero fields. It only updates the fields provided in attrs and only affects records that match the model's primary key or query conditions.
+Update updates records that match the given model's non\-zero fields or primary key. It only updates the fields provided in attrs and only affects records that match the model's primary key or query conditions.
 
 Parameters:
 
 - ctx: Context for the database operation
-- model: The model or query conditions to find records to update
-- attrs: Map, struct, or name/value pairs for the fields to update
+- model: The model instance with primary key set, or struct with query conditions
+- attrs: Map, struct, or individual field values to update
 
-Returns an error if the update fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the update operation
+- error: Error if the update fails, nil on success
+
+Note: The current implementation has a bug where it executes the query twice. This should be fixed to execute only once and return both values properly.
 
 Example:
 
 ```
 // Update user with ID=1
-err := db.Update(ctx, &User{ID: 1}, map[string]interface{}{"name": "New Name", "age": 30})
+rowsAffected, err := db.Update(ctx, &User{ID: 1}, map[string]interface{}{
+    "name": "New Name",
+    "age": 30,
+})
+if err != nil {
+    return err
+}
+fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumn"></a>
-### func \(\*Postgres\) [UpdateColumn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L129>)
+### func \(\*Postgres\) [UpdateColumn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L149>)
 
 ```go
-func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) error
+func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error)
 ```
 
 UpdateColumn updates a single column's value for records that match the given model. Unlike Update, it doesn't run hooks and can be used to update fields that are zero values \(like setting a string to empty or a number to zero\).
@@ -1262,24 +1288,31 @@ UpdateColumn updates a single column's value for records that match the given mo
 Parameters:
 
 - ctx: Context for the database operation
-- model: The model or query conditions to find records to update
+- model: The model instance with primary key set, or struct with query conditions
 - columnName: Name of the column to update
 - value: New value for the column
 
-Returns an error if the update fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the update operation
+- error: Error if the update fails, nil on success
 
 Example:
 
 ```
 // Set status to "inactive" for user with ID=1
-err := db.UpdateColumn(ctx, &User{ID: 1}, "status", "inactive")
+rowsAffected, err := db.UpdateColumn(ctx, &User{ID: 1}, "status", "inactive")
+if err != nil {
+    return err
+}
+fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumns"></a>
-### func \(\*Postgres\) [UpdateColumns](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L153>)
+### func \(\*Postgres\) [UpdateColumns](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L181>)
 
 ```go
-func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) error
+func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error)
 ```
 
 UpdateColumns updates multiple columns with name/value pairs for records that match the given model. Like UpdateColumn, it doesn't run hooks and can update zero\-value fields.
@@ -1287,26 +1320,33 @@ UpdateColumns updates multiple columns with name/value pairs for records that ma
 Parameters:
 
 - ctx: Context for the database operation
-- model: The model or query conditions to find records to update
+- model: The model instance with primary key set, or struct with query conditions
 - columnValues: Map of column names to their new values
 
-Returns an error if the update fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the update operation
+- error: Error if the update fails, nil on success
 
 Example:
 
 ```
 // Update multiple fields for user with ID=1
-err := db.UpdateColumns(ctx, &User{ID: 1}, map[string]interface{}{
+rowsAffected, err := db.UpdateColumns(ctx, &User{ID: 1}, map[string]interface{}{
     "status": "inactive",
     "last_login": time.Now(),
 })
+if err != nil {
+    return err
+}
+fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateWhere"></a>
-### func \(\*Postgres\) [UpdateWhere](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L248>)
+### func \(\*Postgres\) [UpdateWhere](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L300>)
 
 ```go
-func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) error
+func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error)
 ```
 
 UpdateWhere updates records that match the specified WHERE condition. This method provides more flexibility than Update for complex conditions.
@@ -1319,16 +1359,23 @@ Parameters:
 - condition: WHERE condition as a string
 - args: Arguments for the WHERE condition
 
-Returns an error if the update fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the update operation
+- error: Error if the update fails, nil on success
 
 Example:
 
 ```
 // Update all users who haven't logged in for 6 months
-err := db.UpdateWhere(ctx, &User{},
-                      map[string]interface{}{"status": "inactive"},
-                      "last_login < ?",
-                      time.Now().AddDate(0, -6, 0))
+rowsAffected, err := db.UpdateWhere(ctx, &User{},
+                                    map[string]interface{}{"status": "inactive"},
+                                    "last_login < ?",
+                                    time.Now().AddDate(0, -6, 0))
+if err != nil {
+    return err
+}
+fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="PostgresLifeCycleParams"></a>
@@ -1376,7 +1423,7 @@ type QueryBuilder struct {
 ```
 
 <a name="QueryBuilder.Clauses"></a>
-### func \(\*QueryBuilder\) [Clauses](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L686>)
+### func \(\*QueryBuilder\) [Clauses](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L713>)
 
 ```go
 func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder
@@ -1425,10 +1472,10 @@ err := qb.Where("active = ?", true).Count(&count)
 ```
 
 <a name="QueryBuilder.CreateInBatches"></a>
-### func \(\*QueryBuilder\) [CreateInBatches](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L704>)
+### func \(\*QueryBuilder\) [CreateInBatches](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L737>)
 
 ```go
-func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) error
+func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error)
 ```
 
 CreateInBatches creates records in batches to avoid memory issues with large datasets. This is a terminal method that executes the operation and releases the mutex lock.
@@ -1438,20 +1485,27 @@ Parameters:
 - value: Slice of records to create
 - batchSize: Number of records to process in each batch
 
-Returns an error if the operation fails or nil on success.
+Returns:
+
+- int64: Number of rows affected \(records created\)
+- error: Error if the operation fails, nil on success
 
 Example:
 
 ```
 users := []User{{Name: "John"}, {Name: "Jane"}, {Name: "Bob"}}
-err := qb.CreateInBatches(&users, 100)
+rowsAffected, err := qb.CreateInBatches(&users, 100)
+if err != nil {
+    return err
+}
+fmt.Printf("Created %d records\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Delete"></a>
-### func \(\*QueryBuilder\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L414>)
+### func \(\*QueryBuilder\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L429>)
 
 ```go
-func (qb *QueryBuilder) Delete(value interface{}) error
+func (qb *QueryBuilder) Delete(value interface{}) (int64, error)
 ```
 
 Delete deletes records that match the query conditions. This is a terminal method that executes the query and releases the mutex lock.
@@ -1460,16 +1514,23 @@ Parameters:
 
 - value: Model value or pointer to specify what to delete
 
-Returns an error if the deletion fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the delete operation
+- error: Error if the deletion fails, nil on success
 
 Example:
 
 ```
-err := qb.Where("created_at < ?", time.Now().AddDate(-1, 0, 0)).Delete(&User{})
+rowsAffected, err := qb.Where("created_at < ?", time.Now().AddDate(-1, 0, 0)).Delete(&User{})
+if err != nil {
+    return err
+}
+fmt.Printf("Deleted %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Distinct"></a>
-### func \(\*QueryBuilder\) [Distinct](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L449>)
+### func \(\*QueryBuilder\) [Distinct](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L476>)
 
 ```go
 func (qb *QueryBuilder) Distinct(args ...interface{}) *QueryBuilder
@@ -1491,7 +1552,7 @@ qb.Distinct().Where("age > ?", 18).Find(&users) // SELECT DISTINCT * FROM users 
 ```
 
 <a name="QueryBuilder.Done"></a>
-### func \(\*QueryBuilder\) [Done](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L757>)
+### func \(\*QueryBuilder\) [Done](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L793>)
 
 ```go
 func (qb *QueryBuilder) Done()
@@ -1555,7 +1616,7 @@ err := qb.Where("email = ?", "user@example.com").First(&user)
 ```
 
 <a name="QueryBuilder.FirstOrCreate"></a>
-### func \(\*QueryBuilder\) [FirstOrCreate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L740>)
+### func \(\*QueryBuilder\) [FirstOrCreate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L776>)
 
 ```go
 func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error
@@ -1578,7 +1639,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
 ```
 
 <a name="QueryBuilder.FirstOrInit"></a>
-### func \(\*QueryBuilder\) [FirstOrInit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L722>)
+### func \(\*QueryBuilder\) [FirstOrInit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L758>)
 
 ```go
 func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error
@@ -1601,7 +1662,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrInit(&user)
 ```
 
 <a name="QueryBuilder.ForKeyShare"></a>
-### func \(\*QueryBuilder\) [ForKeyShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L618>)
+### func \(\*QueryBuilder\) [ForKeyShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L645>)
 
 ```go
 func (qb *QueryBuilder) ForKeyShare() *QueryBuilder
@@ -1618,7 +1679,7 @@ qb.Where("id = ?", userID).ForKeyShare().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForNoKeyUpdate"></a>
-### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L604>)
+### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L631>)
 
 ```go
 func (qb *QueryBuilder) ForNoKeyUpdate() *QueryBuilder
@@ -1635,7 +1696,7 @@ qb.Where("id = ?", userID).ForNoKeyUpdate().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForShare"></a>
-### func \(\*QueryBuilder\) [ForShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L539>)
+### func \(\*QueryBuilder\) [ForShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L566>)
 
 ```go
 func (qb *QueryBuilder) ForShare() *QueryBuilder
@@ -1653,7 +1714,7 @@ qb.ForShare().Where("status = ?", "active").Find(&users) // Prevents updates but
 ```
 
 <a name="QueryBuilder.ForShareSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L570>)
+### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L597>)
 
 ```go
 func (qb *QueryBuilder) ForShareSkipLocked() *QueryBuilder
@@ -1670,7 +1731,7 @@ qb.Where("category = ?", "news").ForShareSkipLocked().Find(&articles)
 ```
 
 <a name="QueryBuilder.ForUpdate"></a>
-### func \(\*QueryBuilder\) [ForUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L524>)
+### func \(\*QueryBuilder\) [ForUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L551>)
 
 ```go
 func (qb *QueryBuilder) ForUpdate() *QueryBuilder
@@ -1688,7 +1749,7 @@ qb.ForUpdate().Where("status = ?", "pending").Find(&orders) // Locks all matchin
 ```
 
 <a name="QueryBuilder.ForUpdateNoWait"></a>
-### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L587>)
+### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L614>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateNoWait() *QueryBuilder
@@ -1705,7 +1766,7 @@ qb.Where("id = ?", accountID).ForUpdateNoWait().First(&account)
 ```
 
 <a name="QueryBuilder.ForUpdateSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L554>)
+### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L581>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateSkipLocked() *QueryBuilder
@@ -1932,7 +1993,7 @@ qb.Offset(20).Limit(10) // Skip 20 records and return the next 10
 ```
 
 <a name="QueryBuilder.OnConflict"></a>
-### func \(\*QueryBuilder\) [OnConflict](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L638>)
+### func \(\*QueryBuilder\) [OnConflict](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L665>)
 
 ```go
 func (qb *QueryBuilder) OnConflict(onConflict clause.OnConflict) *QueryBuilder
@@ -2000,10 +2061,10 @@ qb.Order("age ASC, name DESC")
 ```
 
 <a name="QueryBuilder.Pluck"></a>
-### func \(\*QueryBuilder\) [Pluck](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L432>)
+### func \(\*QueryBuilder\) [Pluck](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L456>)
 
 ```go
-func (qb *QueryBuilder) Pluck(column string, dest interface{}) error
+func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error)
 ```
 
 Pluck queries a single column and scans the results into a slice. This is a terminal method that executes the query and releases the mutex lock.
@@ -2013,13 +2074,20 @@ Parameters:
 - column: Name of the column to query
 - dest: Pointer to a slice where results will be stored
 
-Returns an error if the query fails or nil on success.
+Returns:
+
+- int64: Number of rows found and processed
+- error: Error if the query fails, nil on success
 
 Example:
 
 ```
 var emails []string
-err := qb.Where("department = ?", "Engineering").Pluck("email", &emails)
+rowsFound, err := qb.Where("department = ?", "Engineering").Pluck("email", &emails)
+if err != nil {
+    return err
+}
+fmt.Printf("Found %d email addresses\n", rowsFound)
 ```
 
 <a name="QueryBuilder.Preload"></a>
@@ -2086,7 +2154,7 @@ qb.Raw("SELECT * FROM users WHERE created_at > ?", time.Now().AddDate(0, -1, 0))
 ```
 
 <a name="QueryBuilder.Returning"></a>
-### func \(\*QueryBuilder\) [Returning](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L656>)
+### func \(\*QueryBuilder\) [Returning](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L683>)
 
 ```go
 func (qb *QueryBuilder) Returning(columns ...string) *QueryBuilder
@@ -2161,7 +2229,7 @@ func (qb *QueryBuilder) ScanRow(dest interface{}) error
 ScanRow is a convenience method to scan a single row directly into a struct. This is a higher\-level alternative to QueryRow that automatically maps column values to struct fields based on naming conventions or field tags. It's useful when you need to map a row to a predefined data structure.
 
 <a name="QueryBuilder.Scopes"></a>
-### func \(\*QueryBuilder\) [Scopes](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L509>)
+### func \(\*QueryBuilder\) [Scopes](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L536>)
 
 ```go
 func (qb *QueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) *QueryBuilder
@@ -2215,7 +2283,7 @@ qb.Select("COUNT(*) as user_count")
 ```
 
 <a name="QueryBuilder.Table"></a>
-### func \(\*QueryBuilder\) [Table](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L467>)
+### func \(\*QueryBuilder\) [Table](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L494>)
 
 ```go
 func (qb *QueryBuilder) Table(name string) *QueryBuilder
@@ -2238,7 +2306,7 @@ qb.Table("user_stats").Select("department, COUNT(*) as count").Group("department
 ```
 
 <a name="QueryBuilder.Unscoped"></a>
-### func \(\*QueryBuilder\) [Unscoped](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L483>)
+### func \(\*QueryBuilder\) [Unscoped](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L510>)
 
 ```go
 func (qb *QueryBuilder) Unscoped() *QueryBuilder
@@ -2257,10 +2325,10 @@ qb.Unscoped().Count(&count) // Counts all records including soft-deleted
 ```
 
 <a name="QueryBuilder.Updates"></a>
-### func \(\*QueryBuilder\) [Updates](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L398>)
+### func \(\*QueryBuilder\) [Updates](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L404>)
 
 ```go
-func (qb *QueryBuilder) Updates(values interface{}) error
+func (qb *QueryBuilder) Updates(values interface{}) (int64, error)
 ```
 
 Updates updates records that match the query conditions. This is a terminal method that executes the query and releases the mutex lock.
@@ -2269,12 +2337,19 @@ Parameters:
 
 - values: Map or struct with the fields to update
 
-Returns an error if the update fails or nil on success.
+Returns:
+
+- int64: Number of rows affected by the update operation
+- error: Error if the update fails, nil on success
 
 Example:
 
 ```
-err := qb.Where("expired = ?", true).Updates(map[string]interface{}{"active": false})
+rowsAffected, err := qb.Where("expired = ?", true).Updates(map[string]interface{}{"active": false})
+if err != nil {
+    return err
+}
+fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Where"></a>

@@ -311,7 +311,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.Equal(t, 31, updatedUser.Age)
 
 		// UpdateWhere
-		err = postgres.UpdateWhere(ctx, &TestUser{}, map[string]interface{}{
+		_, err = postgres.UpdateWhere(ctx, &TestUser{}, map[string]interface{}{
 			"Age": 32,
 		}, "name = ?", "John Doe")
 		assert.NoError(t, err)
@@ -322,7 +322,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.Equal(t, 32, updatedUser.Age)
 
 		// Update specific model
-		err = postgres.Update(ctx, &updatedUser, map[string]interface{}{
+		_, err = postgres.Update(ctx, &updatedUser, map[string]interface{}{
 			"Age": 33,
 		})
 		assert.NoError(t, err)
@@ -333,7 +333,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.Equal(t, 33, updatedUser.Age)
 
 		// UpdateColumn
-		err = postgres.UpdateColumn(ctx, &updatedUser, "Age", 34)
+		_, err = postgres.UpdateColumn(ctx, &updatedUser, "Age", 34)
 		assert.NoError(t, err)
 
 		// Verify UpdateColumn
@@ -342,7 +342,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.Equal(t, 34, updatedUser.Age)
 
 		// UpdateColumns
-		err = postgres.UpdateColumns(ctx, &updatedUser, map[string]interface{}{
+		_, err = postgres.UpdateColumns(ctx, &updatedUser, map[string]interface{}{
 			"Age":   35,
 			"Email": "john.updated@example.com",
 		})
@@ -361,7 +361,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.Equal(t, int64(1), count)
 
 		// Delete
-		err = postgres.Delete(ctx, &TestUser{}, "name = ?", "John Doe")
+		_, err = postgres.Delete(ctx, &TestUser{}, "name = ?", "John Doe")
 		assert.NoError(t, err)
 
 		// Verify deletion with Count
@@ -375,7 +375,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		ctx := context.Background()
 
 		// Create a test table using Exec
-		err := postgres.Exec(ctx, `
+		_, err := postgres.Exec(ctx, `
 			CREATE TABLE IF NOT EXISTS test_items (
 				id SERIAL PRIMARY KEY,
 				name TEXT NOT NULL,
@@ -385,7 +385,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Insert data using Exec
-		err = postgres.Exec(ctx, `
+		_, err = postgres.Exec(ctx, `
 			INSERT INTO test_items (name, value) VALUES ('item1', 100), ('item2', 200)
 		`)
 		assert.NoError(t, err)
@@ -417,7 +417,7 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.ErrorIs(t, translatedErr, ErrRecordNotFound)
 
 		// Create a table with a unique constraint
-		err = postgres.Exec(ctx, `
+		_, err = postgres.Exec(ctx, `
 			CREATE TABLE IF NOT EXISTS unique_test (
 				id SERIAL PRIMARY KEY,
 				email TEXT UNIQUE NOT NULL
@@ -426,11 +426,11 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Create a record
-		err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
+		_, err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
 		assert.NoError(t, err)
 
 		// Try to create a duplicate (will fail due to unique constraint)
-		err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
+		_, err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
 		assert.Error(t, err)
 	})
 
@@ -867,7 +867,7 @@ func TestErrorHandling(t *testing.T) {
 
 	t.Run("RealDatabaseErrors", func(t *testing.T) {
 		// Create test_users table first to test record not found vs table not found
-		err := postgres.Exec(ctx, `
+		_, err := postgres.Exec(ctx, `
 			CREATE TABLE IF NOT EXISTS test_users (
 				id SERIAL PRIMARY KEY,
 				name VARCHAR(100),
@@ -884,7 +884,7 @@ func TestErrorHandling(t *testing.T) {
 		assert.Equal(t, ErrRecordNotFound, translatedErr)
 
 		// Create a test table for constraint testing
-		err = postgres.Exec(ctx, `
+		_, err = postgres.Exec(ctx, `
 			CREATE TABLE IF NOT EXISTS test_constraints (
 				id SERIAL PRIMARY KEY,
 				email VARCHAR(100) UNIQUE NOT NULL,
@@ -895,47 +895,47 @@ func TestErrorHandling(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test duplicate key violation
-		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
+		_, err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
 			"test@example.com", "Test User", 25)
 		require.NoError(t, err)
 
 		// Try to insert duplicate email
-		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
+		_, err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
 			"test@example.com", "Another User", 30)
 		translatedErr = postgres.TranslateError(err)
 		assert.Equal(t, ErrDuplicateKey, translatedErr)
 
 		// Test not null violation
-		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, age) VALUES (?, ?)",
+		_, err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, age) VALUES (?, ?)",
 			"test2@example.com", 25)
 		translatedErr = postgres.TranslateError(err)
 		assert.Equal(t, ErrNotNullViolation, translatedErr)
 
 		// Test check constraint violation
-		err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
+		_, err = postgres.Exec(ctx, "INSERT INTO test_constraints (email, name, age) VALUES (?, ?, ?)",
 			"test3@example.com", "Test User 3", -5)
 		translatedErr = postgres.TranslateError(err)
 		assert.Equal(t, ErrCheckConstraintViolation, translatedErr)
 
 		// Test table not found
-		err = postgres.Exec(ctx, "SELECT * FROM non_existent_table")
+		_, err = postgres.Exec(ctx, "SELECT * FROM non_existent_table")
 		translatedErr = postgres.TranslateError(err)
 		assert.Equal(t, ErrTableNotFound, translatedErr)
 
 		// Test column not found
-		err = postgres.Exec(ctx, "SELECT non_existent_column FROM test_constraints")
+		_, err = postgres.Exec(ctx, "SELECT non_existent_column FROM test_constraints")
 		translatedErr = postgres.TranslateError(err)
 		assert.Equal(t, ErrColumnNotFound, translatedErr)
 
 		// Test invalid SQL syntax
-		err = postgres.Exec(ctx, "INVALID SQL STATEMENT")
+		_, err = postgres.Exec(ctx, "INVALID SQL STATEMENT")
 		translatedErr = postgres.TranslateError(err)
 		assert.Equal(t, ErrInvalidQuery, translatedErr)
 
 		// Clean up
-		err = postgres.Exec(ctx, "DROP TABLE IF EXISTS test_constraints")
+		_, err = postgres.Exec(ctx, "DROP TABLE IF EXISTS test_constraints")
 		require.NoError(t, err)
-		err = postgres.Exec(ctx, "DROP TABLE IF EXISTS test_users")
+		_, err = postgres.Exec(ctx, "DROP TABLE IF EXISTS test_users")
 		require.NoError(t, err)
 	})
 
@@ -1381,7 +1381,7 @@ func seedTestData(ctx context.Context, postgres *Postgres) error {
 			total += item.Price * float64(item.Quantity)
 		}
 
-		if err := postgres.Update(ctx, &order, map[string]interface{}{
+		if _, err := postgres.Update(ctx, &order, map[string]interface{}{
 			"total_amount": total,
 		}); err != nil {
 			return fmt.Errorf("failed to update order total: %w", err)
@@ -1646,7 +1646,7 @@ func testJoinsAndRelationships(ctx context.Context, postgres *Postgres) func(t *
 		// Test 5: Self JOIN
 		t.Run("SelfJoin", func(t *testing.T) {
 			// First, create some sample data with self-references
-			err := postgres.Exec(ctx, `
+			_, err := postgres.Exec(ctx, `
 				CREATE TABLE IF NOT EXISTS employees (
 					id SERIAL PRIMARY KEY,
 					name TEXT NOT NULL,
@@ -1656,7 +1656,7 @@ func testJoinsAndRelationships(ctx context.Context, postgres *Postgres) func(t *
 			require.NoError(t, err)
 
 			// Insert sample data
-			err = postgres.Exec(ctx, `
+			_, err = postgres.Exec(ctx, `
 				INSERT INTO employees (name, manager_id) VALUES
 				('CEO', NULL),
 				('CTO', 1),
@@ -2197,7 +2197,7 @@ func testCTEExpressions(ctx context.Context, postgres *Postgres) func(t *testing
 		// Test 3: Recursive CTE
 		t.Run("RecursiveCTE", func(t *testing.T) {
 			// First, we'll create a hierarchical structure to test with
-			err := postgres.Exec(ctx, `
+			_, err := postgres.Exec(ctx, `
 				CREATE TABLE IF NOT EXISTS categories_tree (
 					id SERIAL PRIMARY KEY,
 					name TEXT NOT NULL,
@@ -2207,7 +2207,7 @@ func testCTEExpressions(ctx context.Context, postgres *Postgres) func(t *testing
 			require.NoError(t, err)
 
 			// Insert sample hierarchical data
-			err = postgres.Exec(ctx, `
+			_, err = postgres.Exec(ctx, `
 				INSERT INTO categories_tree (id, name, parent_id) VALUES
 				(1, 'Electronics', NULL),
 				(2, 'Computers', 1),
@@ -2292,7 +2292,7 @@ func testCTEExpressions(ctx context.Context, postgres *Postgres) func(t *testing
 			require.Greater(t, len(beforeProducts), 0)
 
 			// Use CTE to update prices with a 10% discount for electronics products
-			err = postgres.Exec(ctx, `
+			_, err = postgres.Exec(ctx, `
 				WITH electronics_products AS (
         SELECT id, price 
         FROM products

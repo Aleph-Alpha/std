@@ -74,10 +74,6 @@ func extractTraceMetadataFromContext(ctx context.Context) map[string]string {
 		metadata["Request-Id"] = requestID
 	}
 
-	// Could also add a service name, operation name, etc.
-	metadata["Service"] = "your-service-name"
-	metadata["Operation"] = "object-upload"
-
 	return metadata
 }
 
