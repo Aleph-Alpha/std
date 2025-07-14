@@ -3,12 +3,15 @@ package minio
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/minio/minio-go/v7"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -1922,4 +1925,1313 @@ func uploadTestFile(t *testing.T, ctx context.Context, client *Minio, objectKey 
 	}
 
 	t.Logf("Successfully uploaded test file: %s (%d bytes)", objInfo.Key, objInfo.Size)
+}
+
+func TestMinio_TranslateError(t *testing.T) {
+	m := &Minio{}
+
+	tests := []struct {
+		name     string
+		input    error
+		expected error
+	}{
+		{
+			name:     "nil error",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "NoSuchBucket error",
+			input:    minio.ErrorResponse{Code: "NoSuchBucket", Message: "The specified bucket does not exist"},
+			expected: ErrBucketNotFound,
+		},
+		{
+			name:     "NoSuchKey error",
+			input:    minio.ErrorResponse{Code: "NoSuchKey", Message: "The specified key does not exist"},
+			expected: ErrObjectNotFound,
+		},
+		{
+			name:     "BucketAlreadyExists error",
+			input:    minio.ErrorResponse{Code: "BucketAlreadyExists", Message: "The requested bucket name is not available"},
+			expected: ErrBucketAlreadyExists,
+		},
+		{
+			name:     "BucketAlreadyOwnedByYou error",
+			input:    minio.ErrorResponse{Code: "BucketAlreadyOwnedByYou", Message: "The bucket you tried to create already exists"},
+			expected: ErrBucketAlreadyExists,
+		},
+		{
+			name:     "InvalidBucketName error",
+			input:    minio.ErrorResponse{Code: "InvalidBucketName", Message: "The specified bucket is not valid"},
+			expected: ErrInvalidBucketName,
+		},
+		{
+			name:     "InvalidObjectName error",
+			input:    minio.ErrorResponse{Code: "InvalidObjectName", Message: "The specified object name is not valid"},
+			expected: ErrInvalidObjectName,
+		},
+		{
+			name:     "AccessDenied error",
+			input:    minio.ErrorResponse{Code: "AccessDenied", Message: "Access Denied"},
+			expected: ErrAccessDenied,
+		},
+		{
+			name:     "InvalidAccessKeyId error",
+			input:    minio.ErrorResponse{Code: "InvalidAccessKeyId", Message: "The AWS Access Key Id you provided does not exist"},
+			expected: ErrInvalidCredentials,
+		},
+		{
+			name:     "SignatureDoesNotMatch error",
+			input:    minio.ErrorResponse{Code: "SignatureDoesNotMatch", Message: "The request signature we calculated does not match"},
+			expected: ErrInvalidCredentials,
+		},
+		{
+			name:     "TokenRefreshRequired error",
+			input:    minio.ErrorResponse{Code: "TokenRefreshRequired", Message: "The provided token must be refreshed"},
+			expected: ErrCredentialsExpired,
+		},
+		{
+			name:     "ExpiredToken error",
+			input:    minio.ErrorResponse{Code: "ExpiredToken", Message: "The provided token has expired"},
+			expected: ErrCredentialsExpired,
+		},
+		{
+			name:     "InvalidRange error",
+			input:    minio.ErrorResponse{Code: "InvalidRange", Message: "The requested range cannot be satisfied"},
+			expected: ErrInvalidRange,
+		},
+		{
+			name:     "EntityTooLarge error",
+			input:    minio.ErrorResponse{Code: "EntityTooLarge", Message: "Your proposed upload exceeds the maximum allowed size"},
+			expected: ErrObjectTooLarge,
+		},
+		{
+			name:     "InvalidDigest error",
+			input:    minio.ErrorResponse{Code: "InvalidDigest", Message: "The Content-MD5 you specified was invalid"},
+			expected: ErrInvalidChecksum,
+		},
+		{
+			name:     "BadDigest error",
+			input:    minio.ErrorResponse{Code: "BadDigest", Message: "The Content-MD5 you specified did not match what we received"},
+			expected: ErrInvalidChecksum,
+		},
+		{
+			name:     "InvalidArgument error",
+			input:    minio.ErrorResponse{Code: "InvalidArgument", Message: "Invalid Argument"},
+			expected: ErrInvalidArgument,
+		},
+		{
+			name:     "MalformedXML error",
+			input:    minio.ErrorResponse{Code: "MalformedXML", Message: "The XML you provided was not well-formed"},
+			expected: ErrMalformedXML,
+		},
+		{
+			name:     "InvalidStorageClass error",
+			input:    minio.ErrorResponse{Code: "InvalidStorageClass", Message: "The storage class you specified is not valid"},
+			expected: ErrInvalidStorageClass,
+		},
+		{
+			name:     "InvalidPart error",
+			input:    minio.ErrorResponse{Code: "InvalidPart", Message: "One or more of the specified parts could not be found"},
+			expected: ErrInvalidPart,
+		},
+		{
+			name:     "NoSuchUpload error",
+			input:    minio.ErrorResponse{Code: "NoSuchUpload", Message: "The specified multipart upload does not exist"},
+			expected: ErrInvalidUploadID,
+		},
+		{
+			name:     "PreconditionFailed error",
+			input:    minio.ErrorResponse{Code: "PreconditionFailed", Message: "At least one of the pre-conditions you specified did not hold"},
+			expected: ErrPreconditionFailed,
+		},
+		{
+			name:     "BucketNotEmpty error",
+			input:    minio.ErrorResponse{Code: "BucketNotEmpty", Message: "The bucket you tried to delete is not empty"},
+			expected: ErrBucketNotEmpty,
+		},
+		{
+			name:     "TooManyBuckets error",
+			input:    minio.ErrorResponse{Code: "TooManyBuckets", Message: "You have attempted to create more buckets than allowed"},
+			expected: ErrQuotaExceeded,
+		},
+		{
+			name:     "NotImplemented error",
+			input:    minio.ErrorResponse{Code: "NotImplemented", Message: "A header you provided implies functionality that is not implemented"},
+			expected: ErrNotImplemented,
+		},
+		{
+			name:     "InvalidVersionId error",
+			input:    minio.ErrorResponse{Code: "InvalidVersionId", Message: "Invalid version id specified"},
+			expected: ErrInvalidVersion,
+		},
+		{
+			name:     "NoSuchVersion error",
+			input:    minio.ErrorResponse{Code: "NoSuchVersion", Message: "The version ID specified in the request does not match an existing version"},
+			expected: ErrInvalidVersion,
+		},
+		{
+			name:     "ObjectLockConfigurationNotFoundError error",
+			input:    minio.ErrorResponse{Code: "ObjectLockConfigurationNotFoundError", Message: "Object lock configuration does not exist for this bucket"},
+			expected: ErrLockConfigurationError,
+		},
+		{
+			name:     "InvalidRetentionDate error",
+			input:    minio.ErrorResponse{Code: "InvalidRetentionDate", Message: "Date must be provided in ISO 8601 format"},
+			expected: ErrRetentionPolicyError,
+		},
+		{
+			name:     "InvalidObjectState error",
+			input:    minio.ErrorResponse{Code: "InvalidObjectState", Message: "The operation is not valid for the current state of the object"},
+			expected: ErrObjectLocked,
+		},
+		{
+			name:     "SlowDown error",
+			input:    minio.ErrorResponse{Code: "SlowDown", Message: "Please reduce your request rate"},
+			expected: ErrTooManyRequests,
+		},
+		{
+			name:     "TooManyRequests error",
+			input:    minio.ErrorResponse{Code: "TooManyRequests", Message: "You have exceeded the allowed request rate"},
+			expected: ErrTooManyRequests,
+		},
+		{
+			name:     "InternalError error",
+			input:    minio.ErrorResponse{Code: "InternalError", Message: "We encountered an internal error. Please try again"},
+			expected: ErrServerError,
+		},
+		{
+			name:     "ServiceUnavailable error",
+			input:    minio.ErrorResponse{Code: "ServiceUnavailable", Message: "Service is temporarily unavailable"},
+			expected: ErrServiceUnavailable,
+		},
+		{
+			name:     "InsufficientStorage error",
+			input:    minio.ErrorResponse{Code: "InsufficientStorage", Message: "There is insufficient storage space"},
+			expected: ErrQuotaExceeded,
+		},
+		{
+			name:     "EntityTooSmall error",
+			input:    minio.ErrorResponse{Code: "EntityTooSmall", Message: "Your proposed upload is smaller than the minimum allowed size"},
+			expected: ErrPartTooSmall,
+		},
+		{
+			name:     "RequestTimeout error",
+			input:    minio.ErrorResponse{Code: "RequestTimeout", Message: "Your socket connection to the server was not read from or written to within the timeout period"},
+			expected: ErrTimeout,
+		},
+		{
+			name:     "InvalidContentType error",
+			input:    minio.ErrorResponse{Code: "InvalidContentType", Message: "You must provide an appropriate Content-Type header"},
+			expected: ErrInvalidContentType,
+		},
+		{
+			name:     "MetadataTooLarge error",
+			input:    minio.ErrorResponse{Code: "MetadataTooLarge", Message: "Your metadata headers exceed the maximum allowed metadata size"},
+			expected: ErrInvalidMetadata,
+		},
+		{
+			name:     "InvalidEncryptionAlgorithm error",
+			input:    minio.ErrorResponse{Code: "InvalidEncryptionAlgorithm", Message: "The encryption algorithm you specified is not supported"},
+			expected: ErrInvalidEncryption,
+		},
+		{
+			name:     "InvalidLocationConstraint error",
+			input:    minio.ErrorResponse{Code: "InvalidLocationConstraint", Message: "The specified location constraint is not valid"},
+			expected: ErrConfigurationError,
+		},
+		{
+			name:     "InvalidPolicyDocument error",
+			input:    minio.ErrorResponse{Code: "InvalidPolicyDocument", Message: "The content of the form does not meet the conditions specified in the policy document"},
+			expected: ErrPolicyError,
+		},
+		{
+			name:     "MalformedPolicy error",
+			input:    minio.ErrorResponse{Code: "MalformedPolicy", Message: "Policy has invalid resource"},
+			expected: ErrPolicyError,
+		},
+		{
+			name:     "InvalidWebsiteConfiguration error",
+			input:    minio.ErrorResponse{Code: "InvalidWebsiteConfiguration", Message: "The website configuration is invalid"},
+			expected: ErrWebsiteError,
+		},
+		{
+			name:     "InvalidCORSConfiguration error",
+			input:    minio.ErrorResponse{Code: "InvalidCORSConfiguration", Message: "The CORS configuration is invalid"},
+			expected: ErrCORSError,
+		},
+		{
+			name:     "InvalidNotificationConfiguration error",
+			input:    minio.ErrorResponse{Code: "InvalidNotificationConfiguration", Message: "The notification configuration is invalid"},
+			expected: ErrNotificationError,
+		},
+		{
+			name:     "InvalidLifecycleConfiguration error",
+			input:    minio.ErrorResponse{Code: "InvalidLifecycleConfiguration", Message: "The lifecycle configuration is invalid"},
+			expected: ErrLifecycleError,
+		},
+		{
+			name:     "InvalidReplicationConfiguration error",
+			input:    minio.ErrorResponse{Code: "InvalidReplicationConfiguration", Message: "The replication configuration is invalid"},
+			expected: ErrReplicationError,
+		},
+		{
+			name:     "InvalidTagError error",
+			input:    minio.ErrorResponse{Code: "InvalidTagError", Message: "The tag provided is invalid"},
+			expected: ErrTaggingError,
+		},
+		{
+			name:     "unknown MinIO error code with 400 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 400},
+			expected: ErrInvalidArgument,
+		},
+		{
+			name:     "unknown MinIO error code with 401 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 401},
+			expected: ErrInvalidCredentials,
+		},
+		{
+			name:     "unknown MinIO error code with 403 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 403},
+			expected: ErrAccessDenied,
+		},
+		{
+			name:     "unknown MinIO error code with 404 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 404},
+			expected: ErrObjectNotFound,
+		},
+		{
+			name:     "unknown MinIO error code with 409 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 409},
+			expected: ErrBucketAlreadyExists,
+		},
+		{
+			name:     "unknown MinIO error code with 412 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 412},
+			expected: ErrPreconditionFailed,
+		},
+		{
+			name:     "unknown MinIO error code with 413 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 413},
+			expected: ErrObjectTooLarge,
+		},
+		{
+			name:     "unknown MinIO error code with 416 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 416},
+			expected: ErrInvalidRange,
+		},
+		{
+			name:     "unknown MinIO error code with 429 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 429},
+			expected: ErrTooManyRequests,
+		},
+		{
+			name:     "unknown MinIO error code with 500 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 500},
+			expected: ErrServerError,
+		},
+		{
+			name:     "unknown MinIO error code with 501 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 501},
+			expected: ErrNotImplemented,
+		},
+		{
+			name:     "unknown MinIO error code with 503 status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 503},
+			expected: ErrServiceUnavailable,
+		},
+		{
+			name:     "unknown MinIO error code with unknown status",
+			input:    minio.ErrorResponse{Code: "UnknownError", Message: "Unknown error", StatusCode: 999},
+			expected: ErrUnknownError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := m.TranslateError(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMinio_TranslateError_URLError(t *testing.T) {
+	m := &Minio{}
+
+	tests := []struct {
+		name     string
+		input    error
+		expected error
+	}{
+		{
+			name:     "dial error",
+			input:    &url.Error{Op: "dial", URL: "http://localhost:9000", Err: errors.New("connection refused")},
+			expected: ErrConnectionFailed,
+		},
+		{
+			name:     "read error",
+			input:    &url.Error{Op: "read", URL: "http://localhost:9000", Err: errors.New("connection reset")},
+			expected: ErrConnectionLost,
+		},
+		{
+			name:     "write error",
+			input:    &url.Error{Op: "write", URL: "http://localhost:9000", Err: errors.New("broken pipe")},
+			expected: ErrConnectionLost,
+		},
+		{
+			name:     "timeout error",
+			input:    &url.Error{Op: "Post", URL: "http://localhost:9000", Err: errors.New("timeout")},
+			expected: ErrTimeout,
+		},
+		{
+			name:     "connection refused error",
+			input:    &url.Error{Op: "Post", URL: "http://localhost:9000", Err: errors.New("connection refused")},
+			expected: ErrConnectionFailed,
+		},
+		{
+			name:     "connection reset error",
+			input:    &url.Error{Op: "Post", URL: "http://localhost:9000", Err: errors.New("connection reset")},
+			expected: ErrConnectionLost,
+		},
+		{
+			name:     "generic URL error",
+			input:    &url.Error{Op: "Post", URL: "http://localhost:9000", Err: errors.New("generic error")},
+			expected: ErrNetworkError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := m.TranslateError(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMinio_TranslateError_StringPatterns(t *testing.T) {
+	m := &Minio{}
+
+	tests := []struct {
+		name     string
+		input    error
+		expected error
+	}{
+		// Connection related
+		{
+			name:     "connection refused",
+			input:    errors.New("connection refused"),
+			expected: ErrConnectionFailed,
+		},
+		{
+			name:     "connection reset",
+			input:    errors.New("connection reset by peer"),
+			expected: ErrConnectionLost,
+		},
+		{
+			name:     "connection timeout",
+			input:    errors.New("connection timeout"),
+			expected: ErrTimeout,
+		},
+		{
+			name:     "network unreachable",
+			input:    errors.New("network is unreachable"),
+			expected: ErrNetworkError,
+		},
+		{
+			name:     "no route to host",
+			input:    errors.New("no route to host"),
+			expected: ErrNetworkError,
+		},
+		{
+			name:     "host is down",
+			input:    errors.New("host is down"),
+			expected: ErrNetworkError,
+		},
+
+		// Timeout related
+		{
+			name:     "timeout",
+			input:    errors.New("timeout exceeded"),
+			expected: ErrTimeout,
+		},
+		{
+			name:     "deadline exceeded",
+			input:    errors.New("deadline exceeded"),
+			expected: ErrTimeout,
+		},
+		{
+			name:     "request timeout",
+			input:    errors.New("request timeout"),
+			expected: ErrTimeout,
+		},
+		{
+			name:     "client timeout",
+			input:    errors.New("client timeout"),
+			expected: ErrTimeout,
+		},
+
+		// Object/Bucket related
+		{
+			name:     "bucket does not exist",
+			input:    errors.New("bucket does not exist"),
+			expected: ErrBucketNotFound,
+		},
+		{
+			name:     "bucket not found",
+			input:    errors.New("bucket not found"),
+			expected: ErrBucketNotFound,
+		},
+		{
+			name:     "key does not exist",
+			input:    errors.New("key does not exist"),
+			expected: ErrObjectNotFound,
+		},
+		{
+			name:     "object not found",
+			input:    errors.New("object not found"),
+			expected: ErrObjectNotFound,
+		},
+		{
+			name:     "no such bucket",
+			input:    errors.New("no such bucket"),
+			expected: ErrBucketNotFound,
+		},
+		{
+			name:     "no such key",
+			input:    errors.New("no such key"),
+			expected: ErrObjectNotFound,
+		},
+		{
+			name:     "bucket already exists",
+			input:    errors.New("bucket already exists"),
+			expected: ErrBucketAlreadyExists,
+		},
+		{
+			name:     "bucket not empty",
+			input:    errors.New("bucket not empty"),
+			expected: ErrBucketNotEmpty,
+		},
+
+		// Access/Permission related
+		{
+			name:     "access denied",
+			input:    errors.New("access denied"),
+			expected: ErrAccessDenied,
+		},
+		{
+			name:     "forbidden",
+			input:    errors.New("forbidden"),
+			expected: ErrAccessDenied,
+		},
+		{
+			name:     "unauthorized",
+			input:    errors.New("unauthorized"),
+			expected: ErrInvalidCredentials,
+		},
+		{
+			name:     "invalid credentials",
+			input:    errors.New("invalid credentials"),
+			expected: ErrInvalidCredentials,
+		},
+		{
+			name:     "signature mismatch",
+			input:    errors.New("signature mismatch"),
+			expected: ErrInvalidCredentials,
+		},
+		{
+			name:     "invalid access key",
+			input:    errors.New("invalid access key"),
+			expected: ErrInvalidCredentials,
+		},
+		{
+			name:     "expired token",
+			input:    errors.New("expired token"),
+			expected: ErrCredentialsExpired,
+		},
+		{
+			name:     "token expired",
+			input:    errors.New("token expired"),
+			expected: ErrCredentialsExpired,
+		},
+
+		// Data/Content related
+		{
+			name:     "invalid checksum",
+			input:    errors.New("invalid checksum"),
+			expected: ErrInvalidChecksum,
+		},
+		{
+			name:     "bad digest",
+			input:    errors.New("bad digest"),
+			expected: ErrInvalidChecksum,
+		},
+		{
+			name:     "entity too large",
+			input:    errors.New("entity too large"),
+			expected: ErrObjectTooLarge,
+		},
+		{
+			name:     "file too large",
+			input:    errors.New("file too large"),
+			expected: ErrObjectTooLarge,
+		},
+		{
+			name:     "invalid range",
+			input:    errors.New("invalid range"),
+			expected: ErrInvalidRange,
+		},
+		{
+			name:     "invalid part",
+			input:    errors.New("invalid part"),
+			expected: ErrInvalidPart,
+		},
+		{
+			name:     "part too small",
+			input:    errors.New("part too small"),
+			expected: ErrPartTooSmall,
+		},
+		{
+			name:     "invalid upload id",
+			input:    errors.New("invalid upload id"),
+			expected: ErrInvalidUploadID,
+		},
+		{
+			name:     "malformed xml",
+			input:    errors.New("malformed xml"),
+			expected: ErrMalformedXML,
+		},
+		{
+			name:     "invalid xml",
+			input:    errors.New("invalid xml"),
+			expected: ErrMalformedXML,
+		},
+
+		// Server related
+		{
+			name:     "internal server error",
+			input:    errors.New("internal server error"),
+			expected: ErrServerError,
+		},
+		{
+			name:     "service unavailable",
+			input:    errors.New("service unavailable"),
+			expected: ErrServiceUnavailable,
+		},
+		{
+			name:     "server error",
+			input:    errors.New("server error"),
+			expected: ErrServerError,
+		},
+		{
+			name:     "bad gateway",
+			input:    errors.New("bad gateway"),
+			expected: ErrServerError,
+		},
+		{
+			name:     "gateway timeout",
+			input:    errors.New("gateway timeout"),
+			expected: ErrTimeout,
+		},
+
+		// Rate limiting
+		{
+			name:     "too many requests",
+			input:    errors.New("too many requests"),
+			expected: ErrTooManyRequests,
+		},
+		{
+			name:     "rate limit",
+			input:    errors.New("rate limit exceeded"),
+			expected: ErrTooManyRequests,
+		},
+		{
+			name:     "slow down",
+			input:    errors.New("slow down"),
+			expected: ErrTooManyRequests,
+		},
+
+		// Configuration related
+		{
+			name:     "invalid bucket name",
+			input:    errors.New("invalid bucket name"),
+			expected: ErrInvalidBucketName,
+		},
+		{
+			name:     "invalid object name",
+			input:    errors.New("invalid object name"),
+			expected: ErrInvalidObjectName,
+		},
+		{
+			name:     "invalid key name",
+			input:    errors.New("invalid key name"),
+			expected: ErrInvalidObjectName,
+		},
+		{
+			name:     "invalid argument",
+			input:    errors.New("invalid argument"),
+			expected: ErrInvalidArgument,
+		},
+		{
+			name:     "invalid request",
+			input:    errors.New("invalid request"),
+			expected: ErrInvalidArgument,
+		},
+		{
+			name:     "bad request",
+			input:    errors.New("bad request"),
+			expected: ErrInvalidArgument,
+		},
+
+		// Quota/Storage related
+		{
+			name:     "quota exceeded",
+			input:    errors.New("quota exceeded"),
+			expected: ErrQuotaExceeded,
+		},
+		{
+			name:     "insufficient storage",
+			input:    errors.New("insufficient storage"),
+			expected: ErrQuotaExceeded,
+		},
+		{
+			name:     "storage quota",
+			input:    errors.New("storage quota exceeded"),
+			expected: ErrQuotaExceeded,
+		},
+
+		// Cancellation
+		{
+			name:     "canceled",
+			input:    errors.New("operation canceled"),
+			expected: ErrCancelled,
+		},
+		{
+			name:     "cancelled",
+			input:    errors.New("operation cancelled"),
+			expected: ErrCancelled,
+		},
+		{
+			name:     "context canceled",
+			input:    errors.New("context canceled"),
+			expected: ErrCancelled,
+		},
+		{
+			name:     "context cancelled",
+			input:    errors.New("context cancelled"),
+			expected: ErrCancelled,
+		},
+
+		// Versioning related
+		{
+			name:     "invalid version",
+			input:    errors.New("invalid version"),
+			expected: ErrInvalidVersion,
+		},
+		{
+			name:     "no such version",
+			input:    errors.New("no such version"),
+			expected: ErrInvalidVersion,
+		},
+		{
+			name:     "versioning not enabled",
+			input:    errors.New("versioning not enabled"),
+			expected: ErrVersioningNotEnabled,
+		},
+
+		// Object locking related
+		{
+			name:     "object locked",
+			input:    errors.New("object locked"),
+			expected: ErrObjectLocked,
+		},
+		{
+			name:     "retention policy",
+			input:    errors.New("retention policy violation"),
+			expected: ErrRetentionPolicyError,
+		},
+		{
+			name:     "lock configuration",
+			input:    errors.New("lock configuration error"),
+			expected: ErrLockConfigurationError,
+		},
+
+		// Unknown error
+		{
+			name:     "unknown error",
+			input:    errors.New("some unknown error message"),
+			expected: errors.New("some unknown error message"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := m.TranslateError(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMinio_GetErrorCategory(t *testing.T) {
+	m := &Minio{}
+
+	tests := []struct {
+		name     string
+		input    error
+		expected ErrorCategory
+	}{
+		{
+			name:     "connection error",
+			input:    ErrConnectionFailed,
+			expected: CategoryConnection,
+		},
+		{
+			name:     "connection lost error",
+			input:    ErrConnectionLost,
+			expected: CategoryConnection,
+		},
+		{
+			name:     "authentication error",
+			input:    ErrInvalidCredentials,
+			expected: CategoryAuthentication,
+		},
+		{
+			name:     "credentials expired error",
+			input:    ErrCredentialsExpired,
+			expected: CategoryAuthentication,
+		},
+		{
+			name:     "permission error",
+			input:    ErrAccessDenied,
+			expected: CategoryPermission,
+		},
+		{
+			name:     "insufficient permissions error",
+			input:    ErrInsufficientPermissions,
+			expected: CategoryPermission,
+		},
+		{
+			name:     "object not found error",
+			input:    ErrObjectNotFound,
+			expected: CategoryNotFound,
+		},
+		{
+			name:     "bucket not found error",
+			input:    ErrBucketNotFound,
+			expected: CategoryNotFound,
+		},
+		{
+			name:     "bucket already exists error",
+			input:    ErrBucketAlreadyExists,
+			expected: CategoryConflict,
+		},
+		{
+			name:     "bucket not empty error",
+			input:    ErrBucketNotEmpty,
+			expected: CategoryConflict,
+		},
+		{
+			name:     "invalid bucket name error",
+			input:    ErrInvalidBucketName,
+			expected: CategoryValidation,
+		},
+		{
+			name:     "invalid argument error",
+			input:    ErrInvalidArgument,
+			expected: CategoryValidation,
+		},
+		{
+			name:     "malformed XML error",
+			input:    ErrMalformedXML,
+			expected: CategoryValidation,
+		},
+		{
+			name:     "server error",
+			input:    ErrServerError,
+			expected: CategoryServer,
+		},
+		{
+			name:     "service unavailable error",
+			input:    ErrServiceUnavailable,
+			expected: CategoryServer,
+		},
+		{
+			name:     "network error",
+			input:    ErrNetworkError,
+			expected: CategoryNetwork,
+		},
+		{
+			name:     "timeout error",
+			input:    ErrTimeout,
+			expected: CategoryTimeout,
+		},
+		{
+			name:     "quota exceeded error",
+			input:    ErrQuotaExceeded,
+			expected: CategoryQuota,
+		},
+		{
+			name:     "object too large error",
+			input:    ErrObjectTooLarge,
+			expected: CategoryQuota,
+		},
+		{
+			name:     "configuration error",
+			input:    ErrConfigurationError,
+			expected: CategoryConfiguration,
+		},
+		{
+			name:     "versioning not enabled error",
+			input:    ErrVersioningNotEnabled,
+			expected: CategoryVersioning,
+		},
+		{
+			name:     "invalid version error",
+			input:    ErrInvalidVersion,
+			expected: CategoryVersioning,
+		},
+		{
+			name:     "object locked error",
+			input:    ErrObjectLocked,
+			expected: CategoryLocking,
+		},
+		{
+			name:     "retention policy error",
+			input:    ErrRetentionPolicyError,
+			expected: CategoryLocking,
+		},
+		{
+			name:     "not implemented error",
+			input:    ErrNotImplemented,
+			expected: CategoryOperation,
+		},
+		{
+			name:     "cancelled error",
+			input:    ErrCancelled,
+			expected: CategoryOperation,
+		},
+		{
+			name:     "unknown error",
+			input:    errors.New("some unknown error"),
+			expected: CategoryUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := m.GetErrorCategory(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMinio_IsRetryableError(t *testing.T) {
+	m := &Minio{}
+
+	tests := []struct {
+		name     string
+		input    error
+		expected bool
+	}{
+		{
+			name:     "connection failed - retryable",
+			input:    ErrConnectionFailed,
+			expected: true,
+		},
+		{
+			name:     "connection lost - retryable",
+			input:    ErrConnectionLost,
+			expected: true,
+		},
+		{
+			name:     "timeout - retryable",
+			input:    ErrTimeout,
+			expected: true,
+		},
+		{
+			name:     "network error - retryable",
+			input:    ErrNetworkError,
+			expected: true,
+		},
+		{
+			name:     "server error - retryable",
+			input:    ErrServerError,
+			expected: true,
+		},
+		{
+			name:     "service unavailable - retryable",
+			input:    ErrServiceUnavailable,
+			expected: true,
+		},
+		{
+			name:     "too many requests - retryable",
+			input:    ErrTooManyRequests,
+			expected: true,
+		},
+		{
+			name:     "invalid response - retryable",
+			input:    ErrInvalidResponse,
+			expected: true,
+		},
+		{
+			name:     "object not found - not retryable",
+			input:    ErrObjectNotFound,
+			expected: false,
+		},
+		{
+			name:     "access denied - not retryable",
+			input:    ErrAccessDenied,
+			expected: false,
+		},
+		{
+			name:     "invalid credentials - not retryable",
+			input:    ErrInvalidCredentials,
+			expected: false,
+		},
+		{
+			name:     "invalid argument - not retryable",
+			input:    ErrInvalidArgument,
+			expected: false,
+		},
+		{
+			name:     "unknown error - not retryable",
+			input:    errors.New("some unknown error"),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := m.IsRetryableError(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMinio_IsTemporaryError(t *testing.T) {
+	m := &Minio{}
+
+	tests := []struct {
+		name     string
+		input    error
+		expected bool
+	}{
+		{
+			name:     "connection failed - temporary",
+			input:    ErrConnectionFailed,
+			expected: true,
+		},
+		{
+			name:     "credentials expired - temporary",
+			input:    ErrCredentialsExpired,
+			expected: true,
+		},
+		{
+			name:     "timeout - temporary",
+			input:    ErrTimeout,
+			expected: true,
+		},
+		{
+			name:     "server error - temporary",
+			input:    ErrServerError,
+			expected: true,
+		},
+		{
+			name:     "service unavailable - temporary",
+			input:    ErrServiceUnavailable,
+			expected: true,
+		},
+		{
+			name:     "too many requests - temporary",
+			input:    ErrTooManyRequests,
+			expected: true,
+		},
+		{
+			name:     "object not found - not temporary",
+			input:    ErrObjectNotFound,
+			expected: false,
+		},
+		{
+			name:     "invalid credentials - not temporary",
+			input:    ErrInvalidCredentials,
+			expected: false,
+		},
+		{
+			name:     "access denied - not temporary",
+			input:    ErrAccessDenied,
+			expected: false,
+		},
+		{
+			name:     "invalid argument - not temporary",
+			input:    ErrInvalidArgument,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := m.IsTemporaryError(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMinio_IsPermanentError(t *testing.T) {
+	m := &Minio{}
+
+	tests := []struct {
+		name     string
+		input    error
+		expected bool
+	}{
+		{
+			name:     "object not found - permanent",
+			input:    ErrObjectNotFound,
+			expected: true,
+		},
+		{
+			name:     "bucket not found - permanent",
+			input:    ErrBucketNotFound,
+			expected: true,
+		},
+		{
+			name:     "invalid credentials - permanent",
+			input:    ErrInvalidCredentials,
+			expected: true,
+		},
+		{
+			name:     "access denied - permanent",
+			input:    ErrAccessDenied,
+			expected: true,
+		},
+		{
+			name:     "invalid bucket name - permanent",
+			input:    ErrInvalidBucketName,
+			expected: true,
+		},
+		{
+			name:     "invalid object name - permanent",
+			input:    ErrInvalidObjectName,
+			expected: true,
+		},
+		{
+			name:     "invalid argument - permanent",
+			input:    ErrInvalidArgument,
+			expected: true,
+		},
+		{
+			name:     "invalid range - permanent",
+			input:    ErrInvalidRange,
+			expected: true,
+		},
+		{
+			name:     "invalid checksum - permanent",
+			input:    ErrInvalidChecksum,
+			expected: true,
+		},
+		{
+			name:     "malformed XML - permanent",
+			input:    ErrMalformedXML,
+			expected: true,
+		},
+		{
+			name:     "not implemented - permanent",
+			input:    ErrNotImplemented,
+			expected: true,
+		},
+		{
+			name:     "cancelled - permanent",
+			input:    ErrCancelled,
+			expected: true,
+		},
+		{
+			name:     "connection failed - not permanent",
+			input:    ErrConnectionFailed,
+			expected: false,
+		},
+		{
+			name:     "server error - not permanent",
+			input:    ErrServerError,
+			expected: false,
+		},
+		{
+			name:     "timeout - not permanent",
+			input:    ErrTimeout,
+			expected: false,
+		},
+		{
+			name:     "credentials expired - not permanent",
+			input:    ErrCredentialsExpired,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := m.IsPermanentError(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMinio_TranslateMinIOError(t *testing.T) {
+	m := &Minio{}
+
+	// Test specific MinIO error response handling
+	minioErr := minio.ErrorResponse{
+		Code:       "NoSuchBucket",
+		Message:    "The specified bucket does not exist",
+		StatusCode: 404,
+	}
+
+	result := m.translateMinIOError(minioErr)
+	assert.Equal(t, ErrBucketNotFound, result)
+
+	// Test unknown error code fallback to status code
+	unknownErr := minio.ErrorResponse{
+		Code:       "UnknownErrorCode",
+		Message:    "Some unknown error",
+		StatusCode: 500,
+	}
+
+	result = m.translateMinIOError(unknownErr)
+	assert.Equal(t, ErrServerError, result)
+
+	// Test completely unknown error
+	completelyUnknownErr := minio.ErrorResponse{
+		Code:       "UnknownErrorCode",
+		Message:    "Some unknown error",
+		StatusCode: 999,
+	}
+
+	result = m.translateMinIOError(completelyUnknownErr)
+	assert.Equal(t, ErrUnknownError, result)
+}
+
+func TestMinio_TranslateURLError(t *testing.T) {
+	m := &Minio{}
+
+	// Test dial operation
+	dialErr := &url.Error{
+		Op:  "dial",
+		URL: "http://localhost:9000",
+		Err: errors.New("connection refused"),
+	}
+
+	result := m.translateURLError(dialErr)
+	assert.Equal(t, ErrConnectionFailed, result)
+
+	// Test read operation
+	readErr := &url.Error{
+		Op:  "read",
+		URL: "http://localhost:9000",
+		Err: errors.New("connection reset"),
+	}
+
+	result = m.translateURLError(readErr)
+	assert.Equal(t, ErrConnectionLost, result)
+
+	// Test write operation
+	writeErr := &url.Error{
+		Op:  "write",
+		URL: "http://localhost:9000",
+		Err: errors.New("broken pipe"),
+	}
+
+	result = m.translateURLError(writeErr)
+	assert.Equal(t, ErrConnectionLost, result)
+
+	// Test timeout in unknown operation
+	timeoutErr := &url.Error{
+		Op:  "Post",
+		URL: "http://localhost:9000",
+		Err: errors.New("timeout"),
+	}
+
+	result = m.translateURLError(timeoutErr)
+	assert.Equal(t, ErrTimeout, result)
+
+	// Test connection refused in unknown operation
+	connRefusedErr := &url.Error{
+		Op:  "Post",
+		URL: "http://localhost:9000",
+		Err: errors.New("connection refused"),
+	}
+
+	result = m.translateURLError(connRefusedErr)
+	assert.Equal(t, ErrConnectionFailed, result)
+
+	// Test connection reset in unknown operation
+	connResetErr := &url.Error{
+		Op:  "Post",
+		URL: "http://localhost:9000",
+		Err: errors.New("connection reset"),
+	}
+
+	result = m.translateURLError(connResetErr)
+	assert.Equal(t, ErrConnectionLost, result)
+
+	// Test generic network error
+	genericErr := &url.Error{
+		Op:  "Post",
+		URL: "http://localhost:9000",
+		Err: errors.New("some network error"),
+	}
+
+	result = m.translateURLError(genericErr)
+	assert.Equal(t, ErrNetworkError, result)
+}
+
+// Benchmark tests for performance
+func BenchmarkMinio_TranslateError_MinIOError(b *testing.B) {
+	m := &Minio{}
+	minioErr := minio.ErrorResponse{Code: "NoSuchBucket", Message: "The specified bucket does not exist"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = m.TranslateError(minioErr)
+	}
+}
+
+func BenchmarkMinio_TranslateError_StringMatch(b *testing.B) {
+	m := &Minio{}
+	err := errors.New("bucket not found")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = m.TranslateError(err)
+	}
+}
+
+func BenchmarkMinio_TranslateError_URLError(b *testing.B) {
+	m := &Minio{}
+	urlErr := &url.Error{Op: "dial", URL: "http://localhost:9000", Err: errors.New("connection refused")}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = m.TranslateError(urlErr)
+	}
+}
+
+// Test helper functions
+func TestMinio_ErrorTranslation_Integration(t *testing.T) {
+	m := &Minio{}
+
+	// Test a complex scenario where we might get nested errors
+	minioErr := minio.ErrorResponse{
+		Code:       "NoSuchBucket",
+		Message:    "The specified bucket does not exist",
+		StatusCode: 404,
+	}
+
+	translatedErr := m.TranslateError(minioErr)
+	require.Equal(t, ErrBucketNotFound, translatedErr)
+
+	// Test error categorization
+	category := m.GetErrorCategory(translatedErr)
+	assert.Equal(t, CategoryNotFound, category)
+
+	// Test retry behavior
+	assert.False(t, m.IsRetryableError(translatedErr))
+	assert.False(t, m.IsTemporaryError(translatedErr))
+	assert.True(t, m.IsPermanentError(translatedErr))
 }
