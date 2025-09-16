@@ -2,6 +2,8 @@ package tracer
 
 import (
 	"context"
+	"fmt"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -11,19 +13,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
-
-// Logger defines the interface for logging operations in the rabbit package.
-// This interface allows the package to use any logging implementation that
-// conforms to these methods.
-//
-//go:generate mockgen -source=setup.go -destination=mock_logger.go -package=tracer
-type Logger interface {
-	Info(msg string, err error, fields ...map[string]interface{})
-	Debug(msg string, err error, fields ...map[string]interface{})
-	Warn(msg string, err error, fields ...map[string]interface{})
-	Error(msg string, err error, fields ...map[string]interface{})
-	Fatal(msg string, err error, fields ...map[string]interface{})
-}
 
 // Tracer provides a simplified API for distributed tracing with OpenTelemetry.
 // It wraps the OpenTelemetry TracerProvider and provides convenient methods for
@@ -41,7 +30,6 @@ type Logger interface {
 // The Tracer is designed to be thread-safe and can be shared across goroutines.
 type Tracer struct {
 	tracer *trace.TracerProvider
-	logger Logger
 }
 
 // NewClient creates and initializes a new Tracer instance with OpenTelemetry.
@@ -76,15 +64,14 @@ type Tracer struct {
 //	// Use the tracer in your application
 //	ctx, span := tracerClient.StartSpan(context.Background(), "process-request")
 //	defer span.End()
-func NewClient(cfg Config, logger Logger) *Tracer {
+func NewClient(cfg Config) (*Tracer, error) {
 	var options []trace.TracerProviderOption
 
 	if cfg.EnableExport {
 		client := otlptracehttp.NewClient()
 		exporter, err := otlptrace.New(context.Background(), client)
 		if err != nil {
-			logger.Fatal("cannot initiate tracer", err, nil)
-			return nil
+			return nil, fmt.Errorf("failed to initialize OTLP exporter: %w", err)
 		}
 		options = append(options, trace.WithBatcher(exporter))
 	}
@@ -101,5 +88,5 @@ func NewClient(cfg Config, logger Logger) *Tracer {
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
-	return &Tracer{tracer: tp, logger: logger}
+	return &Tracer{tracer: tp}, nil
 }
