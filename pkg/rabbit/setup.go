@@ -4,33 +4,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
 	"os"
 	"sync"
 	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
-
-// Logger defines the interface for logging operations in the rabbit package.
-// This interface allows the package to use any logging implementation that
-// conforms to these methods.
-//
-//go:generate mockgen -source=setup.go -destination=mock_logger.go -package=rabbit
-type Logger interface {
-	// Info logs informational messages, optionally with error and contextual fields
-	Info(msg string, err error, fields ...map[string]interface{})
-
-	// Debug logs debug-level messages, optionally with error and contextual fields
-	Debug(msg string, err error, fields ...map[string]interface{})
-
-	// Warn logs warning messages, optionally with error and contextual fields
-	Warn(msg string, err error, fields ...map[string]interface{})
-
-	// Error logs error messages with the associated error and optional contextual fields
-	Error(msg string, err error, fields ...map[string]interface{})
-
-	// Fatal logs critical errors that should terminate the application
-	Fatal(msg string, err error, fields ...map[string]interface{})
-}
 
 // Rabbit represents a client for interacting with RabbitMQ.
 // It manages connections, channels, and provides methods for publishing
@@ -45,9 +25,6 @@ type Rabbit struct {
 
 	// conn is the underlying AMQP connection to the RabbitMQ server
 	conn *amqp.Connection
-
-	// logger is used for logging operations and errors
-	logger Logger
 
 	// mu protects concurrent access to connection and channel
 	mu sync.RWMutex
@@ -73,24 +50,25 @@ type Rabbit struct {
 //
 //	client := rabbit.NewClient(config, myLogger)
 //	defer client.Close()
-func NewClient(config Config, logger Logger) *Rabbit {
-	con, err := newConnection(config, logger)
+func NewClient(config Config) (*Rabbit, error) {
+	con, err := newConnection(config)
 	if err != nil {
-		logger.Fatal("error in connecting to rabbit after all retries", nil, nil)
+		log.Printf("ERROR: error in connecting to rabbit after all retries: %v", err)
+		return nil, err
 	}
 
-	ch, err := connectToChannel(con, config, logger)
+	ch, err := connectToChannel(con, config)
 	if ch == nil || err != nil {
-		logger.Fatal("error in declaring channel", nil, nil)
+		log.Printf("ERROR: error in declaring channel: %v", err)
+		return nil, err
 	}
 
 	return &Rabbit{
 		cfg:            config,
 		conn:           con,
 		Channel:        ch,
-		logger:         logger,
 		shutdownSignal: make(chan struct{}),
-	}
+	}, nil
 }
 
 // connectToChannel creates and configures a RabbitMQ channel for consumers and publishers.
@@ -111,15 +89,15 @@ func NewClient(config Config, logger Logger) *Rabbit {
 //   - Full exchange, queue, and binding setup for consumers
 //   - Dead letter exchange and queue configuration when enabled
 //   - QoS (prefetch) settings for controlling message delivery
-func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Channel, error) {
+func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 	ch, err := rb.Channel()
 	if err != nil {
-		logger.Error("failed to create channel", err, nil)
+		log.Printf("ERROR: error in creating channel: %v", err)
 		return nil, fmt.Errorf("failed to create channel: %w", err)
 	}
 
 	if err = ch.Confirm(false); err != nil {
-		logger.Error("failed to enable publisher confirms", err, nil)
+		log.Printf("ERROR: error in enabling publisher confirms: %v", err)
 		return nil, fmt.Errorf("failed to enable publisher confirms: %w", err)
 	}
 
@@ -138,9 +116,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 		nil,   // Arguments
 	)
 	if err != nil {
-		logger.Error("failed to declare exchange", err, map[string]interface{}{
-			"exchange": cfg.Channel.ExchangeName,
-		})
+		log.Printf("ERROR: error in declaring exchange: %v", err)
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
 
@@ -158,9 +134,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 			nil,   // Arguments
 		)
 		if err != nil {
-			logger.Error("failed to declare dead letter exchange", err, map[string]interface{}{
-				"exchange": cfg.DeadLetter.ExchangeName,
-			})
+			log.Printf("ERROR: error in declaring dead letter exchange: %v", err)
 			return nil, fmt.Errorf("failed to declare dead letter exchange: %w", err)
 		}
 
@@ -174,9 +148,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 			nil,   // Arguments
 		)
 		if err != nil {
-			logger.Error("failed to declare dead letter queue", err, map[string]interface{}{
-				"queue": cfg.DeadLetter.QueueName,
-			})
+			log.Printf("ERROR: error in declaring dead letter queue: %v", err)
 			return nil, fmt.Errorf("failed to declare dead letter queue: %w", err)
 		}
 
@@ -189,10 +161,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 			nil,   // Arguments
 		)
 		if err != nil {
-			logger.Error("failed to bind dead letter queue", err, map[string]interface{}{
-				"queue":    cfg.DeadLetter.QueueName,
-				"exchange": cfg.DeadLetter.ExchangeName,
-			})
+			log.Printf("ERROR: error in binding dead letter queue: %v", err)
 			return nil, fmt.Errorf("failed to bind dead letter queue: %w", err)
 		}
 
@@ -214,9 +183,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 		queueArgs, // Arguments including dead letter config
 	)
 	if err != nil {
-		logger.Error("failed to declare queue", err, map[string]interface{}{
-			"queue": cfg.Channel.QueueName,
-		})
+		log.Printf("ERROR: error in declaring queue: %v", err)
 		return nil, fmt.Errorf("failed to declare queue: %w", err)
 	}
 
@@ -229,10 +196,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 		nil,   // Arguments
 	)
 	if err != nil {
-		logger.Error("failed to bind queue", err, map[string]interface{}{
-			"queue":    cfg.Channel.QueueName,
-			"exchange": cfg.Channel.ExchangeName,
-		})
+		log.Printf("ERROR: error in binding queue: %v", err)
 		return nil, fmt.Errorf("failed to bind queue: %w", err)
 	}
 
@@ -240,9 +204,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 	if cfg.Channel.PrefetchCount > 0 {
 		err = ch.Qos(cfg.Channel.PrefetchCount, 0, false)
 		if err != nil {
-			logger.Error("failed to set QoS", err, map[string]interface{}{
-				"prefetch_count": cfg.Channel.PrefetchCount,
-			})
+			log.Printf("ERROR: error in setting QoS: %v", err)
 			return nil, fmt.Errorf("failed to set QoS: %w", err)
 		}
 	}
@@ -264,7 +226,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config, logger Logger) (*amqp.Cha
 //   - Continue monitoring until the shutdownSignal is received
 //
 // This provides resilience against network issues and RabbitMQ server restarts.
-func (rb *Rabbit) RetryConnection(logger Logger, cfg Config) {
+func (rb *Rabbit) RetryConnection(cfg Config) {
 	defer rb.closeShutdownOnce.Do(func() {
 		close(rb.shutdownSignal)
 	})
@@ -275,21 +237,21 @@ outerLoop:
 
 		select {
 		case <-rb.shutdownSignal:
-			logger.Info("Stopping RetryConnection loop due to shutdown signal", nil, nil)
+			log.Println("INFO: Stopping RetryConnection loop due to shutdown signal")
 			return
 
 		case err := <-errChan:
-			logger.Warn("RabbitMQ connection closed, retrying...", err, nil)
+			log.Printf("WARNING: RabbitMQ connection closed, retrying... %v", err)
 		reconnectLoop:
 			for {
 				select {
 				case <-rb.shutdownSignal:
-					logger.Info("Stopping RetryConnection loop due to shutdown signal inside reconnect", nil, nil)
+					log.Println("INFO: Stopping RetryConnection loop due to shutdown signal")
 					return
 				default:
-					newConn, err := newConnection(cfg, logger)
+					newConn, err := newConnection(cfg)
 					if err != nil {
-						logger.Error("Reconnection failed", err, nil)
+						log.Printf("ERROR: RabbitMQ reconnection failed: %v", err)
 						time.Sleep(time.Second)
 						continue reconnectLoop
 					}
@@ -299,15 +261,15 @@ outerLoop:
 					if rb.Channel != nil {
 						_ = rb.Channel.Close()
 					}
-					rb.Channel, err = connectToChannel(newConn, cfg, logger)
+					rb.Channel, err = connectToChannel(newConn, cfg)
 					rb.mu.Unlock()
 
 					if err != nil {
-						logger.Error("Failed to reopen channel, retrying...", err, nil)
+						log.Printf("ERROR: Failed to re-establish RabbitMQ channel: %v", err)
 						continue reconnectLoop
 					}
 
-					logger.Info("Reconnected to RabbitMQ", nil, nil)
+					log.Println("INFO: Successfully reconnected to RabbitMQ")
 					continue outerLoop
 				}
 			}
@@ -332,15 +294,13 @@ outerLoop:
 //   - Plain AMQP (no SSL/TLS)
 //
 // All connections use a 2-second heartbeat interval to detect disconnections quickly.
-func newConnection(cfg Config, logger Logger) (*amqp.Connection, error) {
-
-	logger.Info("Connecting to Rabbit", nil, nil)
+func newConnection(cfg Config) (*amqp.Connection, error) {
 
 	if cfg.Connection.IsSSLEnabled && cfg.Connection.UseCert {
 		hostURL := fmt.Sprintf("amqps://%v:%v@%v:%v", cfg.Connection.User, cfg.Connection.Password, cfg.Connection.Host, cfg.Connection.Port)
 		caCert, err := os.ReadFile(cfg.Connection.CACertPath)
 		if err != nil {
-			logger.Error("failed to read CA certificate", err, nil)
+			log.Printf("ERROR: failed to read CA cert: %v", err)
 			return nil, err
 		}
 		caCertPool := x509.NewCertPool()
@@ -348,7 +308,7 @@ func newConnection(cfg Config, logger Logger) (*amqp.Connection, error) {
 
 		cert, err := tls.LoadX509KeyPair(cfg.Connection.ClientCertPath, cfg.Connection.ClientKeyPath)
 		if err != nil {
-			logger.Error("failed to load client cert/key", err, nil)
+			log.Printf("ERROR: failed to load client cert: %v", err)
 			return nil, err
 		}
 
@@ -362,15 +322,10 @@ func newConnection(cfg Config, logger Logger) (*amqp.Connection, error) {
 			TLSClientConfig: tlsConfig,
 		})
 		if err == nil {
-			logger.Info("Connected to Rabbit", nil, map[string]interface{}{
-				"rabbit_addr": hostURL,
-			})
+			log.Println("INFO: Connected to Rabbit")
 			return conn, nil
 		}
-		logger.Error("error in connecting to rabbit", nil, map[string]interface{}{
-			"rabbit_addr": hostURL,
-			"error":       err,
-		})
+		log.Printf("ERROR: error in connecting to rabbit: %v", err)
 	} else if !cfg.Connection.IsSSLEnabled {
 		hostURL := fmt.Sprintf("amqp://%v:%v@%v:%v", cfg.Connection.User, cfg.Connection.Password, cfg.Connection.Host, cfg.Connection.Port)
 		//conn, err := amqp.Dial(hostURL)
@@ -378,30 +333,20 @@ func newConnection(cfg Config, logger Logger) (*amqp.Connection, error) {
 			Heartbeat: 2 * time.Second,
 		})
 		if err == nil {
-			logger.Info("Connected to Rabbit", nil, map[string]interface{}{
-				"rabbit_addr": hostURL,
-			})
+			log.Println("INFO: Connected to Rabbit")
 			return conn, nil
 		}
-		logger.Error("error in connecting to rabbit", nil, map[string]interface{}{
-			"rabbit_addr": hostURL,
-			"error":       err,
-		})
+		log.Printf("ERROR: error in connecting to rabbit: %v", err)
 	} else {
 		hostURL := fmt.Sprintf("amqps://%v:%v@%v:%v", cfg.Connection.User, cfg.Connection.Password, cfg.Connection.Host, cfg.Connection.Port)
 		conn, err := amqp.DialConfig(hostURL, amqp.Config{
 			Heartbeat: 2 * time.Second,
 		})
 		if err == nil {
-			logger.Info("Connected to Rabbit", nil, map[string]interface{}{
-				"rabbit_addr": hostURL,
-			})
+			log.Println("INFO: Connected to Rabbit")
 			return conn, nil
 		}
-		logger.Error("error in connecting to rabbit", nil, map[string]interface{}{
-			"rabbit_addr": hostURL,
-			"error":       err,
-		})
+		log.Printf("ERROR: error in connecting to rabbit: %v", err)
 	}
 	return nil, fmt.Errorf("failed to connect to Rabbit")
 }
