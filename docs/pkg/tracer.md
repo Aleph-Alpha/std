@@ -113,31 +113,14 @@ Thread Safety:
 
 All methods on the Tracer type and Span interface are safe for concurrent use by multiple goroutines.
 
-Package tracer is a generated GoMock package.
-
 ## Index
 
 - [Variables](<#variables>)
 - [func RegisterTracerLifecycle\(lc fx.Lifecycle, tracer \*Tracer\)](<#RegisterTracerLifecycle>)
 - [type Config](<#Config>)
-- [type Logger](<#Logger>)
-- [type MockLogger](<#MockLogger>)
-  - [func NewMockLogger\(ctrl \*gomock.Controller\) \*MockLogger](<#NewMockLogger>)
-  - [func \(m \*MockLogger\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Debug>)
-  - [func \(m \*MockLogger\) EXPECT\(\) \*MockLoggerMockRecorder](<#MockLogger.EXPECT>)
-  - [func \(m \*MockLogger\) Error\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Error>)
-  - [func \(m \*MockLogger\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Fatal>)
-  - [func \(m \*MockLogger\) Info\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Info>)
-  - [func \(m \*MockLogger\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Warn>)
-- [type MockLoggerMockRecorder](<#MockLoggerMockRecorder>)
-  - [func \(mr \*MockLoggerMockRecorder\) Debug\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Debug>)
-  - [func \(mr \*MockLoggerMockRecorder\) Error\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Error>)
-  - [func \(mr \*MockLoggerMockRecorder\) Fatal\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Fatal>)
-  - [func \(mr \*MockLoggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Info>)
-  - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
 - [type Span](<#Span>)
 - [type Tracer](<#Tracer>)
-  - [func NewClient\(cfg Config, logger Logger\) \*Tracer](<#NewClient>)
+  - [func NewClient\(cfg Config\) \(\*Tracer, error\)](<#NewClient>)
   - [func \(t \*Tracer\) GetCarrier\(ctx context.Context\) map\[string\]string](<#Tracer.GetCarrier>)
   - [func \(t \*Tracer\) SetCarrierOnContext\(ctx context.Context, carrier map\[string\]string\) context.Context](<#Tracer.SetCarrierOnContext>)
   - [func \(t \*Tracer\) StartSpan\(ctx context.Context, name string\) \(context.Context, Span\)](<#Tracer.StartSpan>)
@@ -171,7 +154,7 @@ var FXModule = fx.Module("tracer",
 ```
 
 <a name="RegisterTracerLifecycle"></a>
-## func [RegisterTracerLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/fx_module.go#L57>)
+## func [RegisterTracerLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/fx_module.go#L59>)
 
 ```go
 func RegisterTracerLifecycle(lc fx.Lifecycle, tracer *Tracer)
@@ -236,151 +219,6 @@ type Config struct {
 }
 ```
 
-<a name="Logger"></a>
-## type [Logger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/setup.go#L20-L26>)
-
-Logger defines the interface for logging operations in the rabbit package. This interface allows the package to use any logging implementation that conforms to these methods.
-
-```go
-type Logger interface {
-    Info(msg string, err error, fields ...map[string]interface{})
-    Debug(msg string, err error, fields ...map[string]interface{})
-    Warn(msg string, err error, fields ...map[string]interface{})
-    Error(msg string, err error, fields ...map[string]interface{})
-    Fatal(msg string, err error, fields ...map[string]interface{})
-}
-```
-
-<a name="MockLogger"></a>
-## type [MockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L19-L23>)
-
-MockLogger is a mock of Logger interface.
-
-```go
-type MockLogger struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewMockLogger"></a>
-### func [NewMockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L31>)
-
-```go
-func NewMockLogger(ctrl *gomock.Controller) *MockLogger
-```
-
-NewMockLogger creates a new mock instance.
-
-<a name="MockLogger.Debug"></a>
-### func \(\*MockLogger\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L43>)
-
-```go
-func (m *MockLogger) Debug(msg string, err error, fields ...map[string]any)
-```
-
-Debug mocks base method.
-
-<a name="MockLogger.EXPECT"></a>
-### func \(\*MockLogger\) [EXPECT](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L38>)
-
-```go
-func (m *MockLogger) EXPECT() *MockLoggerMockRecorder
-```
-
-EXPECT returns an object that allows the caller to indicate expected use.
-
-<a name="MockLogger.Error"></a>
-### func \(\*MockLogger\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L60>)
-
-```go
-func (m *MockLogger) Error(msg string, err error, fields ...map[string]any)
-```
-
-Error mocks base method.
-
-<a name="MockLogger.Fatal"></a>
-### func \(\*MockLogger\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L77>)
-
-```go
-func (m *MockLogger) Fatal(msg string, err error, fields ...map[string]any)
-```
-
-Fatal mocks base method.
-
-<a name="MockLogger.Info"></a>
-### func \(\*MockLogger\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L94>)
-
-```go
-func (m *MockLogger) Info(msg string, err error, fields ...map[string]any)
-```
-
-Info mocks base method.
-
-<a name="MockLogger.Warn"></a>
-### func \(\*MockLogger\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L111>)
-
-```go
-func (m *MockLogger) Warn(msg string, err error, fields ...map[string]any)
-```
-
-Warn mocks base method.
-
-<a name="MockLoggerMockRecorder"></a>
-## type [MockLoggerMockRecorder](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L26-L28>)
-
-MockLoggerMockRecorder is the mock recorder for MockLogger.
-
-```go
-type MockLoggerMockRecorder struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="MockLoggerMockRecorder.Debug"></a>
-### func \(\*MockLoggerMockRecorder\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L53>)
-
-```go
-func (mr *MockLoggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Call
-```
-
-Debug indicates an expected call of Debug.
-
-<a name="MockLoggerMockRecorder.Error"></a>
-### func \(\*MockLoggerMockRecorder\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L70>)
-
-```go
-func (mr *MockLoggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Call
-```
-
-Error indicates an expected call of Error.
-
-<a name="MockLoggerMockRecorder.Fatal"></a>
-### func \(\*MockLoggerMockRecorder\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L87>)
-
-```go
-func (mr *MockLoggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Call
-```
-
-Fatal indicates an expected call of Fatal.
-
-<a name="MockLoggerMockRecorder.Info"></a>
-### func \(\*MockLoggerMockRecorder\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L104>)
-
-```go
-func (mr *MockLoggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
-```
-
-Info indicates an expected call of Info.
-
-<a name="MockLoggerMockRecorder.Warn"></a>
-### func \(\*MockLoggerMockRecorder\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/mock_logger.go#L121>)
-
-```go
-func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
-```
-
-Warn indicates an expected call of Warn.
-
 <a name="Span"></a>
 ## type [Span](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L30-L67>)
 
@@ -436,7 +274,7 @@ type Span interface {
 ```
 
 <a name="Tracer"></a>
-## type [Tracer](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/setup.go#L42-L45>)
+## type [Tracer](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/setup.go#L31-L33>)
 
 Tracer provides a simplified API for distributed tracing with OpenTelemetry. It wraps the OpenTelemetry TracerProvider and provides convenient methods for creating spans, recording errors, and propagating trace context across service boundaries.
 
@@ -453,10 +291,10 @@ type Tracer struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/setup.go#L79>)
+### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/setup.go#L67>)
 
 ```go
-func NewClient(cfg Config, logger Logger) *Tracer
+func NewClient(cfg Config) (*Tracer, error)
 ```
 
 NewClient creates and initializes a new Tracer instance with OpenTelemetry. This function sets up the OpenTelemetry tracer provider with the provided configuration, configures trace exporters if enabled, and sets global OpenTelemetry settings.

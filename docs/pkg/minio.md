@@ -184,12 +184,12 @@ Package minio is a generated GoMock package.
 - [type Config](<#Config>)
 - [type ConnectionConfig](<#ConnectionConfig>)
 - [type DownloadConfig](<#DownloadConfig>)
+- [type ErrorCategory](<#ErrorCategory>)
 - [type KafkaNotification](<#KafkaNotification>)
 - [type KafkaSASLAuth](<#KafkaSASLAuth>)
-- [type Logger](<#Logger>)
 - [type MQTTNotification](<#MQTTNotification>)
 - [type Minio](<#Minio>)
-  - [func NewClient\(config Config, logger Logger\) \(\*Minio, error\)](<#NewClient>)
+  - [func NewClient\(config Config\) \(\*Minio, error\)](<#NewClient>)
   - [func NewMinioClientWithDI\(params MinioParams\) \(\*Minio, error\)](<#NewMinioClientWithDI>)
   - [func \(m \*Minio\) AbortMultipartUpload\(ctx context.Context, objectKey, uploadID string\) error](<#Minio.AbortMultipartUpload>)
   - [func \(m \*Minio\) CleanupIncompleteUploads\(ctx context.Context, prefix string, olderThan time.Duration\) error](<#Minio.CleanupIncompleteUploads>)
@@ -198,13 +198,18 @@ Package minio is a generated GoMock package.
   - [func \(m \*Minio\) GenerateMultipartPresignedGetURLs\(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration\) \(MultipartPresignedGet, error\)](<#Minio.GenerateMultipartPresignedGetURLs>)
   - [func \(m \*Minio\) GenerateMultipartUploadURLs\(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration\) \(MultipartUpload, error\)](<#Minio.GenerateMultipartUploadURLs>)
   - [func \(m \*Minio\) Get\(ctx context.Context, objectKey string\) \(\[\]byte, error\)](<#Minio.Get>)
+  - [func \(m \*Minio\) GetErrorCategory\(err error\) ErrorCategory](<#Minio.GetErrorCategory>)
   - [func \(m \*Minio\) GracefulShutdown\(\)](<#Minio.GracefulShutdown>)
+  - [func \(m \*Minio\) IsPermanentError\(err error\) bool](<#Minio.IsPermanentError>)
+  - [func \(m \*Minio\) IsRetryableError\(err error\) bool](<#Minio.IsRetryableError>)
+  - [func \(m \*Minio\) IsTemporaryError\(err error\) bool](<#Minio.IsTemporaryError>)
   - [func \(m \*Minio\) ListIncompleteUploads\(ctx context.Context, prefix string\) \(\[\]minio.ObjectMultipartInfo, error\)](<#Minio.ListIncompleteUploads>)
   - [func \(m \*Minio\) PreSignedGet\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedGet>)
   - [func \(m \*Minio\) PreSignedHeadObject\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedHeadObject>)
   - [func \(m \*Minio\) PreSignedPut\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedPut>)
   - [func \(m \*Minio\) Put\(ctx context.Context, objectKey string, reader io.Reader, size ...int64\) \(int64, error\)](<#Minio.Put>)
   - [func \(m \*Minio\) StreamGet\(ctx context.Context, objectKey string, chunkSize int\) \(\<\-chan \[\]byte, \<\-chan error\)](<#Minio.StreamGet>)
+  - [func \(m \*Minio\) TranslateError\(err error\) error](<#Minio.TranslateError>)
 - [type MinioLifeCycleParams](<#MinioLifeCycleParams>)
 - [type MinioParams](<#MinioParams>)
 - [type MockLogger](<#MockLogger>)
@@ -256,6 +261,165 @@ const (
 
 ## Variables
 
+<a name="ErrObjectNotFound"></a>Common object storage error types that can be used by consumers of this package. These provide a standardized set of errors that abstract away the underlying MinIO\-specific error details.
+
+```go
+var (
+    // ErrObjectNotFound is returned when an object doesn't exist in the bucket
+    ErrObjectNotFound = errors.New("object not found")
+
+    // ErrBucketNotFound is returned when a bucket doesn't exist
+    ErrBucketNotFound = errors.New("bucket not found")
+
+    // ErrBucketAlreadyExists is returned when trying to create a bucket that already exists
+    ErrBucketAlreadyExists = errors.New("bucket already exists")
+
+    // ErrInvalidBucketName is returned when bucket name is invalid
+    ErrInvalidBucketName = errors.New("invalid bucket name")
+
+    // ErrInvalidObjectName is returned when object name is invalid
+    ErrInvalidObjectName = errors.New("invalid object name")
+
+    // ErrAccessDenied is returned when access is denied to bucket or object
+    ErrAccessDenied = errors.New("access denied")
+
+    // ErrInsufficientPermissions is returned when user lacks necessary permissions
+    ErrInsufficientPermissions = errors.New("insufficient permissions")
+
+    // ErrInvalidCredentials is returned when credentials are invalid
+    ErrInvalidCredentials = errors.New("invalid credentials")
+
+    // ErrCredentialsExpired is returned when credentials have expired
+    ErrCredentialsExpired = errors.New("credentials expired")
+
+    // ErrConnectionFailed is returned when connection to MinIO server fails
+    ErrConnectionFailed = errors.New("connection failed")
+
+    // ErrConnectionLost is returned when connection to MinIO server is lost
+    ErrConnectionLost = errors.New("connection lost")
+
+    // ErrTimeout is returned when operation times out
+    ErrTimeout = errors.New("operation timeout")
+
+    // ErrInvalidRange is returned when byte range is invalid
+    ErrInvalidRange = errors.New("invalid range")
+
+    // ErrObjectTooLarge is returned when object exceeds size limits
+    ErrObjectTooLarge = errors.New("object too large")
+
+    // ErrInvalidChecksum is returned when object checksum doesn't match
+    ErrInvalidChecksum = errors.New("invalid checksum")
+
+    // ErrInvalidMetadata is returned when object metadata is invalid
+    ErrInvalidMetadata = errors.New("invalid metadata")
+
+    // ErrInvalidContentType is returned when content type is invalid
+    ErrInvalidContentType = errors.New("invalid content type")
+
+    // ErrInvalidEncryption is returned when encryption parameters are invalid
+    ErrInvalidEncryption = errors.New("invalid encryption")
+
+    // ErrServerError is returned for internal MinIO server errors
+    ErrServerError = errors.New("server error")
+
+    // ErrServiceUnavailable is returned when MinIO service is unavailable
+    ErrServiceUnavailable = errors.New("service unavailable")
+
+    // ErrTooManyRequests is returned when rate limit is exceeded
+    ErrTooManyRequests = errors.New("too many requests")
+
+    // ErrInvalidResponse is returned when server response is invalid
+    ErrInvalidResponse = errors.New("invalid response")
+
+    // ErrNetworkError is returned for network-related errors
+    ErrNetworkError = errors.New("network error")
+
+    // ErrInvalidURL is returned when URL is malformed
+    ErrInvalidURL = errors.New("invalid URL")
+
+    // ErrQuotaExceeded is returned when storage quota is exceeded
+    ErrQuotaExceeded = errors.New("quota exceeded")
+
+    // ErrBucketNotEmpty is returned when trying to delete non-empty bucket
+    ErrBucketNotEmpty = errors.New("bucket not empty")
+
+    // ErrPreconditionFailed is returned when precondition check fails
+    ErrPreconditionFailed = errors.New("precondition failed")
+
+    // ErrInvalidPart is returned when multipart upload part is invalid
+    ErrInvalidPart = errors.New("invalid part")
+
+    // ErrInvalidUploadID is returned when multipart upload ID is invalid
+    ErrInvalidUploadID = errors.New("invalid upload ID")
+
+    // ErrPartTooSmall is returned when multipart upload part is too small
+    ErrPartTooSmall = errors.New("part too small")
+
+    // ErrNotImplemented is returned for unsupported operations
+    ErrNotImplemented = errors.New("operation not implemented")
+
+    // ErrInvalidArgument is returned when function arguments are invalid
+    ErrInvalidArgument = errors.New("invalid argument")
+
+    // ErrCancelled is returned when operation is cancelled
+    ErrCancelled = errors.New("operation cancelled")
+
+    // ErrConfigurationError is returned for configuration-related errors
+    ErrConfigurationError = errors.New("configuration error")
+
+    // ErrVersioningNotEnabled is returned when versioning is required but not enabled
+    ErrVersioningNotEnabled = errors.New("versioning not enabled")
+
+    // ErrInvalidVersion is returned when object version is invalid
+    ErrInvalidVersion = errors.New("invalid version")
+
+    // ErrLockConfigurationError is returned for object lock configuration errors
+    ErrLockConfigurationError = errors.New("lock configuration error")
+
+    // ErrObjectLocked is returned when object is locked and cannot be deleted
+    ErrObjectLocked = errors.New("object locked")
+
+    // ErrRetentionPolicyError is returned for retention policy errors
+    ErrRetentionPolicyError = errors.New("retention policy error")
+
+    // ErrMalformedXML is returned when XML is malformed
+    ErrMalformedXML = errors.New("malformed XML")
+
+    // ErrInvalidStorageClass is returned when storage class is invalid
+    ErrInvalidStorageClass = errors.New("invalid storage class")
+
+    // ErrReplicationError is returned for replication-related errors
+    ErrReplicationError = errors.New("replication error")
+
+    // ErrLifecycleError is returned for lifecycle configuration errors
+    ErrLifecycleError = errors.New("lifecycle error")
+
+    // ErrNotificationError is returned for notification configuration errors
+    ErrNotificationError = errors.New("notification error")
+
+    // ErrTaggingError is returned for object tagging errors
+    ErrTaggingError = errors.New("tagging error")
+
+    // ErrPolicyError is returned for bucket policy errors
+    ErrPolicyError = errors.New("policy error")
+
+    // ErrWebsiteError is returned for website configuration errors
+    ErrWebsiteError = errors.New("website configuration error")
+
+    // ErrCORSError is returned for CORS configuration errors
+    ErrCORSError = errors.New("CORS configuration error")
+
+    // ErrLoggingError is returned for logging configuration errors
+    ErrLoggingError = errors.New("logging configuration error")
+
+    // ErrEncryptionError is returned for encryption configuration errors
+    ErrEncryptionError = errors.New("encryption configuration error")
+
+    // ErrUnknownError is returned for unknown/unhandled errors
+    ErrUnknownError = errors.New("unknown error")
+)
+```
+
 <a name="FXModule"></a>FXModule is an fx.Module that provides and configures the MinIO client. This module registers the MinIO client with the Fx dependency injection framework, making it available to other components in the application.
 
 The module: 1. Provides the MinIO client factory function 2. Invokes the lifecycle registration to manage the client's lifecycle
@@ -279,7 +443,7 @@ var FXModule = fx.Module("minio",
 ```
 
 <a name="RegisterLifecycle"></a>
-## func [RegisterLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L64>)
+## func [RegisterLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L63>)
 
 ```go
 func RegisterLifecycle(params MinioLifeCycleParams)
@@ -364,7 +528,7 @@ type BaseNotification struct {
 ```
 
 <a name="BufferPool"></a>
-## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L69-L72>)
+## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L50-L53>)
 
 BufferPool implements a pool of bytes.Buffers to reduce memory allocations. It's used for temporary buffer operations when reading or writing objects.
 
@@ -375,7 +539,7 @@ type BufferPool struct {
 ```
 
 <a name="NewBufferPool"></a>
-### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L78>)
+### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L59>)
 
 ```go
 func NewBufferPool() *BufferPool
@@ -386,7 +550,7 @@ NewBufferPool creates a new BufferPool instance. The pool will create new bytes.
 Returns a configured BufferPool ready for use.
 
 <a name="BufferPool.Get"></a>
-### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L93>)
+### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L74>)
 
 ```go
 func (bp *BufferPool) Get() *bytes.Buffer
@@ -397,7 +561,7 @@ Get returns a buffer from the pool. The returned buffer may be newly allocated o
 Returns a \*bytes.Buffer that should be returned to the pool when no longer needed.
 
 <a name="BufferPool.Put"></a>
-### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L102>)
+### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L83>)
 
 ```go
 func (bp *BufferPool) Put(b *bytes.Buffer)
@@ -483,6 +647,37 @@ type DownloadConfig struct {
 }
 ```
 
+<a name="ErrorCategory"></a>
+## type [ErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/errors.go#L549>)
+
+ErrorCategory represents different categories of MinIO errors
+
+```go
+type ErrorCategory int
+```
+
+<a name="CategoryUnknown"></a>
+
+```go
+const (
+    CategoryUnknown ErrorCategory = iota
+    CategoryConnection
+    CategoryAuthentication
+    CategoryPermission
+    CategoryNotFound
+    CategoryConflict
+    CategoryValidation
+    CategoryServer
+    CategoryNetwork
+    CategoryTimeout
+    CategoryQuota
+    CategoryConfiguration
+    CategoryVersioning
+    CategoryLocking
+    CategoryOperation
+)
+```
+
 <a name="KafkaNotification"></a>
 ## type [KafkaNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L242-L254>)
 
@@ -522,30 +717,6 @@ type KafkaSASLAuth struct {
 }
 ```
 
-<a name="Logger"></a>
-## type [Logger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L18-L33>)
-
-Logger defines the interface for logging operations within the MinIO client. This interface allows for dependency injection of any compatible logger implementation.
-
-```go
-type Logger interface {
-    // Info logs informational messages with optional error and additional fields
-    Info(msg string, err error, fields ...map[string]interface{})
-
-    // Debug logs debug-level messages with optional error and additional fields
-    Debug(msg string, err error, fields ...map[string]interface{})
-
-    // Warn logs warning messages with optional error and additional fields
-    Warn(msg string, err error, fields ...map[string]interface{})
-
-    // Error logs error messages with the associated error and optional additional fields
-    Error(msg string, err error, fields ...map[string]interface{})
-
-    // Fatal logs critical error messages that typically require immediate attention
-    Fatal(msg string, err error, fields ...map[string]interface{})
-}
-```
-
 <a name="MQTTNotification"></a>
 ## type [MQTTNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L271-L295>)
 
@@ -580,7 +751,7 @@ type MQTTNotification struct {
 ```
 
 <a name="Minio"></a>
-## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L38-L65>)
+## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L22-L46>)
 
 Minio represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and thread\-safety.
 
@@ -596,10 +767,10 @@ type Minio struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L122>)
+### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L103>)
 
 ```go
-func NewClient(config Config, logger Logger) (*Minio, error)
+func NewClient(config Config) (*Minio, error)
 ```
 
 NewClient creates and validates a new MinIO client. It establishes connections to both the standard and core MinIO APIs, validates the connection, and ensures the configured bucket exists.
@@ -630,7 +801,7 @@ func NewMinioClientWithDI(params MinioParams) (*Minio, error)
 
 
 <a name="Minio.AbortMultipartUpload"></a>
-### func \(\*Minio\) [AbortMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L418>)
+### func \(\*Minio\) [AbortMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L411>)
 
 ```go
 func (m *Minio) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error
@@ -653,7 +824,7 @@ err := minioClient.AbortMultipartUpload(ctx, "uploads/myfile.zip", uploadID)
 ```
 
 <a name="Minio.CleanupIncompleteUploads"></a>
-### func \(\*Minio\) [CleanupIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L547>)
+### func \(\*Minio\) [CleanupIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L535>)
 
 ```go
 func (m *Minio) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error
@@ -677,7 +848,7 @@ err := minioClient.CleanupIncompleteUploads(ctx, "uploads/", 24*time.Hour)
 ```
 
 <a name="Minio.CompleteMultipartUpload"></a>
-### func \(\*Minio\) [CompleteMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L453>)
+### func \(\*Minio\) [CompleteMultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L441>)
 
 ```go
 func (m *Minio) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error
@@ -708,7 +879,7 @@ err := minioClient.CompleteMultipartUpload(
 ```
 
 <a name="Minio.Delete"></a>
-### func \(\*Minio\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L224>)
+### func \(\*Minio\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L225>)
 
 ```go
 func (m *Minio) Delete(ctx context.Context, objectKey string) error
@@ -765,7 +936,7 @@ download, err := minioClient.GenerateMultipartPresignedGetURLs(
 ```
 
 <a name="Minio.GenerateMultipartUploadURLs"></a>
-### func \(\*Minio\) [GenerateMultipartUploadURLs](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L250-L256>)
+### func \(\*Minio\) [GenerateMultipartUploadURLs](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L251-L257>)
 
 ```go
 func (m *Minio) GenerateMultipartUploadURLs(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration) (MultipartUpload, error)
@@ -799,7 +970,7 @@ upload, err := minioClient.GenerateMultipartUploadURLs(
 ```
 
 <a name="Minio.Get"></a>
-### func \(\*Minio\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L80>)
+### func \(\*Minio\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L81>)
 
 ```go
 func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error)
@@ -829,8 +1000,17 @@ if err == nil {
 }
 ```
 
+<a name="Minio.GetErrorCategory"></a>
+### func \(\*Minio\) [GetErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/errors.go#L570>)
+
+```go
+func (m *Minio) GetErrorCategory(err error) ErrorCategory
+```
+
+GetErrorCategory returns the category of the given error
+
 <a name="Minio.GracefulShutdown"></a>
-### func \(\*Minio\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L127>)
+### func \(\*Minio\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L126>)
 
 ```go
 func (m *Minio) GracefulShutdown()
@@ -858,8 +1038,35 @@ func processFiles() {
 }
 ```
 
+<a name="Minio.IsPermanentError"></a>
+### func \(\*Minio\) [IsPermanentError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/errors.go#L628>)
+
+```go
+func (m *Minio) IsPermanentError(err error) bool
+```
+
+IsPermanentError returns true if the error is permanent and should not be retried
+
+<a name="Minio.IsRetryableError"></a>
+### func \(\*Minio\) [IsRetryableError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/errors.go#L606>)
+
+```go
+func (m *Minio) IsRetryableError(err error) bool
+```
+
+IsRetryableError returns true if the error is retryable
+
+<a name="Minio.IsTemporaryError"></a>
+### func \(\*Minio\) [IsTemporaryError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/errors.go#L623>)
+
+```go
+func (m *Minio) IsTemporaryError(err error) bool
+```
+
+IsTemporaryError returns true if the error is temporary
+
 <a name="Minio.ListIncompleteUploads"></a>
-### func \(\*Minio\) [ListIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L517>)
+### func \(\*Minio\) [ListIncompleteUploads](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L505>)
 
 ```go
 func (m *Minio) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error)
@@ -917,7 +1124,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedHeadObject"></a>
-### func \(\*Minio\) [PreSignedHeadObject](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L598>)
+### func \(\*Minio\) [PreSignedHeadObject](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L574>)
 
 ```go
 func (m *Minio) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error)
@@ -945,7 +1152,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedPut"></a>
-### func \(\*Minio\) [PreSignedPut](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L628>)
+### func \(\*Minio\) [PreSignedPut](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L604>)
 
 ```go
 func (m *Minio) PreSignedPut(ctx context.Context, objectKey string) (string, error)
@@ -973,7 +1180,7 @@ if err == nil {
 ```
 
 <a name="Minio.Put"></a>
-### func \(\*Minio\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L36>)
+### func \(\*Minio\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L37>)
 
 ```go
 func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error)
@@ -1007,7 +1214,7 @@ if err == nil {
 ```
 
 <a name="Minio.StreamGet"></a>
-### func \(\*Minio\) [StreamGet](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L143>)
+### func \(\*Minio\) [StreamGet](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L144>)
 
 ```go
 func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error)
@@ -1015,8 +1222,19 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 
 StreamGet downloads a file from MinIO and sends chunks through a channel
 
+<a name="Minio.TranslateError"></a>
+### func \(\*Minio\) [TranslateError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/errors.go#L174>)
+
+```go
+func (m *Minio) TranslateError(err error) error
+```
+
+TranslateError converts MinIO\-specific errors into standardized application errors. This function provides abstraction from the underlying MinIO implementation details, allowing application code to handle errors in a MinIO\-agnostic way.
+
+It maps common MinIO errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
+
 <a name="MinioLifeCycleParams"></a>
-## type [MinioLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L41-L47>)
+## type [MinioLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L41-L46>)
 
 
 
@@ -1026,12 +1244,11 @@ type MinioLifeCycleParams struct {
 
     Lifecycle fx.Lifecycle
     Minio     *Minio
-    Logger    Logger
 }
 ```
 
 <a name="MinioParams"></a>
-## type [MinioParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L30-L35>)
+## type [MinioParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L31-L35>)
 
 
 
@@ -1040,7 +1257,6 @@ type MinioParams struct {
     fx.In
 
     Config
-    Logger
 }
 ```
 
@@ -1238,7 +1454,7 @@ type MultipartPresignedGetInfo struct {
 ```
 
 <a name="MultipartUpload"></a>
-## type [MultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L49-L79>)
+## type [MultipartUpload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L50-L80>)
 
 MultipartUpload represents a multipart upload session. This interface provides methods to access information about a multipart upload while hiding the internal implementation details.
 
@@ -1277,7 +1493,7 @@ type MultipartUpload interface {
 ```
 
 <a name="MultipartUploadInfo"></a>
-## type [MultipartUploadInfo](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L17-L44>)
+## type [MultipartUploadInfo](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L18-L45>)
 
 MultipartUploadInfo contains all information needed for a multipart upload. This structure holds all the details required for managing and completing a multipart upload, including upload identifiers, presigned URLs for each part, and sizing information.
 

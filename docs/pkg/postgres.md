@@ -118,8 +118,6 @@ Thread Safety:
 
 All methods on the DB interface are safe for concurrent use by multiple goroutines.
 
-Package postgres is a generated GoMock package.
-
 ## Index
 
 - [Variables](<#variables>)
@@ -128,28 +126,13 @@ Package postgres is a generated GoMock package.
 - [type Connection](<#Connection>)
 - [type ConnectionDetails](<#ConnectionDetails>)
 - [type ErrorCategory](<#ErrorCategory>)
-- [type Logger](<#Logger>)
 - [type Migration](<#Migration>)
 - [type MigrationDirection](<#MigrationDirection>)
 - [type MigrationHistoryRecord](<#MigrationHistoryRecord>)
 - [type MigrationType](<#MigrationType>)
-- [type MockLogger](<#MockLogger>)
-  - [func NewMockLogger\(ctrl \*gomock.Controller\) \*MockLogger](<#NewMockLogger>)
-  - [func \(m \*MockLogger\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Debug>)
-  - [func \(m \*MockLogger\) EXPECT\(\) \*MockLoggerMockRecorder](<#MockLogger.EXPECT>)
-  - [func \(m \*MockLogger\) Error\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Error>)
-  - [func \(m \*MockLogger\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Fatal>)
-  - [func \(m \*MockLogger\) Info\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Info>)
-  - [func \(m \*MockLogger\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Warn>)
-- [type MockLoggerMockRecorder](<#MockLoggerMockRecorder>)
-  - [func \(mr \*MockLoggerMockRecorder\) Debug\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Debug>)
-  - [func \(mr \*MockLoggerMockRecorder\) Error\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Error>)
-  - [func \(mr \*MockLoggerMockRecorder\) Fatal\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Fatal>)
-  - [func \(mr \*MockLoggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Info>)
-  - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
 - [type Postgres](<#Postgres>)
-  - [func NewPostgres\(cfg Config, logger Logger\) \*Postgres](<#NewPostgres>)
-  - [func NewPostgresClientWithDI\(params PostgresParams\) \*Postgres](<#NewPostgresClientWithDI>)
+  - [func NewPostgres\(cfg Config\) \(\*Postgres, error\)](<#NewPostgres>)
+  - [func NewPostgresClientWithDI\(params PostgresParams\) \(\*Postgres, error\)](<#NewPostgresClientWithDI>)
   - [func \(p \*Postgres\) AutoMigrate\(models ...interface\{\}\) error](<#Postgres.AutoMigrate>)
   - [func \(p \*Postgres\) Count\(ctx context.Context, model interface\{\}, count \*int64, conditions ...interface\{\}\) error](<#Postgres.Count>)
   - [func \(p \*Postgres\) Create\(ctx context.Context, value interface\{\}\) error](<#Postgres.Create>)
@@ -169,7 +152,7 @@ Package postgres is a generated GoMock package.
   - [func \(p \*Postgres\) MigrateUp\(ctx context.Context, migrationsDir string\) error](<#Postgres.MigrateUp>)
   - [func \(p \*Postgres\) MonitorConnection\(ctx context.Context\)](<#Postgres.MonitorConnection>)
   - [func \(p \*Postgres\) Query\(ctx context.Context\) \*QueryBuilder](<#Postgres.Query>)
-  - [func \(p \*Postgres\) RetryConnection\(ctx context.Context, logger Logger\)](<#Postgres.RetryConnection>)
+  - [func \(p \*Postgres\) RetryConnection\(ctx context.Context\)](<#Postgres.RetryConnection>)
   - [func \(p \*Postgres\) Save\(ctx context.Context, value interface\{\}\) error](<#Postgres.Save>)
   - [func \(p \*Postgres\) Transaction\(ctx context.Context, fn func\(pg \*Postgres\) error\) error](<#Postgres.Transaction>)
   - [func \(p \*Postgres\) TranslateError\(err error\) error](<#Postgres.TranslateError>)
@@ -396,7 +379,7 @@ var FXModule = fx.Module("postgres",
 ```
 
 <a name="RegisterPostgresLifecycle"></a>
-## func [RegisterPostgresLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L88>)
+## func [RegisterPostgresLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L87>)
 
 ```go
 func RegisterPostgresLifecycle(params PostgresLifeCycleParams)
@@ -501,21 +484,6 @@ const (
 )
 ```
 
-<a name="Logger"></a>
-## type [Logger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L17-L23>)
-
-
-
-```go
-type Logger interface {
-    Info(msg string, err error, fields ...map[string]interface{})
-    Debug(msg string, err error, fields ...map[string]interface{})
-    Warn(msg string, err error, fields ...map[string]interface{})
-    Error(msg string, err error, fields ...map[string]interface{})
-    Fatal(msg string, err error, fields ...map[string]interface{})
-}
-```
-
 <a name="Migration"></a>
 ## type [Migration](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/migrations.go#L42-L58>)
 
@@ -618,138 +586,8 @@ const (
 )
 ```
 
-<a name="MockLogger"></a>
-## type [MockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L19-L23>)
-
-MockLogger is a mock of Logger interface.
-
-```go
-type MockLogger struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewMockLogger"></a>
-### func [NewMockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L31>)
-
-```go
-func NewMockLogger(ctrl *gomock.Controller) *MockLogger
-```
-
-NewMockLogger creates a new mock instance.
-
-<a name="MockLogger.Debug"></a>
-### func \(\*MockLogger\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L43>)
-
-```go
-func (m *MockLogger) Debug(msg string, err error, fields ...map[string]any)
-```
-
-Debug mocks base method.
-
-<a name="MockLogger.EXPECT"></a>
-### func \(\*MockLogger\) [EXPECT](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L38>)
-
-```go
-func (m *MockLogger) EXPECT() *MockLoggerMockRecorder
-```
-
-EXPECT returns an object that allows the caller to indicate expected use.
-
-<a name="MockLogger.Error"></a>
-### func \(\*MockLogger\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L60>)
-
-```go
-func (m *MockLogger) Error(msg string, err error, fields ...map[string]any)
-```
-
-Error mocks base method.
-
-<a name="MockLogger.Fatal"></a>
-### func \(\*MockLogger\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L77>)
-
-```go
-func (m *MockLogger) Fatal(msg string, err error, fields ...map[string]any)
-```
-
-Fatal mocks base method.
-
-<a name="MockLogger.Info"></a>
-### func \(\*MockLogger\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L94>)
-
-```go
-func (m *MockLogger) Info(msg string, err error, fields ...map[string]any)
-```
-
-Info mocks base method.
-
-<a name="MockLogger.Warn"></a>
-### func \(\*MockLogger\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L111>)
-
-```go
-func (m *MockLogger) Warn(msg string, err error, fields ...map[string]any)
-```
-
-Warn mocks base method.
-
-<a name="MockLoggerMockRecorder"></a>
-## type [MockLoggerMockRecorder](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L26-L28>)
-
-MockLoggerMockRecorder is the mock recorder for MockLogger.
-
-```go
-type MockLoggerMockRecorder struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="MockLoggerMockRecorder.Debug"></a>
-### func \(\*MockLoggerMockRecorder\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L53>)
-
-```go
-func (mr *MockLoggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Call
-```
-
-Debug indicates an expected call of Debug.
-
-<a name="MockLoggerMockRecorder.Error"></a>
-### func \(\*MockLoggerMockRecorder\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L70>)
-
-```go
-func (mr *MockLoggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Call
-```
-
-Error indicates an expected call of Error.
-
-<a name="MockLoggerMockRecorder.Fatal"></a>
-### func \(\*MockLoggerMockRecorder\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L87>)
-
-```go
-func (mr *MockLoggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Call
-```
-
-Fatal indicates an expected call of Fatal.
-
-<a name="MockLoggerMockRecorder.Info"></a>
-### func \(\*MockLoggerMockRecorder\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L104>)
-
-```go
-func (mr *MockLoggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
-```
-
-Info indicates an expected call of Info.
-
-<a name="MockLoggerMockRecorder.Warn"></a>
-### func \(\*MockLoggerMockRecorder\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/mock_logger.go#L121>)
-
-```go
-func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
-```
-
-Warn indicates an expected call of Warn.
-
 <a name="Postgres"></a>
-## type [Postgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L29-L39>)
+## type [Postgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L18-L27>)
 
 Postgres is a thread\-safe wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations. It guards all database operations with a mutex to ensure thread safety and includes mechanisms for graceful shutdown and connection health monitoring.
 
@@ -761,10 +599,10 @@ type Postgres struct {
 ```
 
 <a name="NewPostgres"></a>
-### func [NewPostgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L45>)
+### func [NewPostgres](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L33>)
 
 ```go
-func NewPostgres(cfg Config, logger Logger) *Postgres
+func NewPostgres(cfg Config) (*Postgres, error)
 ```
 
 NewPostgres creates a new Postgres instance with the provided configuration and Logger. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it logs a fatal error and terminates.
@@ -773,7 +611,7 @@ NewPostgres creates a new Postgres instance with the provided configuration and 
 ### func [NewPostgresClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L61>)
 
 ```go
-func NewPostgresClientWithDI(params PostgresParams) *Postgres
+func NewPostgresClientWithDI(params PostgresParams) (*Postgres, error)
 ```
 
 NewPostgresClientWithDI creates a new Postgres Client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where the Config and Logger dependencies are automatically provided via the PostgresParams struct.
@@ -1057,7 +895,7 @@ if err == nil {
 ```
 
 <a name="Postgres.GracefulShutdown"></a>
-### func \(\*Postgres\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L131>)
+### func \(\*Postgres\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L130>)
 
 ```go
 func (p *Postgres) GracefulShutdown() error
@@ -1137,7 +975,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="Postgres.MonitorConnection"></a>
-### func \(\*Postgres\) [MonitorConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L149>)
+### func \(\*Postgres\) [MonitorConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L136>)
 
 ```go
 func (p *Postgres) MonitorConnection(ctx context.Context)
@@ -1148,7 +986,7 @@ MonitorConnection periodically checks the health of the database connection and 
 The function respects context cancellation and shutdown signals, ensuring proper resource cleanup and graceful termination when requested.
 
 <a name="Postgres.Query"></a>
-### func \(\*Postgres\) [Query](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L27>)
+### func \(\*Postgres\) [Query](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L28>)
 
 ```go
 func (p *Postgres) Query(ctx context.Context) *QueryBuilder
@@ -1174,10 +1012,10 @@ err := db.Query(ctx).
 ```
 
 <a name="Postgres.RetryConnection"></a>
-### func \(\*Postgres\) [RetryConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L107>)
+### func \(\*Postgres\) [RetryConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/setup.go#L94>)
 
 ```go
-func (p *Postgres) RetryConnection(ctx context.Context, logger Logger)
+func (p *Postgres) RetryConnection(ctx context.Context)
 ```
 
 RetryConnection continuously attempts to reconnect to the PostgresSQL database when notified of a connection failure. It operates as a goroutine that waits for signals on retryChanSignal before attempting reconnection. The function respects context cancellation and shutdown signals, ensuring graceful termination when requested.
@@ -1379,7 +1217,7 @@ fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="PostgresLifeCycleParams"></a>
-## type [PostgresLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L72-L78>)
+## type [PostgresLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L72-L77>)
 
 PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management. This struct combines all the components required to properly manage the lifecycle of a Postgres Client within an fx application, including startup, monitoring, and graceful shutdown.
 
@@ -1391,12 +1229,11 @@ type PostgresLifeCycleParams struct {
 
     Lifecycle fx.Lifecycle
     Postgres  *Postgres
-    Logger    Logger
 }
 ```
 
 <a name="PostgresParams"></a>
-## type [PostgresParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L26-L31>)
+## type [PostgresParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/fx_module.go#L27-L31>)
 
 PostgresParams groups the dependencies needed to create a Postgres Client via dependency injection. This struct is designed to work with Uber's fx dependency injection framework and provides the necessary parameters for initializing a Postgres database connection.
 
@@ -1407,12 +1244,11 @@ type PostgresParams struct {
     fx.In
 
     Config Config
-    Logger Logger
 }
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L38-L44>)
+## type [QueryBuilder](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L39-L45>)
 
 QueryBuilder provides a fluent interface for building complex database queries. It wraps GORM's query building capabilities with thread\-safety and automatic resource cleanup. The builder maintains a chain of query modifiers that are applied when a terminal method is called.
 
@@ -1423,7 +1259,7 @@ type QueryBuilder struct {
 ```
 
 <a name="QueryBuilder.Clauses"></a>
-### func \(\*QueryBuilder\) [Clauses](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L713>)
+### func \(\*QueryBuilder\) [Clauses](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L714>)
 
 ```go
 func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder
@@ -1450,7 +1286,7 @@ qb.Clauses(clause.GroupBy{
 ```
 
 <a name="QueryBuilder.Count"></a>
-### func \(\*QueryBuilder\) [Count](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L382>)
+### func \(\*QueryBuilder\) [Count](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L383>)
 
 ```go
 func (qb *QueryBuilder) Count(count *int64) error
@@ -1472,7 +1308,7 @@ err := qb.Where("active = ?", true).Count(&count)
 ```
 
 <a name="QueryBuilder.CreateInBatches"></a>
-### func \(\*QueryBuilder\) [CreateInBatches](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L737>)
+### func \(\*QueryBuilder\) [CreateInBatches](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L738>)
 
 ```go
 func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error)
@@ -1502,7 +1338,7 @@ fmt.Printf("Created %d records\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Delete"></a>
-### func \(\*QueryBuilder\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L429>)
+### func \(\*QueryBuilder\) [Delete](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L430>)
 
 ```go
 func (qb *QueryBuilder) Delete(value interface{}) (int64, error)
@@ -1530,7 +1366,7 @@ fmt.Printf("Deleted %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Distinct"></a>
-### func \(\*QueryBuilder\) [Distinct](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L476>)
+### func \(\*QueryBuilder\) [Distinct](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L477>)
 
 ```go
 func (qb *QueryBuilder) Distinct(args ...interface{}) *QueryBuilder
@@ -1552,7 +1388,7 @@ qb.Distinct().Where("age > ?", 18).Find(&users) // SELECT DISTINCT * FROM users 
 ```
 
 <a name="QueryBuilder.Done"></a>
-### func \(\*QueryBuilder\) [Done](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L793>)
+### func \(\*QueryBuilder\) [Done](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L794>)
 
 ```go
 func (qb *QueryBuilder) Done()
@@ -1572,7 +1408,7 @@ if someCondition {
 ```
 
 <a name="QueryBuilder.Find"></a>
-### func \(\*QueryBuilder\) [Find](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L331>)
+### func \(\*QueryBuilder\) [Find](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L332>)
 
 ```go
 func (qb *QueryBuilder) Find(dest interface{}) error
@@ -1594,7 +1430,7 @@ err := qb.Where("active = ?", true).Find(&users)
 ```
 
 <a name="QueryBuilder.First"></a>
-### func \(\*QueryBuilder\) [First](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L348>)
+### func \(\*QueryBuilder\) [First](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L349>)
 
 ```go
 func (qb *QueryBuilder) First(dest interface{}) error
@@ -1616,7 +1452,7 @@ err := qb.Where("email = ?", "user@example.com").First(&user)
 ```
 
 <a name="QueryBuilder.FirstOrCreate"></a>
-### func \(\*QueryBuilder\) [FirstOrCreate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L776>)
+### func \(\*QueryBuilder\) [FirstOrCreate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L777>)
 
 ```go
 func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error
@@ -1639,7 +1475,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
 ```
 
 <a name="QueryBuilder.FirstOrInit"></a>
-### func \(\*QueryBuilder\) [FirstOrInit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L758>)
+### func \(\*QueryBuilder\) [FirstOrInit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L759>)
 
 ```go
 func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error
@@ -1662,7 +1498,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrInit(&user)
 ```
 
 <a name="QueryBuilder.ForKeyShare"></a>
-### func \(\*QueryBuilder\) [ForKeyShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L645>)
+### func \(\*QueryBuilder\) [ForKeyShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L646>)
 
 ```go
 func (qb *QueryBuilder) ForKeyShare() *QueryBuilder
@@ -1679,7 +1515,7 @@ qb.Where("id = ?", userID).ForKeyShare().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForNoKeyUpdate"></a>
-### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L631>)
+### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L632>)
 
 ```go
 func (qb *QueryBuilder) ForNoKeyUpdate() *QueryBuilder
@@ -1696,7 +1532,7 @@ qb.Where("id = ?", userID).ForNoKeyUpdate().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForShare"></a>
-### func \(\*QueryBuilder\) [ForShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L566>)
+### func \(\*QueryBuilder\) [ForShare](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L567>)
 
 ```go
 func (qb *QueryBuilder) ForShare() *QueryBuilder
@@ -1714,7 +1550,7 @@ qb.ForShare().Where("status = ?", "active").Find(&users) // Prevents updates but
 ```
 
 <a name="QueryBuilder.ForShareSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L597>)
+### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L598>)
 
 ```go
 func (qb *QueryBuilder) ForShareSkipLocked() *QueryBuilder
@@ -1731,7 +1567,7 @@ qb.Where("category = ?", "news").ForShareSkipLocked().Find(&articles)
 ```
 
 <a name="QueryBuilder.ForUpdate"></a>
-### func \(\*QueryBuilder\) [ForUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L551>)
+### func \(\*QueryBuilder\) [ForUpdate](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L552>)
 
 ```go
 func (qb *QueryBuilder) ForUpdate() *QueryBuilder
@@ -1749,7 +1585,7 @@ qb.ForUpdate().Where("status = ?", "pending").Find(&orders) // Locks all matchin
 ```
 
 <a name="QueryBuilder.ForUpdateNoWait"></a>
-### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L614>)
+### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L615>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateNoWait() *QueryBuilder
@@ -1766,7 +1602,7 @@ qb.Where("id = ?", accountID).ForUpdateNoWait().First(&account)
 ```
 
 <a name="QueryBuilder.ForUpdateSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L581>)
+### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L582>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateSkipLocked() *QueryBuilder
@@ -1784,7 +1620,7 @@ qb.ForUpdateSkipLocked().Where("processed = ?", false).First(&task)
 ```
 
 <a name="QueryBuilder.Group"></a>
-### func \(\*QueryBuilder\) [Group](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L199>)
+### func \(\*QueryBuilder\) [Group](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L200>)
 
 ```go
 func (qb *QueryBuilder) Group(query string) *QueryBuilder
@@ -1806,7 +1642,7 @@ qb.Group("department, location")
 ```
 
 <a name="QueryBuilder.Having"></a>
-### func \(\*QueryBuilder\) [Having](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L216>)
+### func \(\*QueryBuilder\) [Having](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L217>)
 
 ```go
 func (qb *QueryBuilder) Having(query interface{}, args ...interface{}) *QueryBuilder
@@ -1828,7 +1664,7 @@ qb.Group("department").Having("COUNT(*) > ?", 3)
 ```
 
 <a name="QueryBuilder.Joins"></a>
-### func \(\*QueryBuilder\) [Joins](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L128>)
+### func \(\*QueryBuilder\) [Joins](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L129>)
 
 ```go
 func (qb *QueryBuilder) Joins(query string, args ...interface{}) *QueryBuilder
@@ -1850,7 +1686,7 @@ qb.Joins("JOIN orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Last"></a>
-### func \(\*QueryBuilder\) [Last](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L365>)
+### func \(\*QueryBuilder\) [Last](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L366>)
 
 ```go
 func (qb *QueryBuilder) Last(dest interface{}) error
@@ -1872,7 +1708,7 @@ err := qb.Where("department = ?", "Engineering").Order("joined_at ASC").Last(&us
 ```
 
 <a name="QueryBuilder.LeftJoin"></a>
-### func \(\*QueryBuilder\) [LeftJoin](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L145>)
+### func \(\*QueryBuilder\) [LeftJoin](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L146>)
 
 ```go
 func (qb *QueryBuilder) LeftJoin(query string, args ...interface{}) *QueryBuilder
@@ -1894,7 +1730,7 @@ qb.LeftJoin("orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Limit"></a>
-### func \(\*QueryBuilder\) [Limit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L248>)
+### func \(\*QueryBuilder\) [Limit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L249>)
 
 ```go
 func (qb *QueryBuilder) Limit(limit int) *QueryBuilder
@@ -1929,7 +1765,7 @@ Parameters:
 - mapFn: A function that defines how to map rows from the database to your slice items
 
 <a name="QueryBuilder.Model"></a>
-### func \(\*QueryBuilder\) [Model](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L297>)
+### func \(\*QueryBuilder\) [Model](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L298>)
 
 ```go
 func (qb *QueryBuilder) Model(value interface{}) *QueryBuilder
@@ -1950,7 +1786,7 @@ qb.Model(&User{}).Where("active = ?", true).Count(&count)
 ```
 
 <a name="QueryBuilder.Not"></a>
-### func \(\*QueryBuilder\) [Not](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L111>)
+### func \(\*QueryBuilder\) [Not](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L112>)
 
 ```go
 func (qb *QueryBuilder) Not(query interface{}, args ...interface{}) *QueryBuilder
@@ -1972,7 +1808,7 @@ qb.Not("status = ?", "deleted")
 ```
 
 <a name="QueryBuilder.Offset"></a>
-### func \(\*QueryBuilder\) [Offset](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L264>)
+### func \(\*QueryBuilder\) [Offset](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L265>)
 
 ```go
 func (qb *QueryBuilder) Offset(offset int) *QueryBuilder
@@ -1993,7 +1829,7 @@ qb.Offset(20).Limit(10) // Skip 20 records and return the next 10
 ```
 
 <a name="QueryBuilder.OnConflict"></a>
-### func \(\*QueryBuilder\) [OnConflict](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L665>)
+### func \(\*QueryBuilder\) [OnConflict](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L666>)
 
 ```go
 func (qb *QueryBuilder) OnConflict(onConflict clause.OnConflict) *QueryBuilder
@@ -2017,7 +1853,7 @@ qb.OnConflict(clause.OnConflict{
 ```
 
 <a name="QueryBuilder.Or"></a>
-### func \(\*QueryBuilder\) [Or](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L94>)
+### func \(\*QueryBuilder\) [Or](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L95>)
 
 ```go
 func (qb *QueryBuilder) Or(query interface{}, args ...interface{}) *QueryBuilder
@@ -2039,7 +1875,7 @@ qb.Where("status = ?", "active").Or("status = ?", "pending")
 ```
 
 <a name="QueryBuilder.Order"></a>
-### func \(\*QueryBuilder\) [Order](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L233>)
+### func \(\*QueryBuilder\) [Order](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L234>)
 
 ```go
 func (qb *QueryBuilder) Order(value interface{}) *QueryBuilder
@@ -2061,7 +1897,7 @@ qb.Order("age ASC, name DESC")
 ```
 
 <a name="QueryBuilder.Pluck"></a>
-### func \(\*QueryBuilder\) [Pluck](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L456>)
+### func \(\*QueryBuilder\) [Pluck](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L457>)
 
 ```go
 func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error)
@@ -2091,7 +1927,7 @@ fmt.Printf("Found %d email addresses\n", rowsFound)
 ```
 
 <a name="QueryBuilder.Preload"></a>
-### func \(\*QueryBuilder\) [Preload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L182>)
+### func \(\*QueryBuilder\) [Preload](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L183>)
 
 ```go
 func (qb *QueryBuilder) Preload(query string, args ...interface{}) *QueryBuilder
@@ -2132,7 +1968,7 @@ func (qb *QueryBuilder) QueryRows() (RowsScanner, error)
 QueryRows executes a query that returns multiple rows and returns a RowsScanner for them. This method provides an iterator\-style interface for processing multiple rows returned by a query, allowing for efficient traversal of large result sets.
 
 <a name="QueryBuilder.Raw"></a>
-### func \(\*QueryBuilder\) [Raw](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L281>)
+### func \(\*QueryBuilder\) [Raw](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L282>)
 
 ```go
 func (qb *QueryBuilder) Raw(sql string, values ...interface{}) *QueryBuilder
@@ -2154,7 +1990,7 @@ qb.Raw("SELECT * FROM users WHERE created_at > ?", time.Now().AddDate(0, -1, 0))
 ```
 
 <a name="QueryBuilder.Returning"></a>
-### func \(\*QueryBuilder\) [Returning](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L683>)
+### func \(\*QueryBuilder\) [Returning](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L684>)
 
 ```go
 func (qb *QueryBuilder) Returning(columns ...string) *QueryBuilder
@@ -2176,7 +2012,7 @@ qb.Where("status = ?", "pending").Returning("*").Updates(map[string]interface{}{
 ```
 
 <a name="QueryBuilder.RightJoin"></a>
-### func \(\*QueryBuilder\) [RightJoin](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L163>)
+### func \(\*QueryBuilder\) [RightJoin](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L164>)
 
 ```go
 func (qb *QueryBuilder) RightJoin(query string, args ...interface{}) *QueryBuilder
@@ -2198,7 +2034,7 @@ qb.RightJoin("orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Scan"></a>
-### func \(\*QueryBuilder\) [Scan](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L314>)
+### func \(\*QueryBuilder\) [Scan](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L315>)
 
 ```go
 func (qb *QueryBuilder) Scan(dest interface{}) error
@@ -2229,7 +2065,7 @@ func (qb *QueryBuilder) ScanRow(dest interface{}) error
 ScanRow is a convenience method to scan a single row directly into a struct. This is a higher\-level alternative to QueryRow that automatically maps column values to struct fields based on naming conventions or field tags. It's useful when you need to map a row to a predefined data structure.
 
 <a name="QueryBuilder.Scopes"></a>
-### func \(\*QueryBuilder\) [Scopes](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L536>)
+### func \(\*QueryBuilder\) [Scopes](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L537>)
 
 ```go
 func (qb *QueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) *QueryBuilder
@@ -2260,7 +2096,7 @@ qb.Scopes(ActiveUsers).Count(&count)
 ```
 
 <a name="QueryBuilder.Select"></a>
-### func \(\*QueryBuilder\) [Select](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L59>)
+### func \(\*QueryBuilder\) [Select](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L60>)
 
 ```go
 func (qb *QueryBuilder) Select(query interface{}, args ...interface{}) *QueryBuilder
@@ -2283,7 +2119,7 @@ qb.Select("COUNT(*) as user_count")
 ```
 
 <a name="QueryBuilder.Table"></a>
-### func \(\*QueryBuilder\) [Table](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L494>)
+### func \(\*QueryBuilder\) [Table](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L495>)
 
 ```go
 func (qb *QueryBuilder) Table(name string) *QueryBuilder
@@ -2306,7 +2142,7 @@ qb.Table("user_stats").Select("department, COUNT(*) as count").Group("department
 ```
 
 <a name="QueryBuilder.Unscoped"></a>
-### func \(\*QueryBuilder\) [Unscoped](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L510>)
+### func \(\*QueryBuilder\) [Unscoped](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L511>)
 
 ```go
 func (qb *QueryBuilder) Unscoped() *QueryBuilder
@@ -2325,7 +2161,7 @@ qb.Unscoped().Count(&count) // Counts all records including soft-deleted
 ```
 
 <a name="QueryBuilder.Updates"></a>
-### func \(\*QueryBuilder\) [Updates](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L404>)
+### func \(\*QueryBuilder\) [Updates](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L405>)
 
 ```go
 func (qb *QueryBuilder) Updates(values interface{}) (int64, error)
@@ -2353,7 +2189,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Where"></a>
-### func \(\*QueryBuilder\) [Where](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L77>)
+### func \(\*QueryBuilder\) [Where](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/postgres/query_builder.go#L78>)
 
 ```go
 func (qb *QueryBuilder) Where(query interface{}, args ...interface{}) *QueryBuilder

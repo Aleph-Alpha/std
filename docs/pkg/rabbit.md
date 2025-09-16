@@ -29,9 +29,6 @@ import (
 	"sync"
 )
 
-// Create a logger
-log, _ := logger.NewLogger(logger.Config{Level: "info"})
-
 // Create a new RabbitMQ client
 client, err := rabbit.New(rabbit.Config{
 	Connection: rabbit.ConnectionConfig{
@@ -193,8 +190,6 @@ Thread Safety:
 
 All methods on the Rabbit type are safe for concurrent use by multiple goroutines, except for Close\(\) which should only be called once.
 
-Package rabbit is a generated GoMock package.
-
 ## Index
 
 - [Variables](<#variables>)
@@ -208,35 +203,241 @@ Package rabbit is a generated GoMock package.
   - [func \(rb \*ConsumerMessage\) Header\(\) map\[string\]interface\{\}](<#ConsumerMessage.Header>)
   - [func \(rb \*ConsumerMessage\) NackMsg\(requeue bool\) error](<#ConsumerMessage.NackMsg>)
 - [type DeadLetter](<#DeadLetter>)
-- [type Logger](<#Logger>)
+- [type ErrorCategory](<#ErrorCategory>)
 - [type Message](<#Message>)
-- [type MockLogger](<#MockLogger>)
-  - [func NewMockLogger\(ctrl \*gomock.Controller\) \*MockLogger](<#NewMockLogger>)
-  - [func \(m \*MockLogger\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Debug>)
-  - [func \(m \*MockLogger\) EXPECT\(\) \*MockLoggerMockRecorder](<#MockLogger.EXPECT>)
-  - [func \(m \*MockLogger\) Error\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Error>)
-  - [func \(m \*MockLogger\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Fatal>)
-  - [func \(m \*MockLogger\) Info\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Info>)
-  - [func \(m \*MockLogger\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Warn>)
-- [type MockLoggerMockRecorder](<#MockLoggerMockRecorder>)
-  - [func \(mr \*MockLoggerMockRecorder\) Debug\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Debug>)
-  - [func \(mr \*MockLoggerMockRecorder\) Error\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Error>)
-  - [func \(mr \*MockLoggerMockRecorder\) Fatal\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Fatal>)
-  - [func \(mr \*MockLoggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Info>)
-  - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
 - [type Rabbit](<#Rabbit>)
-  - [func NewClient\(config Config, logger Logger\) \*Rabbit](<#NewClient>)
-  - [func NewClientWithDI\(params RabbitParams\) \*Rabbit](<#NewClientWithDI>)
+  - [func NewClient\(config Config\) \(\*Rabbit, error\)](<#NewClient>)
+  - [func NewClientWithDI\(params RabbitParams\) \(\*Rabbit, error\)](<#NewClientWithDI>)
   - [func \(rb \*Rabbit\) Consume\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.Consume>)
   - [func \(rb \*Rabbit\) ConsumeDLQ\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.ConsumeDLQ>)
+  - [func \(r \*Rabbit\) GetErrorCategory\(err error\) ErrorCategory](<#Rabbit.GetErrorCategory>)
   - [func \(rb \*Rabbit\) GracefulShutdown\(\)](<#Rabbit.GracefulShutdown>)
+  - [func \(r \*Rabbit\) IsAlarmError\(err error\) bool](<#Rabbit.IsAlarmError>)
+  - [func \(r \*Rabbit\) IsAuthenticationError\(err error\) bool](<#Rabbit.IsAuthenticationError>)
+  - [func \(r \*Rabbit\) IsChannelError\(err error\) bool](<#Rabbit.IsChannelError>)
+  - [func \(r \*Rabbit\) IsConnectionError\(err error\) bool](<#Rabbit.IsConnectionError>)
+  - [func \(r \*Rabbit\) IsPermanentError\(err error\) bool](<#Rabbit.IsPermanentError>)
+  - [func \(r \*Rabbit\) IsResourceError\(err error\) bool](<#Rabbit.IsResourceError>)
+  - [func \(r \*Rabbit\) IsRetryableError\(err error\) bool](<#Rabbit.IsRetryableError>)
+  - [func \(r \*Rabbit\) IsTemporaryError\(err error\) bool](<#Rabbit.IsTemporaryError>)
   - [func \(rb \*Rabbit\) Publish\(ctx context.Context, msg \[\]byte, headers ...map\[string\]interface\{\}\) error](<#Rabbit.Publish>)
-  - [func \(rb \*Rabbit\) RetryConnection\(logger Logger, cfg Config\)](<#Rabbit.RetryConnection>)
+  - [func \(rb \*Rabbit\) RetryConnection\(cfg Config\)](<#Rabbit.RetryConnection>)
+  - [func \(r \*Rabbit\) TranslateError\(err error\) error](<#Rabbit.TranslateError>)
 - [type RabbitLifecycleParams](<#RabbitLifecycleParams>)
 - [type RabbitParams](<#RabbitParams>)
 
 
 ## Variables
+
+<a name="ErrConnectionFailed"></a>Common RabbitMQ error types that can be used by consumers of this package. These provide a standardized set of errors that abstract away the underlying AMQP\-specific error details.
+
+```go
+var (
+    // ErrConnectionFailed is returned when connection to RabbitMQ cannot be established
+    ErrConnectionFailed = errors.New("connection failed")
+
+    // ErrConnectionLost is returned when connection to RabbitMQ is lost
+    ErrConnectionLost = errors.New("connection lost")
+
+    // ErrConnectionClosed is returned when connection is closed
+    ErrConnectionClosed = errors.New("connection closed")
+
+    // ErrChannelClosed is returned when channel is closed
+    ErrChannelClosed = errors.New("channel closed")
+
+    // ErrChannelException is returned when channel encounters an exception
+    ErrChannelException = errors.New("channel exception")
+
+    // ErrAuthenticationFailed is returned when authentication fails
+    ErrAuthenticationFailed = errors.New("authentication failed")
+
+    // ErrAccessDenied is returned when access is denied to a resource
+    ErrAccessDenied = errors.New("access denied")
+
+    // ErrInsufficientPermissions is returned when user lacks necessary permissions
+    ErrInsufficientPermissions = errors.New("insufficient permissions")
+
+    // ErrInvalidCredentials is returned when credentials are invalid
+    ErrInvalidCredentials = errors.New("invalid credentials")
+
+    // ErrExchangeNotFound is returned when exchange doesn't exist
+    ErrExchangeNotFound = errors.New("exchange not found")
+
+    // ErrQueueNotFound is returned when queue doesn't exist
+    ErrQueueNotFound = errors.New("queue not found")
+
+    // ErrQueueEmpty is returned when queue is empty
+    ErrQueueEmpty = errors.New("queue empty")
+
+    // ErrQueueExists is returned when queue already exists with different properties
+    ErrQueueExists = errors.New("queue already exists")
+
+    // ErrExchangeExists is returned when exchange already exists with different properties
+    ErrExchangeExists = errors.New("exchange already exists")
+
+    // ErrResourceLocked is returned when resource is locked
+    ErrResourceLocked = errors.New("resource locked")
+
+    // ErrPreconditionFailed is returned when precondition check fails
+    ErrPreconditionFailed = errors.New("precondition failed")
+
+    // ErrInvalidArgument is returned when argument is invalid
+    ErrInvalidArgument = errors.New("invalid argument")
+
+    // ErrInvalidFrameFormat is returned when frame format is invalid
+    ErrInvalidFrameFormat = errors.New("invalid frame format")
+
+    // ErrInvalidFrameSize is returned when frame size is invalid
+    ErrInvalidFrameSize = errors.New("invalid frame size")
+
+    // ErrFrameError is returned for frame-related errors
+    ErrFrameError = errors.New("frame error")
+
+    // ErrSyntaxError is returned for syntax errors in AMQP protocol
+    ErrSyntaxError = errors.New("syntax error")
+
+    // ErrCommandInvalid is returned when command is invalid
+    ErrCommandInvalid = errors.New("command invalid")
+
+    // ErrChannelError is returned for channel-related errors
+    ErrChannelError = errors.New("channel error")
+
+    // ErrUnexpectedFrame is returned when unexpected frame is received
+    ErrUnexpectedFrame = errors.New("unexpected frame")
+
+    // ErrResourceError is returned for resource-related errors
+    ErrResourceError = errors.New("resource error")
+
+    // ErrNotAllowed is returned when operation is not allowed
+    ErrNotAllowed = errors.New("not allowed")
+
+    // ErrNotImplemented is returned when feature is not implemented
+    ErrNotImplemented = errors.New("not implemented")
+
+    // ErrInternalError is returned for internal errors
+    ErrInternalError = errors.New("internal error")
+
+    // ErrTimeout is returned when operation times out
+    ErrTimeout = errors.New("timeout")
+
+    // ErrNetworkError is returned for network-related errors
+    ErrNetworkError = errors.New("network error")
+
+    // ErrTLSError is returned for TLS/SSL errors
+    ErrTLSError = errors.New("TLS error")
+
+    // ErrCertificateError is returned for certificate-related errors
+    ErrCertificateError = errors.New("certificate error")
+
+    // ErrHandshakeFailed is returned when handshake fails
+    ErrHandshakeFailed = errors.New("handshake failed")
+
+    // ErrProtocolError is returned for protocol-related errors
+    ErrProtocolError = errors.New("protocol error")
+
+    // ErrVersionMismatch is returned when version mismatch occurs
+    ErrVersionMismatch = errors.New("version mismatch")
+
+    // ErrServerError is returned for server-side errors
+    ErrServerError = errors.New("server error")
+
+    // ErrClientError is returned for client-side errors
+    ErrClientError = errors.New("client error")
+
+    // ErrMessageTooLarge is returned when message exceeds size limits
+    ErrMessageTooLarge = errors.New("message too large")
+
+    // ErrInvalidMessage is returned when message format is invalid
+    ErrInvalidMessage = errors.New("invalid message")
+
+    // ErrMessageNacked is returned when message is negatively acknowledged
+    ErrMessageNacked = errors.New("message nacked")
+
+    // ErrMessageReturned is returned when message is returned by broker
+    ErrMessageReturned = errors.New("message returned")
+
+    // ErrPublishFailed is returned when publish operation fails
+    ErrPublishFailed = errors.New("publish failed")
+
+    // ErrConsumeFailed is returned when consume operation fails
+    ErrConsumeFailed = errors.New("consume failed")
+
+    // ErrAckFailed is returned when acknowledge operation fails
+    ErrAckFailed = errors.New("acknowledge failed")
+
+    // ErrNackFailed is returned when negative acknowledge operation fails
+    ErrNackFailed = errors.New("negative acknowledge failed")
+
+    // ErrRejectFailed is returned when reject operation fails
+    ErrRejectFailed = errors.New("reject failed")
+
+    // ErrQoSFailed is returned when QoS operation fails
+    ErrQoSFailed = errors.New("QoS failed")
+
+    // ErrBindFailed is returned when bind operation fails
+    ErrBindFailed = errors.New("bind failed")
+
+    // ErrUnbindFailed is returned when unbind operation fails
+    ErrUnbindFailed = errors.New("unbind failed")
+
+    // ErrDeclareFailed is returned when declare operation fails
+    ErrDeclareFailed = errors.New("declare failed")
+
+    // ErrDeleteFailed is returned when delete operation fails
+    ErrDeleteFailed = errors.New("delete failed")
+
+    // ErrPurgeFailed is returned when purge operation fails
+    ErrPurgeFailed = errors.New("purge failed")
+
+    // ErrTransactionFailed is returned when transaction fails
+    ErrTransactionFailed = errors.New("transaction failed")
+
+    // ErrCancelled is returned when operation is cancelled
+    ErrCancelled = errors.New("operation cancelled")
+
+    // ErrShutdown is returned when system is shutting down
+    ErrShutdown = errors.New("shutdown")
+
+    // ErrConfigurationError is returned for configuration-related errors
+    ErrConfigurationError = errors.New("configuration error")
+
+    // ErrVirtualHostNotFound is returned when virtual host doesn't exist
+    ErrVirtualHostNotFound = errors.New("virtual host not found")
+
+    // ErrUserNotFound is returned when user doesn't exist
+    ErrUserNotFound = errors.New("user not found")
+
+    // ErrClusterError is returned for cluster-related errors
+    ErrClusterError = errors.New("cluster error")
+
+    // ErrNodeDown is returned when node is down
+    ErrNodeDown = errors.New("node down")
+
+    // ErrMemoryAlarm is returned when memory alarm is triggered
+    ErrMemoryAlarm = errors.New("memory alarm")
+
+    // ErrDiskAlarm is returned when disk alarm is triggered
+    ErrDiskAlarm = errors.New("disk alarm")
+
+    // ErrResourceAlarm is returned when resource alarm is triggered
+    ErrResourceAlarm = errors.New("resource alarm")
+
+    // ErrFlowControl is returned when flow control is active
+    ErrFlowControl = errors.New("flow control")
+
+    // ErrQuotaExceeded is returned when quota is exceeded
+    ErrQuotaExceeded = errors.New("quota exceeded")
+
+    // ErrRateLimit is returned when rate limit is exceeded
+    ErrRateLimit = errors.New("rate limit exceeded")
+
+    // ErrBackpressure is returned when backpressure is applied
+    ErrBackpressure = errors.New("backpressure")
+
+    // ErrUnknownError is returned for unknown/unhandled errors
+    ErrUnknownError = errors.New("unknown error")
+)
+```
 
 <a name="FXModule"></a>FXModule is an fx.Module that provides and configures the RabbitMQ client. This module registers the RabbitMQ client with the Fx dependency injection framework, making it available to other components in the application.
 
@@ -389,7 +590,7 @@ type Connection struct {
 ```
 
 <a name="ConsumerMessage"></a>
-## type [ConsumerMessage](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L47-L50>)
+## type [ConsumerMessage](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L48-L51>)
 
 ConsumerMessage implements the Message interface and wraps an AMQP delivery. This struct provides access to the message content and acknowledgment methods.
 
@@ -400,7 +601,7 @@ type ConsumerMessage struct {
 ```
 
 <a name="ConsumerMessage.AckMsg"></a>
-### func \(\*ConsumerMessage\) [AckMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L296>)
+### func \(\*ConsumerMessage\) [AckMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L287>)
 
 ```go
 func (rb *ConsumerMessage) AckMsg() error
@@ -411,7 +612,7 @@ AckMsg acknowledges the message, informing RabbitMQ that the message has been su
 Returns an error if the acknowledgment fails.
 
 <a name="ConsumerMessage.Body"></a>
-### func \(\*ConsumerMessage\) [Body](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L313>)
+### func \(\*ConsumerMessage\) [Body](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L304>)
 
 ```go
 func (rb *ConsumerMessage) Body() []byte
@@ -420,7 +621,7 @@ func (rb *ConsumerMessage) Body() []byte
 Body returns the message payload as a byte slice.
 
 <a name="ConsumerMessage.Header"></a>
-### func \(\*ConsumerMessage\) [Header](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L351>)
+### func \(\*ConsumerMessage\) [Header](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L342>)
 
 ```go
 func (rb *ConsumerMessage) Header() map[string]interface{}
@@ -463,7 +664,7 @@ for msg := range msgChan {
 ```
 
 <a name="ConsumerMessage.NackMsg"></a>
-### func \(\*ConsumerMessage\) [NackMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L308>)
+### func \(\*ConsumerMessage\) [NackMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L299>)
 
 ```go
 func (rb *ConsumerMessage) NackMsg(requeue bool) error
@@ -501,32 +702,39 @@ type DeadLetter struct {
 }
 ```
 
-<a name="Logger"></a>
-## type [Logger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L18-L33>)
+<a name="ErrorCategory"></a>
+## type [ErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L687>)
 
-Logger defines the interface for logging operations in the rabbit package. This interface allows the package to use any logging implementation that conforms to these methods.
+ErrorCategory represents different categories of RabbitMQ errors
 
 ```go
-type Logger interface {
-    // Info logs informational messages, optionally with error and contextual fields
-    Info(msg string, err error, fields ...map[string]interface{})
+type ErrorCategory int
+```
 
-    // Debug logs debug-level messages, optionally with error and contextual fields
-    Debug(msg string, err error, fields ...map[string]interface{})
+<a name="CategoryUnknown"></a>
 
-    // Warn logs warning messages, optionally with error and contextual fields
-    Warn(msg string, err error, fields ...map[string]interface{})
-
-    // Error logs error messages with the associated error and optional contextual fields
-    Error(msg string, err error, fields ...map[string]interface{})
-
-    // Fatal logs critical errors that should terminate the application
-    Fatal(msg string, err error, fields ...map[string]interface{})
-}
+```go
+const (
+    CategoryUnknown ErrorCategory = iota
+    CategoryConnection
+    CategoryChannel
+    CategoryAuthentication
+    CategoryPermission
+    CategoryResource
+    CategoryMessage
+    CategoryProtocol
+    CategoryNetwork
+    CategoryServer
+    CategoryConfiguration
+    CategoryCluster
+    CategoryOperation
+    CategoryAlarm
+    CategoryTimeout
+)
 ```
 
 <a name="Message"></a>
-## type [Message](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L14-L43>)
+## type [Message](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L15-L44>)
 
 Message defines the interface for consumed messages from RabbitMQ. This interface abstracts the underlying AMQP message structure and provides methods for acknowledging or rejecting messages.
 
@@ -563,138 +771,8 @@ type Message interface {
 }
 ```
 
-<a name="MockLogger"></a>
-## type [MockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L19-L23>)
-
-MockLogger is a mock of Logger interface.
-
-```go
-type MockLogger struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewMockLogger"></a>
-### func [NewMockLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L31>)
-
-```go
-func NewMockLogger(ctrl *gomock.Controller) *MockLogger
-```
-
-NewMockLogger creates a new mock instance.
-
-<a name="MockLogger.Debug"></a>
-### func \(\*MockLogger\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L43>)
-
-```go
-func (m *MockLogger) Debug(msg string, err error, fields ...map[string]any)
-```
-
-Debug mocks base method.
-
-<a name="MockLogger.EXPECT"></a>
-### func \(\*MockLogger\) [EXPECT](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L38>)
-
-```go
-func (m *MockLogger) EXPECT() *MockLoggerMockRecorder
-```
-
-EXPECT returns an object that allows the caller to indicate expected use.
-
-<a name="MockLogger.Error"></a>
-### func \(\*MockLogger\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L60>)
-
-```go
-func (m *MockLogger) Error(msg string, err error, fields ...map[string]any)
-```
-
-Error mocks base method.
-
-<a name="MockLogger.Fatal"></a>
-### func \(\*MockLogger\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L77>)
-
-```go
-func (m *MockLogger) Fatal(msg string, err error, fields ...map[string]any)
-```
-
-Fatal mocks base method.
-
-<a name="MockLogger.Info"></a>
-### func \(\*MockLogger\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L94>)
-
-```go
-func (m *MockLogger) Info(msg string, err error, fields ...map[string]any)
-```
-
-Info mocks base method.
-
-<a name="MockLogger.Warn"></a>
-### func \(\*MockLogger\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L111>)
-
-```go
-func (m *MockLogger) Warn(msg string, err error, fields ...map[string]any)
-```
-
-Warn mocks base method.
-
-<a name="MockLoggerMockRecorder"></a>
-## type [MockLoggerMockRecorder](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L26-L28>)
-
-MockLoggerMockRecorder is the mock recorder for MockLogger.
-
-```go
-type MockLoggerMockRecorder struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="MockLoggerMockRecorder.Debug"></a>
-### func \(\*MockLoggerMockRecorder\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L53>)
-
-```go
-func (mr *MockLoggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Call
-```
-
-Debug indicates an expected call of Debug.
-
-<a name="MockLoggerMockRecorder.Error"></a>
-### func \(\*MockLoggerMockRecorder\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L70>)
-
-```go
-func (mr *MockLoggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Call
-```
-
-Error indicates an expected call of Error.
-
-<a name="MockLoggerMockRecorder.Fatal"></a>
-### func \(\*MockLoggerMockRecorder\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L87>)
-
-```go
-func (mr *MockLoggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Call
-```
-
-Fatal indicates an expected call of Fatal.
-
-<a name="MockLoggerMockRecorder.Info"></a>
-### func \(\*MockLoggerMockRecorder\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L104>)
-
-```go
-func (mr *MockLoggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
-```
-
-Info indicates an expected call of Info.
-
-<a name="MockLoggerMockRecorder.Warn"></a>
-### func \(\*MockLoggerMockRecorder\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/mock_logger.go#L121>)
-
-```go
-func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
-```
-
-Warn indicates an expected call of Warn.
-
 <a name="Rabbit"></a>
-## type [Rabbit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L38-L59>)
+## type [Rabbit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L18-L36>)
 
 Rabbit represents a client for interacting with RabbitMQ. It manages connections, channels, and provides methods for publishing and consuming messages with automatic reconnection capabilities.
 
@@ -709,10 +787,10 @@ type Rabbit struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L76>)
+### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L53>)
 
 ```go
-func NewClient(config Config, logger Logger) *Rabbit
+func NewClient(config Config) (*Rabbit, error)
 ```
 
 NewClient creates and initializes a new RabbitMQ client with the provided configuration. This function establishes the initial connection to RabbitMQ, sets up channels, and configures exchanges and queues as specified in the configuration.
@@ -732,10 +810,10 @@ defer client.Close()
 ```
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L67>)
+### func [NewClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L68>)
 
 ```go
-func NewClientWithDI(params RabbitParams) *Rabbit
+func NewClientWithDI(params RabbitParams) (*Rabbit, error)
 ```
 
 NewClientWithDI creates a new RabbitMQ client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where dependencies are automatically provided via the RabbitParams struct.
@@ -767,7 +845,7 @@ app := fx.New(
 Under the hood, this function simply delegates to the standard NewClient function, making it easier to integrate with dependency injection frameworks while maintaining the same initialization logic.
 
 <a name="Rabbit.Consume"></a>
-### func \(\*Rabbit\) [Consume](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L158>)
+### func \(\*Rabbit\) [Consume](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L153>)
 
 ```go
 func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -802,7 +880,7 @@ for msg := range msgChan {
 ```
 
 <a name="Rabbit.ConsumeDLQ"></a>
-### func \(\*Rabbit\) [ConsumeDLQ](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L187>)
+### func \(\*Rabbit\) [ConsumeDLQ](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L182>)
 
 ```go
 func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -834,6 +912,15 @@ for msg := range dlqChan {
 }
 ```
 
+<a name="Rabbit.GetErrorCategory"></a>
+### func \(\*Rabbit\) [GetErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L708>)
+
+```go
+func (r *Rabbit) GetErrorCategory(err error) ErrorCategory
+```
+
+GetErrorCategory returns the category of the given error
+
 <a name="Rabbit.GracefulShutdown"></a>
 ### func \(\*Rabbit\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L135>)
 
@@ -847,8 +934,80 @@ The shutdown process: 1. Signals all goroutines to stop by closing the shutdownS
 
 Any errors during shutdown are logged but not propagated, as they typically cannot be handled at this stage of application shutdown.
 
+<a name="Rabbit.IsAlarmError"></a>
+### func \(\*Rabbit\) [IsAlarmError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L860>)
+
+```go
+func (r *Rabbit) IsAlarmError(err error) bool
+```
+
+IsAlarmError returns true if the error is alarm\-related
+
+<a name="Rabbit.IsAuthenticationError"></a>
+### func \(\*Rabbit\) [IsAuthenticationError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L831>)
+
+```go
+func (r *Rabbit) IsAuthenticationError(err error) bool
+```
+
+IsAuthenticationError returns true if the error is authentication\-related
+
+<a name="Rabbit.IsChannelError"></a>
+### func \(\*Rabbit\) [IsChannelError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L819>)
+
+```go
+func (r *Rabbit) IsChannelError(err error) bool
+```
+
+IsChannelError returns true if the error is channel\-related
+
+<a name="Rabbit.IsConnectionError"></a>
+### func \(\*Rabbit\) [IsConnectionError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L807>)
+
+```go
+func (r *Rabbit) IsConnectionError(err error) bool
+```
+
+IsConnectionError returns true if the error is connection\-related
+
+<a name="Rabbit.IsPermanentError"></a>
+### func \(\*Rabbit\) [IsPermanentError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L780>)
+
+```go
+func (r *Rabbit) IsPermanentError(err error) bool
+```
+
+IsPermanentError returns true if the error is permanent and should not be retried
+
+<a name="Rabbit.IsResourceError"></a>
+### func \(\*Rabbit\) [IsResourceError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L844>)
+
+```go
+func (r *Rabbit) IsResourceError(err error) bool
+```
+
+IsResourceError returns true if the error is resource\-related
+
+<a name="Rabbit.IsRetryableError"></a>
+### func \(\*Rabbit\) [IsRetryableError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L744>)
+
+```go
+func (r *Rabbit) IsRetryableError(err error) bool
+```
+
+IsRetryableError returns true if the error is retryable
+
+<a name="Rabbit.IsTemporaryError"></a>
+### func \(\*Rabbit\) [IsTemporaryError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L771>)
+
+```go
+func (r *Rabbit) IsTemporaryError(err error) bool
+```
+
+IsTemporaryError returns true if the error is temporary
+
 <a name="Rabbit.Publish"></a>
-### func \(\*Rabbit\) [Publish](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L246>)
+### func \(\*Rabbit\) [Publish](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L241>)
 
 ```go
 func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error
@@ -914,10 +1073,10 @@ log.Println("Message published successfully with trace context")
 ```
 
 <a name="Rabbit.RetryConnection"></a>
-### func \(\*Rabbit\) [RetryConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L267>)
+### func \(\*Rabbit\) [RetryConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L229>)
 
 ```go
-func (rb *Rabbit) RetryConnection(logger Logger, cfg Config)
+func (rb *Rabbit) RetryConnection(cfg Config)
 ```
 
 RetryConnection continuously monitors the RabbitMQ connection and automatically re\-establishes it if it fails. This method is typically run in a goroutine.
@@ -936,8 +1095,19 @@ The method will:
 
 This provides resilience against network issues and RabbitMQ server restarts.
 
+<a name="Rabbit.TranslateError"></a>
+### func \(\*Rabbit\) [TranslateError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L227>)
+
+```go
+func (r *Rabbit) TranslateError(err error) error
+```
+
+TranslateError converts AMQP/RabbitMQ\-specific errors into standardized application errors. This function provides abstraction from the underlying AMQP implementation details, allowing application code to handle errors in a RabbitMQ\-agnostic way.
+
+It maps common RabbitMQ errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
+
 <a name="RabbitLifecycleParams"></a>
-## type [RabbitLifecycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L72-L79>)
+## type [RabbitLifecycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L73-L79>)
 
 RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
 
@@ -947,13 +1117,12 @@ type RabbitLifecycleParams struct {
 
     Lifecycle fx.Lifecycle
     Client    *Rabbit
-    Logger    Logger
     Config    Config
 }
 ```
 
 <a name="RabbitParams"></a>
-## type [RabbitParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L31-L36>)
+## type [RabbitParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L33-L37>)
 
 RabbitParams groups the dependencies needed to create a Rabbit client
 
@@ -962,7 +1131,6 @@ type RabbitParams struct {
     fx.In
 
     Config Config
-    Logger Logger
 }
 ```
 
