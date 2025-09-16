@@ -2,8 +2,9 @@ package minio
 
 import (
 	"context"
-	"go.uber.org/fx"
 	"sync"
+
+	"go.uber.org/fx"
 )
 
 // FXModule is an fx.Module that provides and configures the MinIO client.
@@ -31,11 +32,10 @@ type MinioParams struct {
 	fx.In
 
 	Config
-	Logger
 }
 
 func NewMinioClientWithDI(params MinioParams) (*Minio, error) {
-	return NewClient(params.Config, params.Logger)
+	return NewClient(params.Config)
 }
 
 type MinioLifeCycleParams struct {
@@ -43,7 +43,6 @@ type MinioLifeCycleParams struct {
 
 	Lifecycle fx.Lifecycle
 	Minio     *Minio
-	Logger    Logger
 }
 
 // RegisterLifecycle registers the MinIO client with the fx lifecycle system.
@@ -64,7 +63,7 @@ type MinioLifeCycleParams struct {
 func RegisterLifecycle(params MinioLifeCycleParams) {
 
 	if params.Minio == nil {
-		params.Logger.Fatal("MinIO client is nil, cannot register lifecycle hooks", nil, nil)
+		logger.Fatal("MinIO client is nil, cannot register lifecycle hooks")
 		return
 	}
 
@@ -88,7 +87,7 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 		},
 		OnStop: func(ctx context.Context) error {
 
-			params.Logger.Info("closing minio client...", nil, nil)
+			logger.Printf("INFO: closing minio client...")
 			params.Minio.GracefulShutdown()
 
 			wg.Wait()

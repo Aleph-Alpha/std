@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -11,26 +13,8 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// Logger defines the interface for logging operations within the MinIO client.
-// This interface allows for dependency injection of any compatible logger implementation.
-//
-//go:generate mockgen -source=setup.go -destination=mock_logger.go -package=minio
-type Logger interface {
-	// Info logs informational messages with optional error and additional fields
-	Info(msg string, err error, fields ...map[string]interface{})
-
-	// Debug logs debug-level messages with optional error and additional fields
-	Debug(msg string, err error, fields ...map[string]interface{})
-
-	// Warn logs warning messages with optional error and additional fields
-	Warn(msg string, err error, fields ...map[string]interface{})
-
-	// Error logs error messages with the associated error and optional additional fields
-	Error(msg string, err error, fields ...map[string]interface{})
-
-	// Fatal logs critical error messages that typically require immediate attention
-	Fatal(msg string, err error, fields ...map[string]interface{})
-}
+// Package-level logger initialized once
+var logger = log.New(os.Stdout, "[MINIO] ", log.LstdFlags|log.Lshortfile)
 
 // Minio represents a MinIO client with additional functionality.
 // It wraps the standard MinIO client with features for connection management,
@@ -44,9 +28,6 @@ type Minio struct {
 
 	// cfg holds the configuration for this MinIO client instance
 	cfg Config
-
-	// logger is used for logging operations and errors
-	logger Logger
 
 	// mu provides thread-safety for client operations
 	mu sync.RWMutex
@@ -119,27 +100,20 @@ func (bp *BufferPool) Put(b *bytes.Buffer) {
 //	if err != nil {
 //	    return fmt.Errorf("failed to initialize MinIO client: %w", err)
 //	}
-func NewClient(config Config, logger Logger) (*Minio, error) {
+func NewClient(config Config) (*Minio, error) {
 	// Create the standard client
-	client, err := connectToMinio(config, logger)
+	client, err := connectToMinio(config)
 	if err != nil {
-		logger.Error("failed to connect to minio", err, map[string]interface{}{
-			"endpoint": config.Connection.Endpoint,
-			"region":   config.Connection.Region,
-			"secure":   config.Connection.UseSSL,
-			"bucket":   config.Connection.BucketName,
-		})
+		logger.Printf("ERROR: failed to connect to minio: %v (endpoint=%s, region=%s, secure=%t, bucket=%s)",
+			err, config.Connection.Endpoint, config.Connection.Region, config.Connection.UseSSL, config.Connection.BucketName)
 		return nil, err
 	}
 
 	// Create the core client using the same connection parameters
-	coreClient, err := connectToMinioCore(config, logger)
+	coreClient, err := connectToMinioCore(config)
 	if err != nil {
-		logger.Error("failed to create core minio client", err, map[string]interface{}{
-			"endpoint": config.Connection.Endpoint,
-			"region":   config.Connection.Region,
-			"secure":   config.Connection.UseSSL,
-		})
+		logger.Printf("ERROR: failed to create core minio client: %v (endpoint=%s, region=%s, secure=%t)",
+			err, config.Connection.Endpoint, config.Connection.Region, config.Connection.UseSSL)
 		return nil, err
 	}
 
@@ -147,7 +121,6 @@ func NewClient(config Config, logger Logger) (*Minio, error) {
 		Client:          client,
 		CoreClient:      coreClient,
 		cfg:             config,
-		logger:          logger,
 		shutdownSignal:  make(chan struct{}),
 		reconnectSignal: make(chan error),
 		bufferPool:      NewBufferPool(),
@@ -156,21 +129,13 @@ func NewClient(config Config, logger Logger) (*Minio, error) {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := minioClient.validateConnection(timeoutCtx); err != nil {
-		logger.Error("failed to validate minio connection", err, map[string]interface{}{
-			"endpoint": config.Connection.Endpoint,
-			"region":   config.Connection.Region,
-			"secure":   config.Connection.UseSSL,
-			"bucket":   config.Connection.BucketName,
-		})
+		logger.Printf("ERROR: failed to validate minio connection: %v (endpoint=%s, region=%s, secure=%t, bucket=%s)",
+			err, config.Connection.Endpoint, config.Connection.Region, config.Connection.UseSSL, config.Connection.BucketName)
 		return nil, err
 	}
 	if err := minioClient.ensureBucketExists(timeoutCtx); err != nil {
-		logger.Error("failed to verify bucket", err, map[string]interface{}{
-			"endpoint": config.Connection.Endpoint,
-			"region":   config.Connection.Region,
-			"secure":   config.Connection.UseSSL,
-			"bucket":   config.Connection.BucketName,
-		})
+		logger.Printf("ERROR: failed to verify bucket: %v (endpoint=%s, region=%s, secure=%t, bucket=%s)",
+			err, config.Connection.Endpoint, config.Connection.Region, config.Connection.UseSSL, config.Connection.BucketName)
 		return nil, err
 	}
 
@@ -199,9 +164,7 @@ func (m *Minio) monitorConnection(ctx context.Context) {
 			cancel()
 
 			if err != nil {
-				m.logger.Error("MinIO connection health check failed", err, map[string]interface{}{
-					"endpoint": m.cfg.Connection.Endpoint,
-				})
+				logger.Printf("ERROR: MinIO connection health check failed: %v (endpoint=%s)", err, m.cfg.Connection.Endpoint)
 
 				// Signal connection problem to the retry goroutine
 				select {
@@ -233,27 +196,25 @@ outerLoop:
 	for {
 		select {
 		case <-m.shutdownSignal:
-			m.logger.Info("Stopping MinIO connection retry loop due to shutdown signal", nil, nil)
+			logger.Printf("INFO: Stopping MinIO connection retry loop due to shutdown signal")
 			return
 
 		case <-ctx.Done():
-			m.logger.Info("Stopping MinIO connection retry loop due to context cancellation", nil, nil)
+			logger.Printf("INFO: Stopping MinIO connection retry loop due to context cancellation")
 			return
 
 		case err := <-m.reconnectSignal:
-			m.logger.Warn("MinIO connection issue detected, attempting reconnection", err, map[string]interface{}{
-				"endpoint": m.cfg.Connection.Endpoint,
-			})
+			logger.Printf("WARNING: MinIO connection issue detected, attempting reconnection: %v (endpoint=%s)", err, m.cfg.Connection.Endpoint)
 
 		reconnectLoop:
 			for {
 				select {
 				case <-m.shutdownSignal:
-					m.logger.Info("Stopping MinIO connection retry loop during reconnection due to shutdown signal", nil, nil)
+					logger.Printf("INFO: Stopping MinIO connection retry loop during reconnection due to shutdown signal")
 					return
 
 				case <-ctx.Done():
-					m.logger.Info("Stopping MinIO connection retry loop during reconnection due to context cancellation", nil, nil)
+					logger.Printf("INFO: Stopping MinIO connection retry loop during reconnection due to context cancellation")
 					return
 
 				default:
@@ -261,24 +222,18 @@ outerLoop:
 					ctxReconnect, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 					// Attempt to create new clients
-					newClient, err := connectToMinio(m.cfg, m.logger)
+					newClient, err := connectToMinio(m.cfg)
 					if err != nil {
 						cancel() // Cancel the context to free resources
-						m.logger.Error("MinIO reconnection failed", err, map[string]interface{}{
-							"endpoint":      m.cfg.Connection.Endpoint,
-							"will_retry_in": "1 second",
-						})
+						logger.Printf("ERROR: MinIO reconnection failed: %v (endpoint=%s, will_retry_in=1s)", err, m.cfg.Connection.Endpoint)
 						time.Sleep(time.Second)
 						continue reconnectLoop
 					}
 
-					newCoreClient, err := connectToMinioCore(m.cfg, m.logger)
+					newCoreClient, err := connectToMinioCore(m.cfg)
 					if err != nil {
 						cancel() // Cancel the context to free resources
-						m.logger.Error("MinIO core client reconnection failed", err, map[string]interface{}{
-							"endpoint":      m.cfg.Connection.Endpoint,
-							"will_retry_in": "1 second",
-						})
+						logger.Printf("ERROR: MinIO core client reconnection failed: %v (endpoint=%s, will_retry_in=1s)", err, m.cfg.Connection.Endpoint)
 						time.Sleep(time.Second)
 						continue reconnectLoop
 					}
@@ -291,7 +246,7 @@ outerLoop:
 					err = m.validateConnection(ctxReconnect)
 					if err != nil {
 						cancel() // Cancel the context to free resources
-						m.logger.Error("MinIO connection validation failed", err, nil)
+						logger.Printf("ERROR: MinIO connection validation failed: %v", err)
 						time.Sleep(time.Second)
 						continue reconnectLoop
 					}
@@ -307,15 +262,12 @@ outerLoop:
 					cancel() // Cancel the context to free resources
 
 					if err != nil {
-						m.logger.Error("Failed to verify bucket after reconnection", err, nil)
+						logger.Printf("ERROR: Failed to verify bucket after reconnection: %v", err)
 						time.Sleep(time.Second)
 						continue reconnectLoop
 					}
 
-					m.logger.Info("Successfully reconnected to MinIO", nil, map[string]interface{}{
-						"endpoint": m.cfg.Connection.Endpoint,
-						"bucket":   m.cfg.Connection.BucketName,
-					})
+					logger.Printf("INFO: Successfully reconnected to MinIO (endpoint=%s, bucket=%s)", m.cfg.Connection.Endpoint, m.cfg.Connection.BucketName)
 					continue outerLoop
 				}
 			}
@@ -331,19 +283,13 @@ outerLoop:
 //   - logger: Logger for recording operations and errors
 //
 // Returns a configured MinIO client or an error if the connection fails.
-func connectToMinio(cfg Config, logger Logger) (*minio.Client, error) {
+func connectToMinio(cfg Config) (*minio.Client, error) {
 	// Add validation for an empty endpoint
 	if cfg.Connection.Endpoint == "" {
 		return nil, fmt.Errorf("minio endpoint cannot be empty")
 	}
 
-	connectionFields := map[string]interface{}{
-		"endpoint": cfg.Connection.Endpoint,
-		"region":   cfg.Connection.Region,
-		"secure":   cfg.Connection.UseSSL,
-	}
-
-	logger.Info("Connecting to MinIO", nil, connectionFields)
+	logger.Printf("INFO: Connecting to MinIO (endpoint=%s, region=%s, secure=%t)", cfg.Connection.Endpoint, cfg.Connection.Region, cfg.Connection.UseSSL)
 
 	client, err := minio.New(cfg.Connection.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.Connection.AccessKeyID, cfg.Connection.SecretAccessKey, ""),
@@ -365,20 +311,13 @@ func connectToMinio(cfg Config, logger Logger) (*minio.Client, error) {
 //   - logger: Logger for recording operations and errors
 //
 // Returns a configured MinIO Core client or an error if the connection fails.
-func connectToMinioCore(cfg Config, logger Logger) (*minio.Core, error) {
+func connectToMinioCore(cfg Config) (*minio.Core, error) {
 	// Add validation for an empty endpoint
 	if cfg.Connection.Endpoint == "" {
 		return nil, fmt.Errorf("minio endpoint cannot be empty")
 	}
 
-	connectionFields := map[string]interface{}{
-		"endpoint": cfg.Connection.Endpoint,
-		"region":   cfg.Connection.Region,
-		"secure":   cfg.Connection.UseSSL,
-		"type":     "core client",
-	}
-
-	logger.Info("Creating MinIO Core client", nil, connectionFields)
+	logger.Printf("INFO: Creating MinIO Core client (endpoint=%s, region=%s, secure=%t, type=core client)", cfg.Connection.Endpoint, cfg.Connection.Region, cfg.Connection.UseSSL)
 
 	coreClient, err := minio.NewCore(cfg.Connection.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.Connection.AccessKeyID, cfg.Connection.SecretAccessKey, ""),
@@ -437,10 +376,7 @@ func (m *Minio) ensureBucketExists(ctx context.Context) error {
 	}
 
 	if !exists && m.cfg.Connection.AccessBucketCreation {
-		m.logger.Info("Bucket does not exist, creating it", nil, map[string]interface{}{
-			"bucket": bucketName,
-			"region": m.cfg.Connection.Region,
-		})
+		logger.Printf("INFO: Bucket does not exist, creating it (bucket=%s, region=%s)", bucketName, m.cfg.Connection.Region)
 
 		err = m.Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{
 			Region: m.cfg.Connection.Region,
@@ -450,9 +386,7 @@ func (m *Minio) ensureBucketExists(ctx context.Context) error {
 			return err
 		}
 
-		m.logger.Info("Successfully created bucket", nil, map[string]interface{}{
-			"bucket": bucketName,
-		})
+		logger.Printf("INFO: Successfully created bucket (bucket=%s)", bucketName)
 	} else if !exists {
 		return fmt.Errorf("bucket does not exist, please create it manually")
 	}

@@ -3,8 +3,9 @@ package minio
 import (
 	"context"
 	"fmt"
-	"github.com/minio/minio-go/v7"
 	"io"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // Put uploads an object to the specified bucket.
@@ -86,7 +87,7 @@ func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error) {
 	defer func(reader io.ReadCloser) {
 		err := reader.Close()
 		if err != nil {
-			m.logger.Error("failed to close object reader", err, map[string]interface{}{})
+			logger.Printf("ERROR: Failed to close object reader: %v\n", err)
 		}
 	}(reader)
 
@@ -156,7 +157,7 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 		}
 		defer func() {
 			if err := reader.Close(); err != nil {
-				m.logger.Error("failed to close object reader", err, nil)
+				logger.Printf("ERROR: Failed to close object reader: %v\n", err)
 			}
 		}()
 
