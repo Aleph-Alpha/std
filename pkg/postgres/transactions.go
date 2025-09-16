@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+
 	"gorm.io/gorm"
 )
 
@@ -14,7 +15,6 @@ func (p *Postgres) cloneWithTx(tx *gorm.DB) *Postgres {
 	return &Postgres{
 		Client:          tx,
 		cfg:             p.cfg,
-		logger:          p.logger,
 		mu:              p.mu, // shared mutex is fine
 		shutdownSignal:  p.shutdownSignal,
 		retryChanSignal: p.retryChanSignal,

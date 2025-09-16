@@ -2,8 +2,9 @@ package postgres
 
 import (
 	"context"
-	"go.uber.org/fx"
 	"sync"
+
+	"go.uber.org/fx"
 )
 
 // FXModule is an fx module that provides the Postgres database component.
@@ -27,7 +28,6 @@ type PostgresParams struct {
 	fx.In
 
 	Config Config
-	Logger Logger
 }
 
 // NewPostgresClientWithDI creates a new Postgres Client using dependency injection.
@@ -58,8 +58,8 @@ type PostgresParams struct {
 //
 // This function delegates to the standard NewPostgres function, maintaining the same
 // initialization logic while enabling seamless integration with dependency injection.
-func NewPostgresClientWithDI(params PostgresParams) *Postgres {
-	return NewPostgres(params.Config, params.Logger)
+func NewPostgresClientWithDI(params PostgresParams) (*Postgres, error) {
+	return NewPostgres(params.Config)
 }
 
 // PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management.
@@ -74,7 +74,6 @@ type PostgresLifeCycleParams struct {
 
 	Lifecycle fx.Lifecycle
 	Postgres  *Postgres
-	Logger    Logger
 }
 
 // RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database component.
@@ -98,7 +97,7 @@ func RegisterPostgresLifecycle(params PostgresLifeCycleParams) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				params.Postgres.RetryConnection(ctx, params.Logger)
+				params.Postgres.RetryConnection(ctx)
 			}()
 
 			return nil

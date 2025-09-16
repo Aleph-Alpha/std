@@ -3,24 +3,13 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"log"
 	"sync"
 	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
-
-// Logger defines the interface for logging operations within the postgres package.
-// It provides methods for different logging levels to track database operations,
-// connection status, and error handling.
-
-//go:generate mockgen -source=setup.go -destination=mock_logger.go -package=postgres
-type Logger interface {
-	Info(msg string, err error, fields ...map[string]interface{})
-	Debug(msg string, err error, fields ...map[string]interface{})
-	Warn(msg string, err error, fields ...map[string]interface{})
-	Error(msg string, err error, fields ...map[string]interface{})
-	Fatal(msg string, err error, fields ...map[string]interface{})
-}
 
 // Postgres is a thread-safe wrapper around gorm.DB that provides connection monitoring,
 // automatic reconnection, and standardized database operations.
@@ -29,7 +18,6 @@ type Logger interface {
 type Postgres struct {
 	Client          *gorm.DB
 	cfg             Config
-	logger          Logger
 	mu              *sync.RWMutex
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
@@ -42,27 +30,26 @@ type Postgres struct {
 // It establishes the initial database connection and sets up the internal state
 // for connection monitoring and recovery. If the initial connection fails,
 // it logs a fatal error and terminates.
-func NewPostgres(cfg Config, logger Logger) *Postgres {
-	conn, err := connectToPostgres(logger, cfg)
+func NewPostgres(cfg Config) (*Postgres, error) {
+	conn, err := connectToPostgres(cfg)
 	if err != nil {
-		logger.Fatal("error in connecting to postgres after all retries", nil, nil)
+		return nil, fmt.Errorf("error in connecting to postgres after all retries: %w", err)
 	}
 
 	return &Postgres{
 		Client:          conn,
 		cfg:             cfg,
-		logger:          logger,
 		mu:              &sync.RWMutex{},
 		shutdownSignal:  make(chan struct{}),
 		retryChanSignal: make(chan error, 1),
-	}
+	}, nil
 }
 
 // connectToPostgres establishes a connection to the PostgresSQL database using the provided
 // configuration. It sets up the connection string, opens the connection with GORM,
 // and configures the connection pool with appropriate parameters for performance.
 // Returns the initialized GORM DB instance or an error if the connection fails.
-func connectToPostgres(logger Logger, postgresConfig Config) (*gorm.DB, error) {
+func connectToPostgres(postgresConfig Config) (*gorm.DB, error) {
 	pgConnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		postgresConfig.Connection.Host,
 		postgresConfig.Connection.Port,
@@ -91,7 +78,7 @@ func connectToPostgres(logger Logger, postgresConfig Config) (*gorm.DB, error) {
 	databaseInstance.SetMaxIdleConns(25)
 	databaseInstance.SetConnMaxLifetime(1 * time.Minute)
 
-	logger.Info("Successfully connected to PostgresSQL database", nil, nil)
+	log.Println("INFO: Successfully connected to PostgresSQL database")
 
 	return database, nil
 }
@@ -104,12 +91,12 @@ func connectToPostgres(logger Logger, postgresConfig Config) (*gorm.DB, error) {
 // It implements two nested loops:
 // - The outer loop waits for retry signals
 // - The inner loop attempts reconnection until successful
-func (p *Postgres) RetryConnection(ctx context.Context, logger Logger) {
+func (p *Postgres) RetryConnection(ctx context.Context) {
 outerLoop:
 	for {
 		select {
 		case <-p.shutdownSignal:
-			logger.Info("Stopping RetryConnection loop due to shutdown signal", nil, nil)
+			log.Println("INFO: Stopping RetryConnection loop due to shutdown signal")
 			return
 		case <-ctx.Done():
 			return
@@ -122,16 +109,16 @@ outerLoop:
 				case <-ctx.Done():
 					return
 				default:
-					newConn, err := connectToPostgres(logger, p.cfg)
+					newConn, err := connectToPostgres(p.cfg)
 					if err != nil {
-						logger.Error("Reconnection failed", err, nil)
+						log.Printf("ERROR: PostgresSQL reconnection failed: %v", err)
 						time.Sleep(time.Second)
 						continue innerLoop
 					}
 					p.mu.Lock()
 					p.Client = newConn
 					p.mu.Unlock()
-					logger.Info("Reconnected to PostgresSQL database", nil, nil)
+					log.Println("INFO: Successfully reconnected to PostgresSQL database")
 					continue outerLoop
 				}
 			}
@@ -157,7 +144,7 @@ func (p *Postgres) MonitorConnection(ctx context.Context) {
 	for {
 		select {
 		case <-p.shutdownSignal:
-			p.logger.Info("Stopping MonitorConnection loop due to shutdown signal", nil, nil)
+			log.Println("INFO: Stopping MonitorConnection loop due to shutdown signal")
 			return
 		case <-ticker.C:
 			err := p.healthCheck()
