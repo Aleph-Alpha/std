@@ -8,13 +8,15 @@ import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pk
 
 Package logger provides structured logging functionality for Go applications.
 
-The logger package is designed to provide a standardized logging approach with features such as log levels, contextual logging, and flexible output formatting. It integrates with the fx dependency injection framework for easy incorporation into applications.
+The logger package is designed to provide a standardized logging approach with features such as log levels, contextual logging, distributed tracing integration, and flexible output formatting. It integrates with the fx dependency injection framework for easy incorporation into applications.
 
 Core Features:
 
 - Structured logging with key\-value pairs
 - Support for multiple log levels \(Debug, Info, Warn, Error, etc.\)
 - Context\-aware logging for request tracing
+- Distributed tracing integration with OpenTelemetry
+- Automatic trace and span ID extraction from context
 - Configurable output formats \(JSON, text\)
 - Integration with common log collection systems
 
@@ -24,18 +26,21 @@ Basic Usage:
 import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
 
 // Create a new logger using factory
-log, err := logger.NewLogger(logger.Config{
-	Level:  "info",
-	Format: "json",
+log := logger.NewLoggerClient(logger.Config{
+	Level:         "info",
+	EnableTracing: true,
 })
-if err != nil {
-	panic(err)
-}
 
-// Log with structured fields
+// Log with structured fields (without context)
 log.Info("User logged in", err, map[string]interface{}{
 	"user_id": "12345",
 	"ip":      "192.168.1.1",
+})
+
+// Log with trace context (automatically includes trace_id and span_id)
+log.InfoWithContext(ctx, "Processing request", nil, map[string]interface{}{
+	"request_id": "abc-123",
+	"user_id":    "12345",
 })
 
 // Log different levels
@@ -43,6 +48,11 @@ log.Debug("Debug message", nil, nil) // Only appears if level is Debug
 log.Info("Info message", nil, nil)
 log.Warn("Warning message", nil, nil)
 log.Error("Error message", err, nil)
+
+// Context-aware logging methods
+log.DebugWithContext(ctx, "Debug with trace", nil, nil)
+log.WarnWithContext(ctx, "Warning with trace", nil, nil)
+log.ErrorWithContext(ctx, "Error with trace", err, nil)
 ```
 
 FX Module Integration:
@@ -62,9 +72,20 @@ Configuration:
 The logger can be configured via environment variables:
 
 ```
-LOG_LEVEL=debug
-LOG_FORMAT=json
+ZAP_LOGGER_LEVEL=debug          # Log level (debug, info, warning, error)
+LOGGER_ENABLE_TRACING=true      # Enable distributed tracing integration
 ```
+
+Tracing Integration:
+
+When tracing is enabled \(EnableTracing: true\), the logger will automatically extract trace and span IDs from the context and include them in log entries. This provides correlation between logs and distributed traces in your observability system.
+
+The following fields are automatically added to log entries when tracing is enabled:
+
+- trace\_id: The OpenTelemetry trace ID
+- span\_id: The OpenTelemetry span ID
+
+To use tracing, ensure your application has OpenTelemetry configured and pass context with active spans to the \*WithContext logging methods.
 
 Performance Considerations:
 
@@ -83,10 +104,15 @@ All methods on the Logger interface are safe for concurrent use by multiple goro
 - [type Logger](<#Logger>)
   - [func NewLoggerClient\(cfg Config\) \*Logger](<#NewLoggerClient>)
   - [func \(l \*Logger\) Debug\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Debug>)
+  - [func \(l \*Logger\) DebugWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.DebugWithContext>)
   - [func \(l \*Logger\) Error\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Error>)
+  - [func \(l \*Logger\) ErrorWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.ErrorWithContext>)
   - [func \(l \*Logger\) Fatal\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Fatal>)
+  - [func \(l \*Logger\) FatalWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.FatalWithContext>)
   - [func \(l \*Logger\) Info\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Info>)
+  - [func \(l \*Logger\) InfoWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.InfoWithContext>)
   - [func \(l \*Logger\) Warn\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Warn>)
+  - [func \(l \*Logger\) WarnWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.WarnWithContext>)
 
 
 ## Constants
@@ -165,7 +191,7 @@ This ensures that no log entries are lost if the application shuts down while lo
 Note: This function is automatically invoked by the FXModule and does not need to be called directly in application code.
 
 <a name="Config"></a>
-## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/configs.go#L25-L42>)
+## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/configs.go#L25-L56>)
 
 Config defines the configuration structure for the logger. It contains settings that control the behavior of the logging system.
 
@@ -187,11 +213,25 @@ type Config struct {
     //   - YAML configuration with the "level" key
     //   - Environment variable ZAP_LOGGER_LEVEL
     Level string `yaml:"level" envconfig:"ZAP_LOGGER_LEVEL"`
+
+    // EnableTracing controls whether tracing integration is enabled for logging operations.
+    // When set to true, the logger will automatically extract trace and span information
+    // from context and include it in log entries. This provides correlation between
+    // logs and distributed traces.
+    //
+    // When tracing is enabled, the following fields are automatically added to log entries:
+    //   - "trace_id": The trace ID from the current span context
+    //   - "span_id": The span ID from the current span context
+    //
+    // This setting can be configured via:
+    //   - YAML configuration with the "enable_tracing" key
+    //   - Environment variable LOGGER_ENABLE_TRACING
+    EnableTracing bool `yaml:"enable_tracing" envconfig:"LOGGER_ENABLE_TRACING"`
 }
 ```
 
 <a name="Logger"></a>
-## type [Logger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/setup.go#L13-L18>)
+## type [Logger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/setup.go#L14-L24>)
 
 Logger is a wrapper around Uber's Zap logger. It provides a simplified interface to the underlying Zap logger, with additional functionality specific to the application's needs.
 
@@ -201,11 +241,12 @@ type Logger struct {
     // This is exposed to allow direct access to Zap-specific functionality
     // when needed, but most logging should go through the wrapper methods.
     Zap *zap.Logger
+    // contains filtered or unexported fields
 }
 ```
 
 <a name="NewLoggerClient"></a>
-### func [NewLoggerClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/setup.go#L47>)
+### func [NewLoggerClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/setup.go#L53>)
 
 ```go
 func NewLoggerClient(cfg Config) *Logger
@@ -243,7 +284,7 @@ log.Info("Application started", nil, nil)
 ```
 
 <a name="Logger.Debug"></a>
-### func \(\*Logger\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L67>)
+### func \(\*Logger\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L108>)
 
 ```go
 func (l *Logger) Debug(msg string, err error, fields ...map[string]interface{})
@@ -267,8 +308,34 @@ logger.Debug("Processing request", nil, map[string]interface{}{
 })
 ```
 
+<a name="Logger.DebugWithContext"></a>
+### func \(\*Logger\) [DebugWithContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L213>)
+
+```go
+func (l *Logger) DebugWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+```
+
+DebugWithContext logs a debug\-level message with trace context, useful for development and troubleshooting. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.
+
+Parameters:
+
+- ctx: The context containing trace information
+- msg: The log message
+- err: An error to include in the log entry, or nil if no error
+- fields: Variable number of map\[string\]interface\{\} containing additional structured data
+
+Example:
+
+```
+logger.DebugWithContext(ctx, "Processing request", nil, map[string]interface{}{
+    "request_id": "abc-123",
+    "payload_size": 1024,
+    "processing_time_ms": 15,
+})
+```
+
 <a name="Logger.Error"></a>
-### func \(\*Logger\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L108>)
+### func \(\*Logger\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L149>)
 
 ```go
 func (l *Logger) Error(msg string, err error, fields ...map[string]interface{})
@@ -294,8 +361,36 @@ if err != nil {
 }
 ```
 
+<a name="Logger.ErrorWithContext"></a>
+### func \(\*Logger\) [ErrorWithContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L258>)
+
+```go
+func (l *Logger) ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+```
+
+ErrorWithContext logs an error message with trace context, including details of the error and additional context fields. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.
+
+Parameters:
+
+- ctx: The context containing trace information
+- msg: The log message
+- err: An error to include in the log entry, or nil if no error
+- fields: Variable number of map\[string\]interface\{\} containing additional structured data
+
+Example:
+
+```
+err := database.Connect()
+if err != nil {
+    logger.ErrorWithContext(ctx, "Failed to connect to database", err, map[string]interface{}{
+        "retry_count": 3,
+        "database": "users",
+    })
+}
+```
+
 <a name="Logger.Fatal"></a>
-### func \(\*Logger\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L131>)
+### func \(\*Logger\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L172>)
 
 ```go
 func (l *Logger) Fatal(msg string, err error, fields ...map[string]interface{})
@@ -322,8 +417,37 @@ if configErr != nil {
 
 Note: This function does not return as it terminates the application.
 
+<a name="Logger.FatalWithContext"></a>
+### func \(\*Logger\) [FatalWithContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L285>)
+
+```go
+func (l *Logger) FatalWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+```
+
+FatalWithContext logs a critical error message with trace context and terminates the application. This method automatically extracts trace and span IDs from the provided context when tracing is enabled. Use Fatal only for errors that make it impossible for the application to continue running. This method will call os.Exit\(1\) after logging the message.
+
+Parameters:
+
+- ctx: The context containing trace information
+- msg: The log message
+- err: An error to include in the log entry, or nil if no error
+- fields: Variable number of map\[string\]interface\{\} containing additional structured data
+
+Example:
+
+```
+configErr := LoadConfiguration()
+if configErr != nil {
+    logger.FatalWithContext(ctx, "Cannot start application without configuration", configErr, map[string]interface{}{
+        "config_path": "/etc/myapp/config.json",
+    })
+}
+```
+
+Note: This function does not return as it terminates the application.
+
 <a name="Logger.Info"></a>
-### func \(\*Logger\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L47>)
+### func \(\*Logger\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L88>)
 
 ```go
 func (l *Logger) Info(msg string, err error, fields ...map[string]interface{})
@@ -346,8 +470,33 @@ logger.Info("User logged in successfully", nil, map[string]interface{}{
 })
 ```
 
+<a name="Logger.InfoWithContext"></a>
+### func \(\*Logger\) [InfoWithContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L191>)
+
+```go
+func (l *Logger) InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+```
+
+InfoWithContext logs an informational message with trace context, along with an optional error and structured fields. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.
+
+Parameters:
+
+- ctx: The context containing trace information
+- msg: The log message
+- err: An error to include in the log entry, or nil if no error
+- fields: Variable number of map\[string\]interface\{\} containing additional structured data
+
+Example:
+
+```
+logger.InfoWithContext(ctx, "User logged in successfully", nil, map[string]interface{}{
+    "user_id": 12345,
+    "login_method": "oauth",
+})
+```
+
 <a name="Logger.Warn"></a>
-### func \(\*Logger\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L86>)
+### func \(\*Logger\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L127>)
 
 ```go
 func (l *Logger) Warn(msg string, err error, fields ...map[string]interface{})
@@ -365,6 +514,31 @@ Example:
 
 ```
 logger.Warn("High resource usage detected", nil, map[string]interface{}{
+    "cpu_usage": 85.5,
+    "memory_usage_mb": 1024,
+})
+```
+
+<a name="Logger.WarnWithContext"></a>
+### func \(\*Logger\) [WarnWithContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/utils.go#L234>)
+
+```go
+func (l *Logger) WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+```
+
+WarnWithContext logs a warning message with trace context, indicating potential issues that aren't necessarily errors. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.
+
+Parameters:
+
+- ctx: The context containing trace information
+- msg: The log message
+- err: An error to include in the log entry, or nil if no error
+- fields: Variable number of map\[string\]interface\{\} containing additional structured data
+
+Example:
+
+```
+logger.WarnWithContext(ctx, "High resource usage detected", nil, map[string]interface{}{
     "cpu_usage": 85.5,
     "memory_usage_mb": 1024,
 })

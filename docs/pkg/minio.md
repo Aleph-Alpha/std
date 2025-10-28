@@ -27,11 +27,12 @@ import (
 		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
 	)
 
-	// Create a logger
-	log, _ := logger.NewLogger(logger.Config{Level: "info"})
+	// Create a logger (optional)
+	log, _ := logger.NewLoggerClient(logger.Config{Level: "info"})
+	loggerAdapter := minio.NewLoggerAdapter(log)
 
-	// Create a new MinIO client
-	client, err := minio.New(minio.Config{
+	// Create a new MinIO client with logger
+	client, err := minio.NewClient(minio.Config{
 		Connection: minio.ConnectionConfig{
 			Endpoint:        "play.min.io",
 			AccessKeyID:     "minioadmin",
@@ -43,9 +44,15 @@ import (
 		PresignedConfig: minio.PresignedConfig{
 			ExpiryDuration: 1 * time.Hour,
 		},
-	}, log)
+	}, loggerAdapter)
 	if err != nil {
 		log.Fatal("Failed to create MinIO client", err, nil)
+	}
+
+	// Alternative: Create MinIO client without logger (uses fallback)
+	client, err := minio.NewClient(config, nil)
+	if err != nil {
+		return fmt.Errorf("failed to initialize MinIO client: %w", err)
 	}
 
 	// Create a bucket if it doesn't exist
@@ -127,12 +134,23 @@ ranges := download.GetPartRanges()
 
 FX Module Integration:
 
-This package provides an fx module for easy integration:
+This package provides an fx module for easy integration with optional logger injection:
 
 ```
+// With logger module (recommended)
 app := fx.New(
-	logger.Module,
-	minio.Module,
+	logger.FXModule,  // Provides structured logger
+	fx.Provide(func(log *logger.Logger) minio.MinioLogger {
+		return minio.NewLoggerAdapter(log)
+	}),
+	minio.FXModule,   // Will automatically use the provided logger
+	// ... other modules
+)
+app.Run()
+
+// Without logger module (uses fallback logger)
+app := fx.New(
+	minio.FXModule,   // Will use fallback logger
 	// ... other modules
 )
 app.Run()
@@ -187,9 +205,15 @@ Package minio is a generated GoMock package.
 - [type ErrorCategory](<#ErrorCategory>)
 - [type KafkaNotification](<#KafkaNotification>)
 - [type KafkaSASLAuth](<#KafkaSASLAuth>)
+- [type LoggerAdapter](<#LoggerAdapter>)
+  - [func \(la \*LoggerAdapter\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Debug>)
+  - [func \(la \*LoggerAdapter\) Error\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Error>)
+  - [func \(la \*LoggerAdapter\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Fatal>)
+  - [func \(la \*LoggerAdapter\) Info\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Info>)
+  - [func \(la \*LoggerAdapter\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Warn>)
 - [type MQTTNotification](<#MQTTNotification>)
 - [type Minio](<#Minio>)
-  - [func NewClient\(config Config\) \(\*Minio, error\)](<#NewClient>)
+  - [func NewClient\(config Config, logger MinioLogger\) \(\*Minio, error\)](<#NewClient>)
   - [func NewMinioClientWithDI\(params MinioParams\) \(\*Minio, error\)](<#NewMinioClientWithDI>)
   - [func \(m \*Minio\) AbortMultipartUpload\(ctx context.Context, objectKey, uploadID string\) error](<#Minio.AbortMultipartUpload>)
   - [func \(m \*Minio\) CleanupIncompleteUploads\(ctx context.Context, prefix string, olderThan time.Duration\) error](<#Minio.CleanupIncompleteUploads>)
@@ -211,6 +235,14 @@ Package minio is a generated GoMock package.
   - [func \(m \*Minio\) StreamGet\(ctx context.Context, objectKey string, chunkSize int\) \(\<\-chan \[\]byte, \<\-chan error\)](<#Minio.StreamGet>)
   - [func \(m \*Minio\) TranslateError\(err error\) error](<#Minio.TranslateError>)
 - [type MinioLifeCycleParams](<#MinioLifeCycleParams>)
+- [type MinioLogger](<#MinioLogger>)
+  - [func NewLoggerAdapter\(logger interface \{
+    Debug\(msg string, err error, fields ...map\[string\]interface\{\}\)
+    Info\(msg string, err error, fields ...map\[string\]interface\{\}\)
+    Warn\(msg string, err error, fields ...map\[string\]interface\{\}\)
+    Error\(msg string, err error, fields ...map\[string\]interface\{\}\)
+    Fatal\(msg string, err error, fields ...map\[string\]interface\{\}\)
+\}\) MinioLogger](<#NewLoggerAdapter>)
 - [type MinioParams](<#MinioParams>)
 - [type MockLogger](<#MockLogger>)
   - [func NewMockLogger\(ctrl \*gomock.Controller\) \*MockLogger](<#NewMockLogger>)
@@ -443,7 +475,7 @@ var FXModule = fx.Module("minio",
 ```
 
 <a name="RegisterLifecycle"></a>
-## func [RegisterLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L63>)
+## func [RegisterLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L65>)
 
 ```go
 func RegisterLifecycle(params MinioLifeCycleParams)
@@ -528,7 +560,7 @@ type BaseNotification struct {
 ```
 
 <a name="BufferPool"></a>
-## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L50-L53>)
+## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L190-L193>)
 
 BufferPool implements a pool of bytes.Buffers to reduce memory allocations. It's used for temporary buffer operations when reading or writing objects.
 
@@ -539,7 +571,7 @@ type BufferPool struct {
 ```
 
 <a name="NewBufferPool"></a>
-### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L59>)
+### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L199>)
 
 ```go
 func NewBufferPool() *BufferPool
@@ -550,7 +582,7 @@ NewBufferPool creates a new BufferPool instance. The pool will create new bytes.
 Returns a configured BufferPool ready for use.
 
 <a name="BufferPool.Get"></a>
-### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L74>)
+### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L214>)
 
 ```go
 func (bp *BufferPool) Get() *bytes.Buffer
@@ -561,7 +593,7 @@ Get returns a buffer from the pool. The returned buffer may be newly allocated o
 Returns a \*bytes.Buffer that should be returned to the pool when no longer needed.
 
 <a name="BufferPool.Put"></a>
-### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L83>)
+### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L223>)
 
 ```go
 func (bp *BufferPool) Put(b *bytes.Buffer)
@@ -717,6 +749,62 @@ type KafkaSASLAuth struct {
 }
 ```
 
+<a name="LoggerAdapter"></a>
+## type [LoggerAdapter](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L34-L42>)
+
+LoggerAdapter adapts the logger package's Logger to implement MinioLogger interface. This allows seamless integration with the structured logger from the logger package.
+
+```go
+type LoggerAdapter struct {
+    // contains filtered or unexported fields
+}
+```
+
+<a name="LoggerAdapter.Debug"></a>
+### func \(\*LoggerAdapter\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L57>)
+
+```go
+func (la *LoggerAdapter) Debug(msg string, err error, fields ...map[string]any)
+```
+
+Debug implements MinioLogger interface by delegating to the wrapped logger
+
+<a name="LoggerAdapter.Error"></a>
+### func \(\*LoggerAdapter\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L75>)
+
+```go
+func (la *LoggerAdapter) Error(msg string, err error, fields ...map[string]any)
+```
+
+Error implements MinioLogger interface by delegating to the wrapped logger
+
+<a name="LoggerAdapter.Fatal"></a>
+### func \(\*LoggerAdapter\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L81>)
+
+```go
+func (la *LoggerAdapter) Fatal(msg string, err error, fields ...map[string]any)
+```
+
+Fatal implements MinioLogger interface by delegating to the wrapped logger
+
+<a name="LoggerAdapter.Info"></a>
+### func \(\*LoggerAdapter\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L63>)
+
+```go
+func (la *LoggerAdapter) Info(msg string, err error, fields ...map[string]any)
+```
+
+Info implements MinioLogger interface by delegating to the wrapped logger
+
+<a name="LoggerAdapter.Warn"></a>
+### func \(\*LoggerAdapter\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L69>)
+
+```go
+func (la *LoggerAdapter) Warn(msg string, err error, fields ...map[string]any)
+```
+
+Warn implements MinioLogger interface by delegating to the wrapped logger
+
 <a name="MQTTNotification"></a>
 ## type [MQTTNotification](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L271-L295>)
 
@@ -751,7 +839,7 @@ type MQTTNotification struct {
 ```
 
 <a name="Minio"></a>
-## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L22-L46>)
+## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L159-L186>)
 
 Minio represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and thread\-safety.
 
@@ -767,32 +855,39 @@ type Minio struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L103>)
+### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L250>)
 
 ```go
-func NewClient(config Config) (*Minio, error)
+func NewClient(config Config, logger MinioLogger) (*Minio, error)
 ```
 
 NewClient creates and validates a new MinIO client. It establishes connections to both the standard and core MinIO APIs, validates the connection, and ensures the configured bucket exists.
 
 Parameters:
 
-- cfg: Configuration for the MinIO client
-- logger: Logger for recording operations and errors
+- config: Configuration for the MinIO client
+- logger: Optional logger for recording operations and errors. If nil, a fallback logger will be used.
 
 Returns a configured and validated MinIO client or an error if initialization fails.
 
 Example:
 
 ```
+// With custom logger
 client, err := minio.NewClient(config, myLogger)
+if err != nil {
+    return fmt.Errorf("failed to initialize MinIO client: %w", err)
+}
+
+// Without logger (uses fallback)
+client, err := minio.NewClient(config, nil)
 if err != nil {
     return fmt.Errorf("failed to initialize MinIO client: %w", err)
 }
 ```
 
 <a name="NewMinioClientWithDI"></a>
-### func [NewMinioClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L37>)
+### func [NewMinioClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L39>)
 
 ```go
 func NewMinioClientWithDI(params MinioParams) (*Minio, error)
@@ -1010,7 +1105,7 @@ func (m *Minio) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="Minio.GracefulShutdown"></a>
-### func \(\*Minio\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L126>)
+### func \(\*Minio\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L130>)
 
 ```go
 func (m *Minio) GracefulShutdown()
@@ -1234,7 +1329,7 @@ TranslateError converts MinIO\-specific errors into standardized application err
 It maps common MinIO errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="MinioLifeCycleParams"></a>
-## type [MinioLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L41-L46>)
+## type [MinioLifeCycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L43-L48>)
 
 
 
@@ -1247,8 +1342,43 @@ type MinioLifeCycleParams struct {
 }
 ```
 
+<a name="MinioLogger"></a>
+## type [MinioLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L19-L30>)
+
+MinioLogger defines the logging interface used by MinIO client. This interface allows for flexible logger injection while maintaining compatibility with both structured loggers \(like the logger package\) and simple loggers.
+
+```go
+type MinioLogger interface {
+    // Debug logs debug-level messages
+    Debug(msg string, err error, fields ...map[string]any)
+    // Info logs informational messages
+    Info(msg string, err error, fields ...map[string]any)
+    // Warn logs warning messages
+    Warn(msg string, err error, fields ...map[string]any)
+    // Error logs error messages
+    Error(msg string, err error, fields ...map[string]any)
+    // Fatal logs fatal messages and should terminate the application
+    Fatal(msg string, err error, fields ...map[string]any)
+}
+```
+
+<a name="NewLoggerAdapter"></a>
+### func [NewLoggerAdapter](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L46-L52>)
+
+```go
+func NewLoggerAdapter(logger interface {
+    Debug(msg string, err error, fields ...map[string]interface{})
+    Info(msg string, err error, fields ...map[string]interface{})
+    Warn(msg string, err error, fields ...map[string]interface{})
+    Error(msg string, err error, fields ...map[string]interface{})
+    Fatal(msg string, err error, fields ...map[string]interface{})
+}) MinioLogger
+```
+
+NewLoggerAdapter creates a new LoggerAdapter that wraps the logger package's Logger. This function provides a bridge between the logger package and MinIO's logging interface.
+
 <a name="MinioParams"></a>
-## type [MinioParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L31-L35>)
+## type [MinioParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L31-L37>)
 
 
 
@@ -1257,6 +1387,8 @@ type MinioParams struct {
     fx.In
 
     Config
+    // Logger is optional - if not provided, fallback logger will be used
+    Logger MinioLogger `optional:"true"`
 }
 ```
 

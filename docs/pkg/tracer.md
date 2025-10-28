@@ -220,7 +220,7 @@ type Config struct {
 ```
 
 <a name="Span"></a>
-## type [Span](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L30-L67>)
+## type [Span](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L31-L68>)
 
 Span represents a trace span for tracking operations in distributed systems. It provides methods for ending the span, recording errors, and setting attributes.
 
@@ -333,7 +333,7 @@ defer span.End()
 ```
 
 <a name="Tracer.GetCarrier"></a>
-### func \(\*Tracer\) [GetCarrier](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L287>)
+### func \(\*Tracer\) [GetCarrier](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L288>)
 
 ```go
 func (t *Tracer) GetCarrier(ctx context.Context) map[string]string
@@ -382,7 +382,7 @@ func makeHttpRequest(ctx context.Context, url string) (*http.Response, error) {
 ```
 
 <a name="Tracer.SetCarrierOnContext"></a>
-### func \(\*Tracer\) [SetCarrierOnContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L340>)
+### func \(\*Tracer\) [SetCarrierOnContext](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L341>)
 
 ```go
 func (t *Tracer) SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context
@@ -432,7 +432,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 ```
 
 <a name="Tracer.StartSpan"></a>
-### func \(\*Tracer\) [StartSpan](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L232>)
+### func \(\*Tracer\) [StartSpan](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/tracer/utils.go#L233>)
 
 ```go
 func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, Span)

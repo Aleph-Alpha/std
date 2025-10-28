@@ -32,10 +32,12 @@ type MinioParams struct {
 	fx.In
 
 	Config
+	// Logger is optional - if not provided, fallback logger will be used
+	Logger MinioLogger `optional:"true"`
 }
 
 func NewMinioClientWithDI(params MinioParams) (*Minio, error) {
-	return NewClient(params.Config)
+	return NewClient(params.Config, params.Logger)
 }
 
 type MinioLifeCycleParams struct {
@@ -63,7 +65,9 @@ type MinioLifeCycleParams struct {
 func RegisterLifecycle(params MinioLifeCycleParams) {
 
 	if params.Minio == nil {
-		logger.Fatal("MinIO client is nil, cannot register lifecycle hooks")
+		// Use fallback logger since we don't have a MinIO client
+		fallbackLog := newFallbackLogger()
+		fallbackLog.Fatal("MinIO client is nil, cannot register lifecycle hooks", nil, nil)
 		return
 	}
 
@@ -87,7 +91,7 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 		},
 		OnStop: func(ctx context.Context) error {
 
-			logger.Printf("INFO: closing minio client...")
+			params.Minio.logger.Info("closing minio client...", nil, nil)
 			params.Minio.GracefulShutdown()
 
 			wg.Wait()
