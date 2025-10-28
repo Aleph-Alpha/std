@@ -224,8 +224,5 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 //	}
 func (m *Minio) Delete(ctx context.Context, objectKey string) error {
 	err := m.Client.RemoveObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.RemoveObjectOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
