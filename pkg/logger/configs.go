@@ -39,4 +39,18 @@ type Config struct {
 	//   - YAML configuration with the "level" key
 	//   - Environment variable ZAP_LOGGER_LEVEL
 	Level string `yaml:"level" envconfig:"ZAP_LOGGER_LEVEL"`
+
+	// EnableTracing controls whether tracing integration is enabled for logging operations.
+	// When set to true, the logger will automatically extract trace and span information
+	// from context and include it in log entries. This provides correlation between
+	// logs and distributed traces.
+	//
+	// When tracing is enabled, the following fields are automatically added to log entries:
+	//   - "trace_id": The trace ID from the current span context
+	//   - "span_id": The span ID from the current span context
+	//
+	// This setting can be configured via:
+	//   - YAML configuration with the "enable_tracing" key
+	//   - Environment variable LOGGER_ENABLE_TRACING
+	EnableTracing bool `yaml:"enable_tracing" envconfig:"LOGGER_ENABLE_TRACING"`
 }
