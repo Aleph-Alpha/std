@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -181,47 +183,454 @@ type Minio struct {
 	// bufferPool manages reusable byte buffers to reduce memory allocations
 	bufferPool *BufferPool
 
+	// resourceMonitor tracks resource usage and performance metrics
+	resourceMonitor *ResourceMonitor
+
 	closeShutdownOnce  sync.Once
 	closeReconnectOnce sync.Once
 }
 
-// BufferPool implements a pool of bytes.Buffers to reduce memory allocations.
-// It's used for temporary buffer operations when reading or writing objects.
+// BufferPoolConfig contains configuration for the buffer pool
+type BufferPoolConfig struct {
+	// MaxBufferSize is the maximum size a buffer can grow to before being discarded
+	MaxBufferSize int
+	// MaxPoolSize is the maximum number of buffers to keep in the pool
+	MaxPoolSize int
+	// InitialBufferSize is the initial size for new buffers
+	InitialBufferSize int
+}
+
+// DefaultBufferPoolConfig returns the default buffer pool configuration
+func DefaultBufferPoolConfig() BufferPoolConfig {
+	return BufferPoolConfig{
+		MaxBufferSize:     32 * 1024 * 1024, // 32MB max buffer size
+		MaxPoolSize:       100,              // Max 100 buffers in pool
+		InitialBufferSize: 64 * 1024,        // 64KB initial size
+	}
+}
+
+// BufferPool implements an advanced pool of bytes.Buffers with size limits and monitoring.
+// It prevents memory leaks by limiting buffer sizes and pool capacity.
 type BufferPool struct {
 	// pool is the underlying sync.Pool that manages the buffer objects
 	pool sync.Pool
+	// config holds the buffer pool configuration
+	config BufferPoolConfig
+	// poolSize tracks the current number of buffers in the pool
+	poolSize int64
+	// totalBuffersCreated tracks total buffers created for monitoring
+	totalBuffersCreated int64
+	// totalBuffersReused tracks total buffer reuses for monitoring
+	totalBuffersReused int64
+	// totalBuffersDiscarded tracks buffers discarded due to size limits
+	totalBuffersDiscarded int64
+	// mu protects pool size modifications
+	mu sync.RWMutex
 }
 
-// NewBufferPool creates a new BufferPool instance.
-// The pool will create new bytes.Buffer instances as needed when none are available.
+// NewBufferPool creates a new BufferPool instance with default configuration.
+// The pool will create new bytes.Buffer instances as needed when none are available,
+// with built-in size limits to prevent memory leaks.
 //
 // Returns a configured BufferPool ready for use.
 func NewBufferPool() *BufferPool {
-	return &BufferPool{
-		pool: sync.Pool{
-			New: func() interface{} {
-				return new(bytes.Buffer)
-			},
+	return NewBufferPoolWithConfig(DefaultBufferPoolConfig())
+}
+
+// NewBufferPoolWithConfig creates a new BufferPool with custom configuration.
+// This allows fine-tuning of buffer sizes and pool limits for specific use cases.
+//
+// Parameters:
+//   - config: Configuration for buffer pool behavior
+//
+// Returns a configured BufferPool ready for use.
+func NewBufferPoolWithConfig(config BufferPoolConfig) *BufferPool {
+	bp := &BufferPool{
+		config: config,
+	}
+
+	bp.pool = sync.Pool{
+		New: func() interface{} {
+			atomic.AddInt64(&bp.totalBuffersCreated, 1)
+			buf := bytes.NewBuffer(make([]byte, 0, bp.config.InitialBufferSize))
+			return buf
 		},
 	}
+
+	return bp
 }
 
 // Get returns a buffer from the pool.
 // The returned buffer may be newly allocated or reused from a previous Put call.
-// The caller should Reset the buffer before use if its previous contents are not needed.
+// The buffer is automatically reset and ready for use.
 //
 // Returns a *bytes.Buffer that should be returned to the pool when no longer needed.
 func (bp *BufferPool) Get() *bytes.Buffer {
-	return bp.pool.Get().(*bytes.Buffer)
+	buf := bp.pool.Get().(*bytes.Buffer)
+	buf.Reset() // Always reset the buffer for clean state
+	atomic.AddInt64(&bp.totalBuffersReused, 1)
+	return buf
 }
 
 // Put returns a buffer to the pool for future reuse.
-// The buffer should not be used after calling Put as it may be provided to another goroutine.
+// The buffer will be discarded if it exceeds the maximum size limit or if the pool is full.
+// This prevents memory leaks from oversized buffers accumulating in the pool.
 //
 // Parameters:
 //   - b: The buffer to return to the pool
 func (bp *BufferPool) Put(b *bytes.Buffer) {
+	if b == nil {
+		return
+	}
+
+	// Check if buffer is too large - discard it to prevent memory leaks
+	if b.Cap() > bp.config.MaxBufferSize {
+		atomic.AddInt64(&bp.totalBuffersDiscarded, 1)
+		return
+	}
+
+	// Check if pool is at capacity
+	bp.mu.RLock()
+	currentSize := atomic.LoadInt64(&bp.poolSize)
+	bp.mu.RUnlock()
+
+	if currentSize >= int64(bp.config.MaxPoolSize) {
+		atomic.AddInt64(&bp.totalBuffersDiscarded, 1)
+		return
+	}
+
+	// Reset buffer and return to pool
+	b.Reset()
 	bp.pool.Put(b)
+	atomic.AddInt64(&bp.poolSize, 1)
+}
+
+// Stats returns statistics about buffer pool usage for monitoring and debugging.
+type BufferPoolStats struct {
+	// CurrentPoolSize is the current number of buffers in the pool
+	CurrentPoolSize int64 `json:"currentPoolSize"`
+	// TotalBuffersCreated is the total number of buffers created since start
+	TotalBuffersCreated int64 `json:"totalBuffersCreated"`
+	// TotalBuffersReused is the total number of buffer reuses
+	TotalBuffersReused int64 `json:"totalBuffersReused"`
+	// TotalBuffersDiscarded is the total number of buffers discarded due to limits
+	TotalBuffersDiscarded int64 `json:"totalBuffersDiscarded"`
+	// MaxBufferSize is the maximum allowed buffer size
+	MaxBufferSize int `json:"maxBufferSize"`
+	// MaxPoolSize is the maximum allowed pool size
+	MaxPoolSize int `json:"maxPoolSize"`
+	// ReuseRatio is the ratio of reused buffers to created buffers
+	ReuseRatio float64 `json:"reuseRatio"`
+}
+
+// GetStats returns current buffer pool statistics for monitoring.
+// This is useful for understanding memory usage patterns and pool effectiveness.
+func (bp *BufferPool) GetStats() BufferPoolStats {
+	bp.mu.RLock()
+	defer bp.mu.RUnlock()
+
+	created := atomic.LoadInt64(&bp.totalBuffersCreated)
+	reused := atomic.LoadInt64(&bp.totalBuffersReused)
+	discarded := atomic.LoadInt64(&bp.totalBuffersDiscarded)
+	poolSize := atomic.LoadInt64(&bp.poolSize)
+
+	var reuseRatio float64
+	if created > 0 {
+		reuseRatio = float64(reused) / float64(created)
+	}
+
+	return BufferPoolStats{
+		CurrentPoolSize:       poolSize,
+		TotalBuffersCreated:   created,
+		TotalBuffersReused:    reused,
+		TotalBuffersDiscarded: discarded,
+		MaxBufferSize:         bp.config.MaxBufferSize,
+		MaxPoolSize:           bp.config.MaxPoolSize,
+		ReuseRatio:            reuseRatio,
+	}
+}
+
+// Cleanup forces cleanup of the buffer pool, releasing all buffers.
+// This is useful during shutdown or when memory pressure is high.
+func (bp *BufferPool) Cleanup() {
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
+
+	// Create a new pool to replace the old one
+	bp.pool = sync.Pool{
+		New: func() interface{} {
+			atomic.AddInt64(&bp.totalBuffersCreated, 1)
+			buf := bytes.NewBuffer(make([]byte, 0, bp.config.InitialBufferSize))
+			return buf
+		},
+	}
+
+	atomic.StoreInt64(&bp.poolSize, 0)
+
+	// Force garbage collection to free the discarded buffers
+	runtime.GC()
+}
+
+// ConnectionPoolConfig contains configuration for connection management
+type ConnectionPoolConfig struct {
+	// MaxIdleConnections is the maximum number of idle connections to maintain
+	MaxIdleConnections int
+	// MaxConnectionsPerHost is the maximum connections per host
+	MaxConnectionsPerHost int
+	// IdleConnectionTimeout is how long to keep idle connections
+	IdleConnectionTimeout time.Duration
+	// ConnectionTimeout is the timeout for establishing connections
+	ConnectionTimeout time.Duration
+}
+
+// DefaultConnectionPoolConfig returns default connection pool configuration
+func DefaultConnectionPoolConfig() ConnectionPoolConfig {
+	return ConnectionPoolConfig{
+		MaxIdleConnections:    50,
+		MaxConnectionsPerHost: 100,
+		IdleConnectionTimeout: 90 * time.Second,
+		ConnectionTimeout:     30 * time.Second,
+	}
+}
+
+// ResourceMonitor tracks resource usage, performance metrics, and connection health
+type ResourceMonitor struct {
+	// Connection metrics
+	totalConnections   int64
+	activeConnections  int64
+	failedConnections  int64
+	connectionAttempts int64
+
+	// Request metrics
+	totalRequests      int64
+	successfulRequests int64
+	failedRequests     int64
+
+	// Performance metrics
+	totalRequestDuration int64 // in nanoseconds
+	maxRequestDuration   int64 // in nanoseconds
+	minRequestDuration   int64 // in nanoseconds
+
+	// Memory metrics
+	totalMemoryAllocated int64
+	currentMemoryUsage   int64
+	maxMemoryUsage       int64
+
+	// Buffer pool metrics (reference to buffer pool stats)
+	bufferPool *BufferPool
+
+	// Timestamps
+	startTime time.Time
+	lastReset time.Time
+
+	// Mutex for thread-safe operations
+	mu sync.RWMutex
+}
+
+// NewResourceMonitor creates a new resource monitor instance
+func NewResourceMonitor(bufferPool *BufferPool) *ResourceMonitor {
+	now := time.Now()
+	return &ResourceMonitor{
+		bufferPool:         bufferPool,
+		startTime:          now,
+		lastReset:          now,
+		minRequestDuration: int64(^uint64(0) >> 1), // Max int64 value initially
+	}
+}
+
+// RecordConnectionAttempt records a connection attempt
+func (rm *ResourceMonitor) RecordConnectionAttempt() {
+	atomic.AddInt64(&rm.connectionAttempts, 1)
+}
+
+// RecordConnectionSuccess records a successful connection
+func (rm *ResourceMonitor) RecordConnectionSuccess() {
+	atomic.AddInt64(&rm.totalConnections, 1)
+	atomic.AddInt64(&rm.activeConnections, 1)
+}
+
+// RecordConnectionFailure records a failed connection
+func (rm *ResourceMonitor) RecordConnectionFailure() {
+	atomic.AddInt64(&rm.failedConnections, 1)
+}
+
+// RecordConnectionClosure records a connection closure
+func (rm *ResourceMonitor) RecordConnectionClosure() {
+	atomic.AddInt64(&rm.activeConnections, -1)
+}
+
+// RecordRequest records the start of a request and returns a function to record completion
+func (rm *ResourceMonitor) RecordRequest() func(success bool) {
+	atomic.AddInt64(&rm.totalRequests, 1)
+	startTime := time.Now()
+
+	return func(success bool) {
+		duration := time.Since(startTime).Nanoseconds()
+		atomic.AddInt64(&rm.totalRequestDuration, duration)
+
+		// Update min/max duration atomically
+		for {
+			current := atomic.LoadInt64(&rm.maxRequestDuration)
+			if duration <= current || atomic.CompareAndSwapInt64(&rm.maxRequestDuration, current, duration) {
+				break
+			}
+		}
+
+		for {
+			current := atomic.LoadInt64(&rm.minRequestDuration)
+			if duration >= current || atomic.CompareAndSwapInt64(&rm.minRequestDuration, current, duration) {
+				break
+			}
+		}
+
+		if success {
+			atomic.AddInt64(&rm.successfulRequests, 1)
+		} else {
+			atomic.AddInt64(&rm.failedRequests, 1)
+		}
+	}
+}
+
+// RecordMemoryUsage records current memory usage
+func (rm *ResourceMonitor) RecordMemoryUsage(bytes int64) {
+	atomic.AddInt64(&rm.totalMemoryAllocated, bytes)
+	atomic.StoreInt64(&rm.currentMemoryUsage, bytes)
+
+	// Update max memory usage
+	for {
+		current := atomic.LoadInt64(&rm.maxMemoryUsage)
+		if bytes <= current || atomic.CompareAndSwapInt64(&rm.maxMemoryUsage, current, bytes) {
+			break
+		}
+	}
+}
+
+// ResourceStats contains comprehensive resource usage statistics
+type ResourceStats struct {
+	// Connection statistics
+	TotalConnections      int64   `json:"totalConnections"`
+	ActiveConnections     int64   `json:"activeConnections"`
+	FailedConnections     int64   `json:"failedConnections"`
+	ConnectionAttempts    int64   `json:"connectionAttempts"`
+	ConnectionSuccessRate float64 `json:"connectionSuccessRate"`
+
+	// Request statistics
+	TotalRequests      int64   `json:"totalRequests"`
+	SuccessfulRequests int64   `json:"successfulRequests"`
+	FailedRequests     int64   `json:"failedRequests"`
+	RequestSuccessRate float64 `json:"requestSuccessRate"`
+
+	// Performance statistics
+	AverageRequestDuration time.Duration `json:"averageRequestDuration"`
+	MaxRequestDuration     time.Duration `json:"maxRequestDuration"`
+	MinRequestDuration     time.Duration `json:"minRequestDuration"`
+	RequestsPerSecond      float64       `json:"requestsPerSecond"`
+
+	// Memory statistics
+	TotalMemoryAllocated int64 `json:"totalMemoryAllocated"`
+	CurrentMemoryUsage   int64 `json:"currentMemoryUsage"`
+	MaxMemoryUsage       int64 `json:"maxMemoryUsage"`
+
+	// Buffer pool statistics
+	BufferPoolStats BufferPoolStats `json:"bufferPoolStats"`
+
+	// Runtime information
+	Uptime        time.Duration `json:"uptime"`
+	LastResetTime time.Time     `json:"lastResetTime"`
+
+	// System memory info
+	SystemMemoryStats runtime.MemStats `json:"systemMemoryStats"`
+}
+
+// GetStats returns comprehensive resource usage statistics
+func (rm *ResourceMonitor) GetStats() ResourceStats {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	now := time.Now()
+	uptime := now.Sub(rm.startTime)
+
+	totalConns := atomic.LoadInt64(&rm.totalConnections)
+	connAttempts := atomic.LoadInt64(&rm.connectionAttempts)
+	totalReqs := atomic.LoadInt64(&rm.totalRequests)
+	successReqs := atomic.LoadInt64(&rm.successfulRequests)
+	totalDuration := atomic.LoadInt64(&rm.totalRequestDuration)
+
+	var connSuccessRate, reqSuccessRate, avgDuration, reqPerSec float64
+
+	if connAttempts > 0 {
+		connSuccessRate = float64(totalConns) / float64(connAttempts)
+	}
+
+	if totalReqs > 0 {
+		reqSuccessRate = float64(successReqs) / float64(totalReqs)
+		avgDuration = float64(totalDuration) / float64(totalReqs)
+		reqPerSec = float64(totalReqs) / uptime.Seconds()
+	}
+
+	// Get system memory stats
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	// Get buffer pool stats
+	var bufferStats BufferPoolStats
+	if rm.bufferPool != nil {
+		bufferStats = rm.bufferPool.GetStats()
+	}
+
+	return ResourceStats{
+		TotalConnections:      totalConns,
+		ActiveConnections:     atomic.LoadInt64(&rm.activeConnections),
+		FailedConnections:     atomic.LoadInt64(&rm.failedConnections),
+		ConnectionAttempts:    connAttempts,
+		ConnectionSuccessRate: connSuccessRate,
+
+		TotalRequests:      totalReqs,
+		SuccessfulRequests: successReqs,
+		FailedRequests:     atomic.LoadInt64(&rm.failedRequests),
+		RequestSuccessRate: reqSuccessRate,
+
+		AverageRequestDuration: time.Duration(avgDuration),
+		MaxRequestDuration:     time.Duration(atomic.LoadInt64(&rm.maxRequestDuration)),
+		MinRequestDuration:     time.Duration(atomic.LoadInt64(&rm.minRequestDuration)),
+		RequestsPerSecond:      reqPerSec,
+
+		TotalMemoryAllocated: atomic.LoadInt64(&rm.totalMemoryAllocated),
+		CurrentMemoryUsage:   atomic.LoadInt64(&rm.currentMemoryUsage),
+		MaxMemoryUsage:       atomic.LoadInt64(&rm.maxMemoryUsage),
+
+		BufferPoolStats: bufferStats,
+
+		Uptime:        uptime,
+		LastResetTime: rm.lastReset,
+
+		SystemMemoryStats: memStats,
+	}
+}
+
+// ResetStats resets all statistics counters
+func (rm *ResourceMonitor) ResetStats() {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	atomic.StoreInt64(&rm.totalConnections, 0)
+	atomic.StoreInt64(&rm.activeConnections, 0)
+	atomic.StoreInt64(&rm.failedConnections, 0)
+	atomic.StoreInt64(&rm.connectionAttempts, 0)
+
+	atomic.StoreInt64(&rm.totalRequests, 0)
+	atomic.StoreInt64(&rm.successfulRequests, 0)
+	atomic.StoreInt64(&rm.failedRequests, 0)
+
+	atomic.StoreInt64(&rm.totalRequestDuration, 0)
+	atomic.StoreInt64(&rm.maxRequestDuration, 0)
+	atomic.StoreInt64(&rm.minRequestDuration, int64(^uint64(0)>>1))
+
+	atomic.StoreInt64(&rm.totalMemoryAllocated, 0)
+	atomic.StoreInt64(&rm.currentMemoryUsage, 0)
+	atomic.StoreInt64(&rm.maxMemoryUsage, 0)
+
+	rm.lastReset = time.Now()
 }
 
 // NewClient creates and validates a new MinIO client.
@@ -276,6 +685,10 @@ func NewClient(config Config, logger MinioLogger) (*Minio, error) {
 		return nil, err
 	}
 
+	// Create buffer pool and resource monitor
+	bufferPool := NewBufferPool()
+	resourceMonitor := NewResourceMonitor(bufferPool)
+
 	minioClient := &Minio{
 		Client:          client,
 		CoreClient:      coreClient,
@@ -283,7 +696,8 @@ func NewClient(config Config, logger MinioLogger) (*Minio, error) {
 		logger:          logger,
 		shutdownSignal:  make(chan struct{}),
 		reconnectSignal: make(chan error),
-		bufferPool:      NewBufferPool(),
+		bufferPool:      bufferPool,
+		resourceMonitor: resourceMonitor,
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -587,4 +1001,73 @@ func (m *Minio) ensureBucketExists(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// GetResourceStats returns comprehensive resource usage statistics for monitoring.
+// This method provides insights into connection health, request performance, memory usage,
+// and buffer pool efficiency.
+//
+// Returns:
+//   - ResourceStats: Comprehensive statistics about resource usage
+//
+// Example:
+//
+//	stats := minioClient.GetResourceStats()
+//	fmt.Printf("Active connections: %d\n", stats.ActiveConnections)
+//	fmt.Printf("Request success rate: %.2f%%\n", stats.RequestSuccessRate*100)
+//	fmt.Printf("Average request duration: %v\n", stats.AverageRequestDuration)
+func (m *Minio) GetResourceStats() ResourceStats {
+	if m.resourceMonitor == nil {
+		return ResourceStats{}
+	}
+	return m.resourceMonitor.GetStats()
+}
+
+// GetBufferPoolStats returns buffer pool statistics for monitoring buffer efficiency.
+// This is useful for understanding memory usage patterns and optimizing buffer sizes.
+//
+// Returns:
+//   - BufferPoolStats: Statistics about buffer pool usage and efficiency
+//
+// Example:
+//
+//	stats := minioClient.GetBufferPoolStats()
+//	fmt.Printf("Buffer reuse ratio: %.2f%%\n", stats.ReuseRatio*100)
+//	fmt.Printf("Buffers in pool: %d\n", stats.CurrentPoolSize)
+func (m *Minio) GetBufferPoolStats() BufferPoolStats {
+	if m.bufferPool == nil {
+		return BufferPoolStats{}
+	}
+	return m.bufferPool.GetStats()
+}
+
+// ResetResourceStats resets all resource monitoring statistics.
+// This is useful for getting fresh metrics for a specific time period.
+//
+// Example:
+//
+//	// Reset stats at the beginning of a monitoring period
+//	minioClient.ResetResourceStats()
+//	// ... perform operations ...
+//	stats := minioClient.GetResourceStats()
+func (m *Minio) ResetResourceStats() {
+	if m.resourceMonitor != nil {
+		m.resourceMonitor.ResetStats()
+	}
+}
+
+// CleanupResources performs cleanup of buffer pools and forces garbage collection.
+// This method is useful during shutdown or when memory pressure is high.
+//
+// Example:
+//
+//	// Clean up resources during shutdown
+//	defer minioClient.CleanupResources()
+func (m *Minio) CleanupResources() {
+	if m.bufferPool != nil {
+		m.bufferPool.Cleanup()
+	}
+
+	// Force garbage collection to free memory
+	runtime.GC()
 }

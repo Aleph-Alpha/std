@@ -92,6 +92,9 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 		OnStop: func(ctx context.Context) error {
 
 			params.Minio.logger.Info("closing minio client...", nil, nil)
+
+			// Clean up resources before shutdown
+			params.Minio.CleanupResources()
 			params.Minio.GracefulShutdown()
 
 			wg.Wait()
