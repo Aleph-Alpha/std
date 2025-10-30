@@ -191,7 +191,7 @@ This ensures that no log entries are lost if the application shuts down while lo
 Note: This function is automatically invoked by the FXModule and does not need to be called directly in application code.
 
 <a name="Config"></a>
-## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/configs.go#L25-L56>)
+## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/logger/configs.go#L25-L60>)
 
 Config defines the configuration structure for the logger. It contains settings that control the behavior of the logging system.
 
@@ -227,6 +227,10 @@ type Config struct {
     //   - YAML configuration with the "enable_tracing" key
     //   - Environment variable LOGGER_ENABLE_TRACING
     EnableTracing bool `yaml:"enable_tracing" envconfig:"LOGGER_ENABLE_TRACING"`
+
+    // ServiceName is the name of the service that is logging messages.
+    // This value is used to populate the "service" field in log entries.
+    ServiceName string
 }
 ```
 

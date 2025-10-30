@@ -53,4 +53,8 @@ type Config struct {
 	//   - YAML configuration with the "enable_tracing" key
 	//   - Environment variable LOGGER_ENABLE_TRACING
 	EnableTracing bool `yaml:"enable_tracing" envconfig:"LOGGER_ENABLE_TRACING"`
+
+	// ServiceName is the name of the service that is logging messages.
+	// This value is used to populate the "service" field in log entries.
+	ServiceName string
 }
