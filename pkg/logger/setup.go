@@ -88,7 +88,7 @@ func NewLoggerClient(cfg Config) *Logger {
 		},
 		InitialFields: map[string]interface{}{
 			"pid":     os.Getpid(),
-			"service": "pharia-data-api",
+			"service": cfg.ServiceName,
 		},
 	}
 

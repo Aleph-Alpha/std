@@ -197,10 +197,18 @@ Package minio is a generated GoMock package.
 - [type BaseNotification](<#BaseNotification>)
 - [type BufferPool](<#BufferPool>)
   - [func NewBufferPool\(\) \*BufferPool](<#NewBufferPool>)
+  - [func NewBufferPoolWithConfig\(config BufferPoolConfig\) \*BufferPool](<#NewBufferPoolWithConfig>)
+  - [func \(bp \*BufferPool\) Cleanup\(\)](<#BufferPool.Cleanup>)
   - [func \(bp \*BufferPool\) Get\(\) \*bytes.Buffer](<#BufferPool.Get>)
+  - [func \(bp \*BufferPool\) GetStats\(\) BufferPoolStats](<#BufferPool.GetStats>)
   - [func \(bp \*BufferPool\) Put\(b \*bytes.Buffer\)](<#BufferPool.Put>)
+- [type BufferPoolConfig](<#BufferPoolConfig>)
+  - [func DefaultBufferPoolConfig\(\) BufferPoolConfig](<#DefaultBufferPoolConfig>)
+- [type BufferPoolStats](<#BufferPoolStats>)
 - [type Config](<#Config>)
 - [type ConnectionConfig](<#ConnectionConfig>)
+- [type ConnectionPoolConfig](<#ConnectionPoolConfig>)
+  - [func DefaultConnectionPoolConfig\(\) ConnectionPoolConfig](<#DefaultConnectionPoolConfig>)
 - [type DownloadConfig](<#DownloadConfig>)
 - [type ErrorCategory](<#ErrorCategory>)
 - [type KafkaNotification](<#KafkaNotification>)
@@ -217,12 +225,15 @@ Package minio is a generated GoMock package.
   - [func NewMinioClientWithDI\(params MinioParams\) \(\*Minio, error\)](<#NewMinioClientWithDI>)
   - [func \(m \*Minio\) AbortMultipartUpload\(ctx context.Context, objectKey, uploadID string\) error](<#Minio.AbortMultipartUpload>)
   - [func \(m \*Minio\) CleanupIncompleteUploads\(ctx context.Context, prefix string, olderThan time.Duration\) error](<#Minio.CleanupIncompleteUploads>)
+  - [func \(m \*Minio\) CleanupResources\(\)](<#Minio.CleanupResources>)
   - [func \(m \*Minio\) CompleteMultipartUpload\(ctx context.Context, objectKey, uploadID string, partNumbers \[\]int, etags \[\]string\) error](<#Minio.CompleteMultipartUpload>)
   - [func \(m \*Minio\) Delete\(ctx context.Context, objectKey string\) error](<#Minio.Delete>)
   - [func \(m \*Minio\) GenerateMultipartPresignedGetURLs\(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration\) \(MultipartPresignedGet, error\)](<#Minio.GenerateMultipartPresignedGetURLs>)
   - [func \(m \*Minio\) GenerateMultipartUploadURLs\(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration\) \(MultipartUpload, error\)](<#Minio.GenerateMultipartUploadURLs>)
   - [func \(m \*Minio\) Get\(ctx context.Context, objectKey string\) \(\[\]byte, error\)](<#Minio.Get>)
+  - [func \(m \*Minio\) GetBufferPoolStats\(\) BufferPoolStats](<#Minio.GetBufferPoolStats>)
   - [func \(m \*Minio\) GetErrorCategory\(err error\) ErrorCategory](<#Minio.GetErrorCategory>)
+  - [func \(m \*Minio\) GetResourceStats\(\) ResourceStats](<#Minio.GetResourceStats>)
   - [func \(m \*Minio\) GracefulShutdown\(\)](<#Minio.GracefulShutdown>)
   - [func \(m \*Minio\) IsPermanentError\(err error\) bool](<#Minio.IsPermanentError>)
   - [func \(m \*Minio\) IsRetryableError\(err error\) bool](<#Minio.IsRetryableError>)
@@ -232,6 +243,7 @@ Package minio is a generated GoMock package.
   - [func \(m \*Minio\) PreSignedHeadObject\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedHeadObject>)
   - [func \(m \*Minio\) PreSignedPut\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedPut>)
   - [func \(m \*Minio\) Put\(ctx context.Context, objectKey string, reader io.Reader, size ...int64\) \(int64, error\)](<#Minio.Put>)
+  - [func \(m \*Minio\) ResetResourceStats\(\)](<#Minio.ResetResourceStats>)
   - [func \(m \*Minio\) StreamGet\(ctx context.Context, objectKey string, chunkSize int\) \(\<\-chan \[\]byte, \<\-chan error\)](<#Minio.StreamGet>)
   - [func \(m \*Minio\) TranslateError\(err error\) error](<#Minio.TranslateError>)
 - [type MinioLifeCycleParams](<#MinioLifeCycleParams>)
@@ -265,6 +277,17 @@ Package minio is a generated GoMock package.
 - [type NotificationConfig](<#NotificationConfig>)
 - [type PresignedConfig](<#PresignedConfig>)
 - [type RedisNotification](<#RedisNotification>)
+- [type ResourceMonitor](<#ResourceMonitor>)
+  - [func NewResourceMonitor\(bufferPool \*BufferPool\) \*ResourceMonitor](<#NewResourceMonitor>)
+  - [func \(rm \*ResourceMonitor\) GetStats\(\) ResourceStats](<#ResourceMonitor.GetStats>)
+  - [func \(rm \*ResourceMonitor\) RecordConnectionAttempt\(\)](<#ResourceMonitor.RecordConnectionAttempt>)
+  - [func \(rm \*ResourceMonitor\) RecordConnectionClosure\(\)](<#ResourceMonitor.RecordConnectionClosure>)
+  - [func \(rm \*ResourceMonitor\) RecordConnectionFailure\(\)](<#ResourceMonitor.RecordConnectionFailure>)
+  - [func \(rm \*ResourceMonitor\) RecordConnectionSuccess\(\)](<#ResourceMonitor.RecordConnectionSuccess>)
+  - [func \(rm \*ResourceMonitor\) RecordMemoryUsage\(bytes int64\)](<#ResourceMonitor.RecordMemoryUsage>)
+  - [func \(rm \*ResourceMonitor\) RecordRequest\(\) func\(success bool\)](<#ResourceMonitor.RecordRequest>)
+  - [func \(rm \*ResourceMonitor\) ResetStats\(\)](<#ResourceMonitor.ResetStats>)
+- [type ResourceStats](<#ResourceStats>)
 - [type UploadConfig](<#UploadConfig>)
 - [type WebhookNotification](<#WebhookNotification>)
 
@@ -560,9 +583,9 @@ type BaseNotification struct {
 ```
 
 <a name="BufferPool"></a>
-## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L190-L193>)
+## type [BufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L214-L229>)
 
-BufferPool implements a pool of bytes.Buffers to reduce memory allocations. It's used for temporary buffer operations when reading or writing objects.
+BufferPool implements an advanced pool of bytes.Buffers with size limits and monitoring. It prevents memory leaks by limiting buffer sizes and pool capacity.
 
 ```go
 type BufferPool struct {
@@ -571,39 +594,121 @@ type BufferPool struct {
 ```
 
 <a name="NewBufferPool"></a>
-### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L199>)
+### func [NewBufferPool](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L236>)
 
 ```go
 func NewBufferPool() *BufferPool
 ```
 
-NewBufferPool creates a new BufferPool instance. The pool will create new bytes.Buffer instances as needed when none are available.
+NewBufferPool creates a new BufferPool instance with default configuration. The pool will create new bytes.Buffer instances as needed when none are available, with built\-in size limits to prevent memory leaks.
 
 Returns a configured BufferPool ready for use.
 
+<a name="NewBufferPoolWithConfig"></a>
+### func [NewBufferPoolWithConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L247>)
+
+```go
+func NewBufferPoolWithConfig(config BufferPoolConfig) *BufferPool
+```
+
+NewBufferPoolWithConfig creates a new BufferPool with custom configuration. This allows fine\-tuning of buffer sizes and pool limits for specific use cases.
+
+Parameters:
+
+- config: Configuration for buffer pool behavior
+
+Returns a configured BufferPool ready for use.
+
+<a name="BufferPool.Cleanup"></a>
+### func \(\*BufferPool\) [Cleanup](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L355>)
+
+```go
+func (bp *BufferPool) Cleanup()
+```
+
+Cleanup forces cleanup of the buffer pool, releasing all buffers. This is useful during shutdown or when memory pressure is high.
+
 <a name="BufferPool.Get"></a>
-### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L214>)
+### func \(\*BufferPool\) [Get](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L268>)
 
 ```go
 func (bp *BufferPool) Get() *bytes.Buffer
 ```
 
-Get returns a buffer from the pool. The returned buffer may be newly allocated or reused from a previous Put call. The caller should Reset the buffer before use if its previous contents are not needed.
+Get returns a buffer from the pool. The returned buffer may be newly allocated or reused from a previous Put call. The buffer is automatically reset and ready for use.
 
 Returns a \*bytes.Buffer that should be returned to the pool when no longer needed.
 
+<a name="BufferPool.GetStats"></a>
+### func \(\*BufferPool\) [GetStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L328>)
+
+```go
+func (bp *BufferPool) GetStats() BufferPoolStats
+```
+
+GetStats returns current buffer pool statistics for monitoring. This is useful for understanding memory usage patterns and pool effectiveness.
+
 <a name="BufferPool.Put"></a>
-### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L223>)
+### func \(\*BufferPool\) [Put](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L281>)
 
 ```go
 func (bp *BufferPool) Put(b *bytes.Buffer)
 ```
 
-Put returns a buffer to the pool for future reuse. The buffer should not be used after calling Put as it may be provided to another goroutine.
+Put returns a buffer to the pool for future reuse. The buffer will be discarded if it exceeds the maximum size limit or if the pool is full. This prevents memory leaks from oversized buffers accumulating in the pool.
 
 Parameters:
 
 - b: The buffer to return to the pool
+
+<a name="BufferPoolConfig"></a>
+## type [BufferPoolConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L194-L201>)
+
+BufferPoolConfig contains configuration for the buffer pool
+
+```go
+type BufferPoolConfig struct {
+    // MaxBufferSize is the maximum size a buffer can grow to before being discarded
+    MaxBufferSize int
+    // MaxPoolSize is the maximum number of buffers to keep in the pool
+    MaxPoolSize int
+    // InitialBufferSize is the initial size for new buffers
+    InitialBufferSize int
+}
+```
+
+<a name="DefaultBufferPoolConfig"></a>
+### func [DefaultBufferPoolConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L204>)
+
+```go
+func DefaultBufferPoolConfig() BufferPoolConfig
+```
+
+DefaultBufferPoolConfig returns the default buffer pool configuration
+
+<a name="BufferPoolStats"></a>
+## type [BufferPoolStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L309-L324>)
+
+Stats returns statistics about buffer pool usage for monitoring and debugging.
+
+```go
+type BufferPoolStats struct {
+    // CurrentPoolSize is the current number of buffers in the pool
+    CurrentPoolSize int64 `json:"currentPoolSize"`
+    // TotalBuffersCreated is the total number of buffers created since start
+    TotalBuffersCreated int64 `json:"totalBuffersCreated"`
+    // TotalBuffersReused is the total number of buffer reuses
+    TotalBuffersReused int64 `json:"totalBuffersReused"`
+    // TotalBuffersDiscarded is the total number of buffers discarded due to limits
+    TotalBuffersDiscarded int64 `json:"totalBuffersDiscarded"`
+    // MaxBufferSize is the maximum allowed buffer size
+    MaxBufferSize int `json:"maxBufferSize"`
+    // MaxPoolSize is the maximum allowed pool size
+    MaxPoolSize int `json:"maxPoolSize"`
+    // ReuseRatio is the ratio of reused buffers to created buffers
+    ReuseRatio float64 `json:"reuseRatio"`
+}
+```
 
 <a name="Config"></a>
 ## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L40-L55>)
@@ -658,6 +763,33 @@ type ConnectionConfig struct {
     AccessBucketCreation bool
 }
 ```
+
+<a name="ConnectionPoolConfig"></a>
+## type [ConnectionPoolConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L375-L384>)
+
+ConnectionPoolConfig contains configuration for connection management
+
+```go
+type ConnectionPoolConfig struct {
+    // MaxIdleConnections is the maximum number of idle connections to maintain
+    MaxIdleConnections int
+    // MaxConnectionsPerHost is the maximum connections per host
+    MaxConnectionsPerHost int
+    // IdleConnectionTimeout is how long to keep idle connections
+    IdleConnectionTimeout time.Duration
+    // ConnectionTimeout is the timeout for establishing connections
+    ConnectionTimeout time.Duration
+}
+```
+
+<a name="DefaultConnectionPoolConfig"></a>
+### func [DefaultConnectionPoolConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L387>)
+
+```go
+func DefaultConnectionPoolConfig() ConnectionPoolConfig
+```
+
+DefaultConnectionPoolConfig returns default connection pool configuration
 
 <a name="DownloadConfig"></a>
 ## type [DownloadConfig](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/configs.go#L104-L115>)
@@ -750,7 +882,7 @@ type KafkaSASLAuth struct {
 ```
 
 <a name="LoggerAdapter"></a>
-## type [LoggerAdapter](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L34-L42>)
+## type [LoggerAdapter](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L36-L44>)
 
 LoggerAdapter adapts the logger package's Logger to implement MinioLogger interface. This allows seamless integration with the structured logger from the logger package.
 
@@ -761,7 +893,7 @@ type LoggerAdapter struct {
 ```
 
 <a name="LoggerAdapter.Debug"></a>
-### func \(\*LoggerAdapter\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L57>)
+### func \(\*LoggerAdapter\) [Debug](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L59>)
 
 ```go
 func (la *LoggerAdapter) Debug(msg string, err error, fields ...map[string]any)
@@ -770,7 +902,7 @@ func (la *LoggerAdapter) Debug(msg string, err error, fields ...map[string]any)
 Debug implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Error"></a>
-### func \(\*LoggerAdapter\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L75>)
+### func \(\*LoggerAdapter\) [Error](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L77>)
 
 ```go
 func (la *LoggerAdapter) Error(msg string, err error, fields ...map[string]any)
@@ -779,7 +911,7 @@ func (la *LoggerAdapter) Error(msg string, err error, fields ...map[string]any)
 Error implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Fatal"></a>
-### func \(\*LoggerAdapter\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L81>)
+### func \(\*LoggerAdapter\) [Fatal](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L83>)
 
 ```go
 func (la *LoggerAdapter) Fatal(msg string, err error, fields ...map[string]any)
@@ -788,7 +920,7 @@ func (la *LoggerAdapter) Fatal(msg string, err error, fields ...map[string]any)
 Fatal implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Info"></a>
-### func \(\*LoggerAdapter\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L63>)
+### func \(\*LoggerAdapter\) [Info](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L65>)
 
 ```go
 func (la *LoggerAdapter) Info(msg string, err error, fields ...map[string]any)
@@ -797,7 +929,7 @@ func (la *LoggerAdapter) Info(msg string, err error, fields ...map[string]any)
 Info implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Warn"></a>
-### func \(\*LoggerAdapter\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L69>)
+### func \(\*LoggerAdapter\) [Warn](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L71>)
 
 ```go
 func (la *LoggerAdapter) Warn(msg string, err error, fields ...map[string]any)
@@ -839,7 +971,7 @@ type MQTTNotification struct {
 ```
 
 <a name="Minio"></a>
-## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L159-L186>)
+## type [Minio](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L161-L191>)
 
 Minio represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and thread\-safety.
 
@@ -855,7 +987,7 @@ type Minio struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L250>)
+### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L659>)
 
 ```go
 func NewClient(config Config, logger MinioLogger) (*Minio, error)
@@ -940,6 +1072,22 @@ Example:
 ```
 // Abort all incomplete uploads in the "uploads/" prefix that are older than 24 hours
 err := minioClient.CleanupIncompleteUploads(ctx, "uploads/", 24*time.Hour)
+```
+
+<a name="Minio.CleanupResources"></a>
+### func \(\*Minio\) [CleanupResources](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L1066>)
+
+```go
+func (m *Minio) CleanupResources()
+```
+
+CleanupResources performs cleanup of buffer pools and forces garbage collection. This method is useful during shutdown or when memory pressure is high.
+
+Example:
+
+```
+// Clean up resources during shutdown
+defer minioClient.CleanupResources()
 ```
 
 <a name="Minio.CompleteMultipartUpload"></a>
@@ -1095,6 +1243,27 @@ if err == nil {
 }
 ```
 
+<a name="Minio.GetBufferPoolStats"></a>
+### func \(\*Minio\) [GetBufferPoolStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L1037>)
+
+```go
+func (m *Minio) GetBufferPoolStats() BufferPoolStats
+```
+
+GetBufferPoolStats returns buffer pool statistics for monitoring buffer efficiency. This is useful for understanding memory usage patterns and optimizing buffer sizes.
+
+Returns:
+
+- BufferPoolStats: Statistics about buffer pool usage and efficiency
+
+Example:
+
+```
+stats := minioClient.GetBufferPoolStats()
+fmt.Printf("Buffer reuse ratio: %.2f%%\n", stats.ReuseRatio*100)
+fmt.Printf("Buffers in pool: %d\n", stats.CurrentPoolSize)
+```
+
 <a name="Minio.GetErrorCategory"></a>
 ### func \(\*Minio\) [GetErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/errors.go#L570>)
 
@@ -1104,8 +1273,30 @@ func (m *Minio) GetErrorCategory(err error) ErrorCategory
 
 GetErrorCategory returns the category of the given error
 
+<a name="Minio.GetResourceStats"></a>
+### func \(\*Minio\) [GetResourceStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L1019>)
+
+```go
+func (m *Minio) GetResourceStats() ResourceStats
+```
+
+GetResourceStats returns comprehensive resource usage statistics for monitoring. This method provides insights into connection health, request performance, memory usage, and buffer pool efficiency.
+
+Returns:
+
+- ResourceStats: Comprehensive statistics about resource usage
+
+Example:
+
+```
+stats := minioClient.GetResourceStats()
+fmt.Printf("Active connections: %d\n", stats.ActiveConnections)
+fmt.Printf("Request success rate: %.2f%%\n", stats.RequestSuccessRate*100)
+fmt.Printf("Average request duration: %v\n", stats.AverageRequestDuration)
+```
+
 <a name="Minio.GracefulShutdown"></a>
-### func \(\*Minio\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L130>)
+### func \(\*Minio\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/fx_module.go#L133>)
 
 ```go
 func (m *Minio) GracefulShutdown()
@@ -1308,6 +1499,24 @@ if err == nil {
 }
 ```
 
+<a name="Minio.ResetResourceStats"></a>
+### func \(\*Minio\) [ResetResourceStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L1053>)
+
+```go
+func (m *Minio) ResetResourceStats()
+```
+
+ResetResourceStats resets all resource monitoring statistics. This is useful for getting fresh metrics for a specific time period.
+
+Example:
+
+```
+// Reset stats at the beginning of a monitoring period
+minioClient.ResetResourceStats()
+// ... perform operations ...
+stats := minioClient.GetResourceStats()
+```
+
 <a name="Minio.StreamGet"></a>
 ### func \(\*Minio\) [StreamGet](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/object_utils.go#L144>)
 
@@ -1343,7 +1552,7 @@ type MinioLifeCycleParams struct {
 ```
 
 <a name="MinioLogger"></a>
-## type [MinioLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L19-L30>)
+## type [MinioLogger](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L21-L32>)
 
 MinioLogger defines the logging interface used by MinIO client. This interface allows for flexible logger injection while maintaining compatibility with both structured loggers \(like the logger package\) and simple loggers.
 
@@ -1363,7 +1572,7 @@ type MinioLogger interface {
 ```
 
 <a name="NewLoggerAdapter"></a>
-### func [NewLoggerAdapter](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L46-L52>)
+### func [NewLoggerAdapter](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L48-L54>)
 
 ```go
 func NewLoggerAdapter(logger interface {
@@ -1726,6 +1935,141 @@ type RedisNotification struct {
 
     // Key is the Redis key where events will be published
     Key string
+}
+```
+
+<a name="ResourceMonitor"></a>
+## type [ResourceMonitor](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L397-L428>)
+
+ResourceMonitor tracks resource usage, performance metrics, and connection health
+
+```go
+type ResourceMonitor struct {
+    // contains filtered or unexported fields
+}
+```
+
+<a name="NewResourceMonitor"></a>
+### func [NewResourceMonitor](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L431>)
+
+```go
+func NewResourceMonitor(bufferPool *BufferPool) *ResourceMonitor
+```
+
+NewResourceMonitor creates a new resource monitor instance
+
+<a name="ResourceMonitor.GetStats"></a>
+### func \(\*ResourceMonitor\) [GetStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L546>)
+
+```go
+func (rm *ResourceMonitor) GetStats() ResourceStats
+```
+
+GetStats returns comprehensive resource usage statistics
+
+<a name="ResourceMonitor.RecordConnectionAttempt"></a>
+### func \(\*ResourceMonitor\) [RecordConnectionAttempt](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L442>)
+
+```go
+func (rm *ResourceMonitor) RecordConnectionAttempt()
+```
+
+RecordConnectionAttempt records a connection attempt
+
+<a name="ResourceMonitor.RecordConnectionClosure"></a>
+### func \(\*ResourceMonitor\) [RecordConnectionClosure](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L458>)
+
+```go
+func (rm *ResourceMonitor) RecordConnectionClosure()
+```
+
+RecordConnectionClosure records a connection closure
+
+<a name="ResourceMonitor.RecordConnectionFailure"></a>
+### func \(\*ResourceMonitor\) [RecordConnectionFailure](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L453>)
+
+```go
+func (rm *ResourceMonitor) RecordConnectionFailure()
+```
+
+RecordConnectionFailure records a failed connection
+
+<a name="ResourceMonitor.RecordConnectionSuccess"></a>
+### func \(\*ResourceMonitor\) [RecordConnectionSuccess](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L447>)
+
+```go
+func (rm *ResourceMonitor) RecordConnectionSuccess()
+```
+
+RecordConnectionSuccess records a successful connection
+
+<a name="ResourceMonitor.RecordMemoryUsage"></a>
+### func \(\*ResourceMonitor\) [RecordMemoryUsage](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L495>)
+
+```go
+func (rm *ResourceMonitor) RecordMemoryUsage(bytes int64)
+```
+
+RecordMemoryUsage records current memory usage
+
+<a name="ResourceMonitor.RecordRequest"></a>
+### func \(\*ResourceMonitor\) [RecordRequest](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L463>)
+
+```go
+func (rm *ResourceMonitor) RecordRequest() func(success bool)
+```
+
+RecordRequest records the start of a request and returns a function to record completion
+
+<a name="ResourceMonitor.ResetStats"></a>
+### func \(\*ResourceMonitor\) [ResetStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L612>)
+
+```go
+func (rm *ResourceMonitor) ResetStats()
+```
+
+ResetStats resets all statistics counters
+
+<a name="ResourceStats"></a>
+## type [ResourceStats](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/minio/setup.go#L509-L543>)
+
+ResourceStats contains comprehensive resource usage statistics
+
+```go
+type ResourceStats struct {
+    // Connection statistics
+    TotalConnections      int64   `json:"totalConnections"`
+    ActiveConnections     int64   `json:"activeConnections"`
+    FailedConnections     int64   `json:"failedConnections"`
+    ConnectionAttempts    int64   `json:"connectionAttempts"`
+    ConnectionSuccessRate float64 `json:"connectionSuccessRate"`
+
+    // Request statistics
+    TotalRequests      int64   `json:"totalRequests"`
+    SuccessfulRequests int64   `json:"successfulRequests"`
+    FailedRequests     int64   `json:"failedRequests"`
+    RequestSuccessRate float64 `json:"requestSuccessRate"`
+
+    // Performance statistics
+    AverageRequestDuration time.Duration `json:"averageRequestDuration"`
+    MaxRequestDuration     time.Duration `json:"maxRequestDuration"`
+    MinRequestDuration     time.Duration `json:"minRequestDuration"`
+    RequestsPerSecond      float64       `json:"requestsPerSecond"`
+
+    // Memory statistics
+    TotalMemoryAllocated int64 `json:"totalMemoryAllocated"`
+    CurrentMemoryUsage   int64 `json:"currentMemoryUsage"`
+    MaxMemoryUsage       int64 `json:"maxMemoryUsage"`
+
+    // Buffer pool statistics
+    BufferPoolStats BufferPoolStats `json:"bufferPoolStats"`
+
+    // Runtime information
+    Uptime        time.Duration `json:"uptime"`
+    LastResetTime time.Time     `json:"lastResetTime"`
+
+    // System memory info
+    SystemMemoryStats runtime.MemStats `json:"systemMemoryStats"`
 }
 ```
 
