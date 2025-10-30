@@ -2,8 +2,10 @@ package rabbit
 
 import (
 	"context"
-	"go.uber.org/fx"
+	"log"
 	"sync"
+
+	"go.uber.org/fx"
 )
 
 // FXModule is an fx.Module that provides and configures the RabbitMQ client.
@@ -32,7 +34,6 @@ type RabbitParams struct {
 	fx.In
 
 	Config Config
-	Logger Logger
 }
 
 // NewClientWithDI creates a new RabbitMQ client using dependency injection.
@@ -64,8 +65,8 @@ type RabbitParams struct {
 // Under the hood, this function simply delegates to the standard NewClient function,
 // making it easier to integrate with dependency injection frameworks while maintaining
 // the same initialization logic.
-func NewClientWithDI(params RabbitParams) *Rabbit {
-	return NewClient(params.Config, params.Logger)
+func NewClientWithDI(params RabbitParams) (*Rabbit, error) {
+	return NewClient(params.Config)
 }
 
 // RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
@@ -74,7 +75,6 @@ type RabbitLifecycleParams struct {
 
 	Lifecycle fx.Lifecycle
 	Client    *Rabbit
-	Logger    Logger
 	Config    Config
 }
 
@@ -103,10 +103,10 @@ func RegisterRabbitLifecycle(params RabbitLifecycleParams) {
 		OnStart: func(ctx context.Context) error {
 			wg.Add(1)
 
-			go func(logger Logger, cfg Config) {
+			go func(cfg Config) {
 				defer wg.Done()
-				params.Client.RetryConnection(logger, cfg)
-			}(params.Logger, params.Config)
+				params.Client.RetryConnection(cfg)
+			}(params.Config)
 
 			return nil
 		},
@@ -138,17 +138,17 @@ func (rb *Rabbit) GracefulShutdown() {
 	})
 	rb.mu.Lock()
 
-	rb.logger.Info("closing rabbit channel...", nil, nil)
+	log.Println("INFO: Shutting down RabbitMQ client")
 
 	if rb.Channel != nil {
 		if err := rb.Channel.Close(); err != nil {
-			rb.logger.Error("error in closing rabbit channel", err, nil)
+			log.Println("WARN: Failed to close rabbit channel")
 			return
 		}
 	}
 	if rb.conn != nil && !rb.conn.IsClosed() {
 		if err := rb.conn.Close(); err != nil {
-			rb.logger.Error("error in closing rabbit connection", err, nil)
+			log.Println("WARN: Failed to close rabbit connection")
 			return
 		}
 	}

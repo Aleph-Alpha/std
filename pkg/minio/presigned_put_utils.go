@@ -3,12 +3,13 @@ package minio
 import (
 	"context"
 	"fmt"
-	"github.com/minio/minio-go/v7"
 	"math"
 	"net/url"
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // MultipartUploadInfo contains all information needed for a multipart upload.
@@ -268,14 +269,6 @@ func (m *Minio) GenerateMultipartUploadURLs(
 		return nil, fmt.Errorf("file size %d exceeds maximum allowed size %d", fileSize, m.cfg.UploadConfig.MaxObjectSize)
 	}
 
-	// Check if the file size is below a multipart threshold, in which case suggest single-part upload
-	if fileSize < m.cfg.UploadConfig.MultipartThreshold {
-		m.logger.Info("File size is below multipart threshold, consider using single-part upload", nil, map[string]interface{}{
-			"fileSize":  fileSize,
-			"threshold": m.cfg.UploadConfig.MultipartThreshold,
-		})
-	}
-
 	// Calculate optimal part size and count
 	partSize, partCount := m.calculateOptimalPartSize(fileSize)
 
@@ -421,11 +414,6 @@ func (m *Minio) AbortMultipartUpload(ctx context.Context, objectKey, uploadID st
 		return fmt.Errorf("failed to abort multipart upload: %w", err)
 	}
 
-	m.logger.Info("Aborted multipart upload", nil, map[string]interface{}{
-		"objectKey": objectKey,
-		"uploadID":  uploadID,
-	})
-
 	return nil
 }
 
@@ -557,20 +545,8 @@ func (m *Minio) CleanupIncompleteUploads(ctx context.Context, prefix string, old
 		if upload.Initiated.Before(cutoffTime) {
 			err := m.AbortMultipartUpload(ctx, upload.Key, upload.UploadID)
 			if err != nil {
-				m.logger.Error("Failed to abort incomplete upload during cleanup", err, map[string]interface{}{
-					"objectKey": upload.Key,
-					"uploadID":  upload.UploadID,
-				})
-				// Continue with other uploads even if one fails
-				continue
+				return fmt.Errorf("failed to abort multipart upload: %w", err)
 			}
-
-			m.logger.Info("Cleaned up incomplete upload", nil, map[string]interface{}{
-				"objectKey":   upload.Key,
-				"uploadID":    upload.UploadID,
-				"initiatedOn": upload.Initiated,
-				"ageInHours":  time.Since(upload.Initiated).Hours(),
-			})
 		}
 	}
 

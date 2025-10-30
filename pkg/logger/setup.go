@@ -1,10 +1,11 @@
 package logger
 
 import (
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"log"
 	"os"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Logger is a wrapper around Uber's Zap logger.
@@ -15,6 +16,11 @@ type Logger struct {
 	// This is exposed to allow direct access to Zap-specific functionality
 	// when needed, but most logging should go through the wrapper methods.
 	Zap *zap.Logger
+
+	// tracingEnabled indicates whether tracing integration is enabled
+	// When true, logging methods will automatically extract trace context
+	// and include trace/span IDs in log entries
+	tracingEnabled bool
 }
 
 // NewLoggerClient initializes and returns a new instance of the logger based on configuration.
@@ -49,7 +55,9 @@ func NewLoggerClient(cfg Config) *Logger {
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "timestamp"
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
+	encoderCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	encoderCfg.EncodeCaller = zapcore.FullCallerEncoder
+	encoderCfg.EncodeDuration = zapcore.MillisDurationEncoder
 
 	logLevel := zap.InfoLevel
 
@@ -90,5 +98,8 @@ func NewLoggerClient(cfg Config) *Logger {
 		log.Fatal(err)
 	}
 
-	return &Logger{Zap: logger}
+	return &Logger{
+		Zap:            logger,
+		tracingEnabled: cfg.EnableTracing,
+	}
 }

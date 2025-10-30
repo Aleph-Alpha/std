@@ -20,11 +20,12 @@
 //			"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
 //		)
 //
-//		// Create a logger
-//		log, _ := logger.NewLogger(logger.Config{Level: "info"})
+//		// Create a logger (optional)
+//		log, _ := logger.NewLoggerClient(logger.Config{Level: "info"})
+//		loggerAdapter := minio.NewLoggerAdapter(log)
 //
-//		// Create a new MinIO client
-//		client, err := minio.New(minio.Config{
+//		// Create a new MinIO client with logger
+//		client, err := minio.NewClient(minio.Config{
 //			Connection: minio.ConnectionConfig{
 //				Endpoint:        "play.min.io",
 //				AccessKeyID:     "minioadmin",
@@ -36,9 +37,15 @@
 //			PresignedConfig: minio.PresignedConfig{
 //				ExpiryDuration: 1 * time.Hour,
 //			},
-//		}, log)
+//		}, loggerAdapter)
 //		if err != nil {
 //			log.Fatal("Failed to create MinIO client", err, nil)
+//		}
+//
+//		// Alternative: Create MinIO client without logger (uses fallback)
+//		client, err := minio.NewClient(config, nil)
+//		if err != nil {
+//			return fmt.Errorf("failed to initialize MinIO client: %w", err)
 //		}
 //
 //		// Create a bucket if it doesn't exist
@@ -115,11 +122,22 @@
 //
 // FX Module Integration:
 //
-// This package provides an fx module for easy integration:
+// This package provides an fx module for easy integration with optional logger injection:
 //
+//	// With logger module (recommended)
 //	app := fx.New(
-//		logger.Module,
-//		minio.Module,
+//		logger.FXModule,  // Provides structured logger
+//		fx.Provide(func(log *logger.Logger) minio.MinioLogger {
+//			return minio.NewLoggerAdapter(log)
+//		}),
+//		minio.FXModule,   // Will automatically use the provided logger
+//		// ... other modules
+//	)
+//	app.Run()
+//
+//	// Without logger module (uses fallback logger)
+//	app := fx.New(
+//		minio.FXModule,   // Will use fallback logger
 //		// ... other modules
 //	)
 //	app.Run()

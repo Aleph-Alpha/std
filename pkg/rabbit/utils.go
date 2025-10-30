@@ -2,10 +2,11 @@ package rabbit
 
 import (
 	"context"
-	"fmt"
-	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
 	"sync"
 	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // Message defines the interface for consumed messages from RabbitMQ.
@@ -76,10 +77,10 @@ func (rb *Rabbit) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueNam
 		for {
 			select {
 			case <-rb.shutdownSignal:
-				rb.logger.Info("consumer is shutting down due to shutdown signal", nil, nil)
+				log.Println("INFO: Stopping consumer due to shutdown signal")
 				return
 			case <-ctx.Done():
-				rb.logger.Info("consumer is shutting down due to context cancellation", ctx.Err(), nil)
+				log.Println("INFO: Stopping consumer due to context cancellation")
 				return
 			default:
 				rb.mu.RLock()
@@ -95,9 +96,7 @@ func (rb *Rabbit) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueNam
 				rb.mu.RUnlock()
 
 				if err != nil {
-					rb.logger.Error("error in establishing consumer for rabbit", err, map[string]interface{}{
-						"queue_name": queueName,
-					})
+					log.Printf("ERROR: Failed to establish consumer for queue %s: %v", queueName, err)
 					time.Sleep(100 * time.Millisecond)
 					continue
 				}
@@ -105,19 +104,15 @@ func (rb *Rabbit) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueNam
 				for {
 					select {
 					case <-ctx.Done():
-						rb.logger.Info("consumer is shutting down due to context cancellation", ctx.Err(), nil)
+						log.Printf("INFO: Stopping consumer due to context cancellation: %v", ctx.Err())
 						return
 					case <-rb.shutdownSignal:
-						rb.logger.Info("consumer is shutting down due to shutdown signal", nil, nil)
+						log.Println("INFO: Stopping consumer due to shutdown signal")
 						return
 					case msg, ok := <-msgs:
 						if !ok {
 							continue outerLoop
 						}
-						rb.logger.Debug("message consumed from rabbit", nil, map[string]interface{}{
-							"queue_name": queueName,
-							"payload":    fmt.Sprintf("%v", string(msg.Body)),
-						})
 						outChan <- &ConsumerMessage{
 							body:     msg.Body,
 							delivery: &msg,
@@ -246,7 +241,7 @@ func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Mes
 func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error {
 	select {
 	case <-ctx.Done():
-		rb.logger.Error("context error for publishing msg into rabbit", ctx.Err(), nil)
+		log.Printf("context error for publishing msg into rabbit: %v", ctx.Err())
 		return ctx.Err()
 	default:
 		// Initialize header variable
@@ -281,10 +276,6 @@ func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string
 		)
 		rb.mu.RUnlock()
 
-		if err == nil {
-			return nil
-		}
-		rb.logger.Error("error in publishing msg into rabbit", err, nil)
 		return err
 	}
 }

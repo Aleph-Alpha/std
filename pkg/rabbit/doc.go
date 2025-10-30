@@ -21,8 +21,6 @@
 //		"sync"
 //	)
 //
-//	// Create a logger
-//	log, _ := logger.NewLogger(logger.Config{Level: "info"})
 //
 //	// Create a new RabbitMQ client
 //	client, err := rabbit.New(rabbit.Config{

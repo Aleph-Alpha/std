@@ -2,6 +2,8 @@ package tracer
 
 import (
 	"context"
+	"log"
+
 	"go.uber.org/fx"
 )
 
@@ -57,9 +59,9 @@ var FXModule = fx.Module("tracer",
 func RegisterTracerLifecycle(lc fx.Lifecycle, tracer *Tracer) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			tracer.logger.Info("shutting down tracer tracer...", nil, nil)
+			log.Println("INFO: shutting down tracer...")
 			if tracer.tracer == nil {
-				tracer.logger.Warn("tracer was nil during shutdown", nil, nil)
+				log.Println("INFO: tracer is nil, skipping shutdown")
 				return nil
 			}
 			return tracer.tracer.Shutdown(ctx)

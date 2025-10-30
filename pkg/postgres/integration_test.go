@@ -3,14 +3,16 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"github.com/docker/docker/api/types/container"
-	"github.com/jackc/pgx/v5/pgconn"
 	"net"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"database/sql"
+
 	"github.com/docker/go-connections/nat"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -210,19 +212,6 @@ func TestPostgresWithFXModule(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMockLogger(ctrl)
-
-	// Override Fatal to prevent test termination
-	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(msg string, err error, fields ...map[string]interface{}) {
-			t.Logf("FATAL: %s, Error: %v", msg, err)
-		}).AnyTimes()
-
-	// Set up expected Logger calls
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Print connection details for debugging
 	t.Logf("Using PostgreSQL on %s:%s", containerInstance.Host, containerInstance.Port)
@@ -236,9 +225,6 @@ func TestPostgresWithFXModule(t *testing.T) {
 		fx.Provide(
 			func() Config {
 				return containerInstance.Config
-			},
-			func() Logger {
-				return mockLogger
 			},
 		),
 		// Use the existing FXModule
@@ -461,19 +447,6 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMockLogger(ctrl)
-
-	// Override Fatal to prevent test termination
-	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(msg string, err error, fields ...map[string]interface{}) {
-			t.Logf("FATAL: %s, Error: %v", msg, err)
-		}).AnyTimes()
-
-	// Set up expected Logger calls
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Get the Postgres instance to test it
 	var postgres *Postgres
@@ -484,9 +457,6 @@ func TestPostgresConnectionFailureRecovery(t *testing.T) {
 		fx.Provide(
 			func() Config {
 				return containerInstance.Config
-			},
-			func() Logger {
-				return mockLogger
 			},
 		),
 		// Use the existing FXModule
@@ -535,13 +505,6 @@ func TestErrorHandling(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMockLogger(ctrl)
-
-	// Set up expected Logger calls
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Get the Postgres instance to test it
 	var postgres *Postgres
@@ -552,9 +515,6 @@ func TestErrorHandling(t *testing.T) {
 		fx.Provide(
 			func() Config {
 				return containerInstance.Config
-			},
-			func() Logger {
-				return mockLogger
 			},
 		),
 		// Use the existing FXModule
@@ -956,13 +916,6 @@ func TestErrorCategoriesComprehensive(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMockLogger(ctrl)
-
-	// Set up expected Logger calls
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Get the Postgres instance to test it
 	var postgres *Postgres
@@ -973,9 +926,6 @@ func TestErrorCategoriesComprehensive(t *testing.T) {
 		fx.Provide(
 			func() Config {
 				return containerInstance.Config
-			},
-			func() Logger {
-				return mockLogger
 			},
 		),
 		// Use the existing FXModule
@@ -1084,13 +1034,6 @@ func TestErrorClassificationFunctions(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMockLogger(ctrl)
-
-	// Set up expected Logger calls
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Get the Postgres instance to test it
 	var postgres *Postgres
@@ -1101,9 +1044,6 @@ func TestErrorClassificationFunctions(t *testing.T) {
 		fx.Provide(
 			func() Config {
 				return containerInstance.Config
-			},
-			func() Logger {
-				return mockLogger
 			},
 		),
 		// Use the existing FXModule
@@ -1231,14 +1171,6 @@ func TestAdvancedQueryOperations(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMockLogger(ctrl)
-
-	// Set up expected Logger calls
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Get the Postgres instance to test it
 	var postgres *Postgres
@@ -1249,9 +1181,6 @@ func TestAdvancedQueryOperations(t *testing.T) {
 		fx.Provide(
 			func() Config {
 				return containerInstance.Config
-			},
-			func() Logger {
-				return mockLogger
 			},
 		),
 		// Use the existing FXModule
@@ -2391,14 +2320,6 @@ func TestTransactionHandling(t *testing.T) {
 	// Create mock controller and Logger
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockLogger := NewMockLogger(ctrl)
-
-	// Set up expected Logger calls
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockLogger.EXPECT().Fatal(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	var postgres *Postgres
 
@@ -2408,9 +2329,6 @@ func TestTransactionHandling(t *testing.T) {
 		fx.Provide(
 			func() Config {
 				return containerInstance.Config
-			},
-			func() Logger {
-				return mockLogger
 			},
 		),
 		// Use the existing FXModule

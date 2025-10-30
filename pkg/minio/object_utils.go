@@ -3,8 +3,9 @@ package minio
 import (
 	"context"
 	"fmt"
-	"github.com/minio/minio-go/v7"
 	"io"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // Put uploads an object to the specified bucket.
@@ -86,7 +87,7 @@ func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error) {
 	defer func(reader io.ReadCloser) {
 		err := reader.Close()
 		if err != nil {
-			m.logger.Error("failed to close object reader", err, map[string]interface{}{})
+			m.logger.Error("Failed to close object reader", err, nil)
 		}
 	}(reader)
 
@@ -156,7 +157,7 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 		}
 		defer func() {
 			if err := reader.Close(); err != nil {
-				m.logger.Error("failed to close object reader", err, nil)
+				m.logger.Error("Failed to close object reader", err, nil)
 			}
 		}()
 
@@ -223,8 +224,5 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 //	}
 func (m *Minio) Delete(ctx context.Context, objectKey string) error {
 	err := m.Client.RemoveObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.RemoveObjectOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
