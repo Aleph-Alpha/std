@@ -15,8 +15,8 @@
 // Basic Usage:
 //
 //	import (
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/rabbit"
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+//		"github.com/Aleph-Alpha/data-go-packages/pkg/rabbit"
+//		"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
 //		"context"
 //		"sync"
 //	)
@@ -75,7 +75,7 @@
 // Publisher Example (sending trace context):
 //
 //	import (
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
+//		"github.com/Aleph-Alpha/data-go-packages/pkg/tracer"
 //		// other imports...
 //	)
 //

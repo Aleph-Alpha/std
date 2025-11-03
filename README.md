@@ -5,7 +5,7 @@
 To use this package in your Go project, add it as a dependency:
 
 ```bash
-go get gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages
+go get github.com/Aleph-Alpha/data-go-packages
 ```
 
 ## Authentication Setup
@@ -60,13 +60,13 @@ This module contains several packages that you can import into your project:
 
 ```go
 // Import the logger package
-import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+import "github.com/Aleph-Alpha/data-go-packages/pkg/logger"
 
 // Import the minio package
-import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/minio"
+import "github.com/Aleph-Alpha/data-go-packages/pkg/minio"
 
 // Import the rabbit package
-import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/rabbit"
+import "github.com/Aleph-Alpha/data-go-packages/pkg/rabbit"
 ```
 
 # Running Tests
@@ -106,12 +106,11 @@ DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLE
 
 # Go Packages Documentation
 
-Generated on Thu Oct 30 22:57:43 CET 2025
+Generated on Mon Nov  3 17:04:36 CET 2025
 
 ## Packages
 - [tracer](docs/pkg/tracer.md)
 - [logger](docs/pkg/logger.md)
-- [redis](docs/pkg/redis.md)
 - [minio](docs/pkg/minio.md)
 - [postgres](docs/pkg/postgres.md)
 - [rabbit](docs/pkg/rabbit.md)
