@@ -15,8 +15,8 @@
 // Basic Usage:
 //
 //	import (
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/postgres"
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+//		"github.com/Aleph-Alpha/data-go-packages/pkg/postgres"
+//		"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
 //	)
 //
 //	// Create a logger

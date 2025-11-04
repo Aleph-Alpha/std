@@ -3,7 +3,7 @@
 # rabbit
 
 ```go
-import "gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/rabbit"
+import "github.com/Aleph-Alpha/data-go-packages/pkg/rabbit"
 ```
 
 Package rabbit provides functionality for interacting with RabbitMQ.
@@ -23,8 +23,8 @@ Basic Usage:
 
 ```
 import (
-	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/rabbit"
-	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+	"github.com/Aleph-Alpha/data-go-packages/pkg/rabbit"
+	"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
 	"context"
 	"sync"
 )
@@ -83,7 +83,7 @@ Publisher Example \(sending trace context\):
 
 ```
 import (
-	"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
+	"github.com/Aleph-Alpha/data-go-packages/pkg/tracer"
 	// other imports...
 )
 
@@ -462,7 +462,7 @@ var FXModule = fx.Module("rabbit",
 ```
 
 <a name="RegisterRabbitLifecycle"></a>
-## func [RegisterRabbitLifecycle](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L99>)
+## func [RegisterRabbitLifecycle](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L99>)
 
 ```go
 func RegisterRabbitLifecycle(params RabbitLifecycleParams)
@@ -485,7 +485,7 @@ The function:
 This ensures that the RabbitMQ client remains available throughout the application's lifetime and is properly cleaned up during shutdown.
 
 <a name="Channel"></a>
-## type [Channel](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/configs.go#L60-L92>)
+## type [Channel](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/configs.go#L60-L92>)
 
 Channel contains configuration for AMQP channels, exchanges, queues, and bindings. These settings determine how messages are routed and processed.
 
@@ -526,7 +526,7 @@ type Channel struct {
 ```
 
 <a name="Config"></a>
-## type [Config](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/configs.go#L6-L16>)
+## type [Config](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/configs.go#L6-L16>)
 
 Config defines the top\-level configuration structure for the RabbitMQ client. It contains all the necessary configuration sections for establishing connections, setting up channels, and configuring dead\-letter behavior.
 
@@ -545,7 +545,7 @@ type Config struct {
 ```
 
 <a name="Connection"></a>
-## type [Connection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/configs.go#L20-L56>)
+## type [Connection](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/configs.go#L20-L56>)
 
 Connection contains the configuration parameters needed to establish a connection to a RabbitMQ server, including authentication and TLS settings.
 
@@ -590,7 +590,7 @@ type Connection struct {
 ```
 
 <a name="ConsumerMessage"></a>
-## type [ConsumerMessage](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L48-L51>)
+## type [ConsumerMessage](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L48-L51>)
 
 ConsumerMessage implements the Message interface and wraps an AMQP delivery. This struct provides access to the message content and acknowledgment methods.
 
@@ -601,7 +601,7 @@ type ConsumerMessage struct {
 ```
 
 <a name="ConsumerMessage.AckMsg"></a>
-### func \(\*ConsumerMessage\) [AckMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L287>)
+### func \(\*ConsumerMessage\) [AckMsg](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L287>)
 
 ```go
 func (rb *ConsumerMessage) AckMsg() error
@@ -612,7 +612,7 @@ AckMsg acknowledges the message, informing RabbitMQ that the message has been su
 Returns an error if the acknowledgment fails.
 
 <a name="ConsumerMessage.Body"></a>
-### func \(\*ConsumerMessage\) [Body](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L304>)
+### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L304>)
 
 ```go
 func (rb *ConsumerMessage) Body() []byte
@@ -621,7 +621,7 @@ func (rb *ConsumerMessage) Body() []byte
 Body returns the message payload as a byte slice.
 
 <a name="ConsumerMessage.Header"></a>
-### func \(\*ConsumerMessage\) [Header](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L342>)
+### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L342>)
 
 ```go
 func (rb *ConsumerMessage) Header() map[string]interface{}
@@ -664,7 +664,7 @@ for msg := range msgChan {
 ```
 
 <a name="ConsumerMessage.NackMsg"></a>
-### func \(\*ConsumerMessage\) [NackMsg](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L299>)
+### func \(\*ConsumerMessage\) [NackMsg](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L299>)
 
 ```go
 func (rb *ConsumerMessage) NackMsg(requeue bool) error
@@ -679,7 +679,7 @@ Parameters:
 Returns an error if the rejection fails.
 
 <a name="DeadLetter"></a>
-## type [DeadLetter](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/configs.go#L97-L112>)
+## type [DeadLetter](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/configs.go#L97-L112>)
 
 DeadLetter contains configuration for dead\-letter handling. Dead\-letter exchanges receive messages that are rejected, expire, or exceed queue limits. This provides a mechanism for handling failed message processing.
 
@@ -703,7 +703,7 @@ type DeadLetter struct {
 ```
 
 <a name="ErrorCategory"></a>
-## type [ErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L687>)
+## type [ErrorCategory](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L687>)
 
 ErrorCategory represents different categories of RabbitMQ errors
 
@@ -734,7 +734,7 @@ const (
 ```
 
 <a name="Message"></a>
-## type [Message](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L15-L44>)
+## type [Message](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L15-L44>)
 
 Message defines the interface for consumed messages from RabbitMQ. This interface abstracts the underlying AMQP message structure and provides methods for acknowledging or rejecting messages.
 
@@ -772,7 +772,7 @@ type Message interface {
 ```
 
 <a name="Rabbit"></a>
-## type [Rabbit](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L18-L36>)
+## type [Rabbit](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/setup.go#L18-L36>)
 
 Rabbit represents a client for interacting with RabbitMQ. It manages connections, channels, and provides methods for publishing and consuming messages with automatic reconnection capabilities.
 
@@ -787,7 +787,7 @@ type Rabbit struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L53>)
+### func [NewClient](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/setup.go#L53>)
 
 ```go
 func NewClient(config Config) (*Rabbit, error)
@@ -810,7 +810,7 @@ defer client.Close()
 ```
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L68>)
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L68>)
 
 ```go
 func NewClientWithDI(params RabbitParams) (*Rabbit, error)
@@ -845,7 +845,7 @@ app := fx.New(
 Under the hood, this function simply delegates to the standard NewClient function, making it easier to integrate with dependency injection frameworks while maintaining the same initialization logic.
 
 <a name="Rabbit.Consume"></a>
-### func \(\*Rabbit\) [Consume](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L153>)
+### func \(\*Rabbit\) [Consume](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L153>)
 
 ```go
 func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -880,7 +880,7 @@ for msg := range msgChan {
 ```
 
 <a name="Rabbit.ConsumeDLQ"></a>
-### func \(\*Rabbit\) [ConsumeDLQ](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L182>)
+### func \(\*Rabbit\) [ConsumeDLQ](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L182>)
 
 ```go
 func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -913,7 +913,7 @@ for msg := range dlqChan {
 ```
 
 <a name="Rabbit.GetErrorCategory"></a>
-### func \(\*Rabbit\) [GetErrorCategory](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L708>)
+### func \(\*Rabbit\) [GetErrorCategory](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L708>)
 
 ```go
 func (r *Rabbit) GetErrorCategory(err error) ErrorCategory
@@ -922,7 +922,7 @@ func (r *Rabbit) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="Rabbit.GracefulShutdown"></a>
-### func \(\*Rabbit\) [GracefulShutdown](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L135>)
+### func \(\*Rabbit\) [GracefulShutdown](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L135>)
 
 ```go
 func (rb *Rabbit) GracefulShutdown()
@@ -935,7 +935,7 @@ The shutdown process: 1. Signals all goroutines to stop by closing the shutdownS
 Any errors during shutdown are logged but not propagated, as they typically cannot be handled at this stage of application shutdown.
 
 <a name="Rabbit.IsAlarmError"></a>
-### func \(\*Rabbit\) [IsAlarmError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L860>)
+### func \(\*Rabbit\) [IsAlarmError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L860>)
 
 ```go
 func (r *Rabbit) IsAlarmError(err error) bool
@@ -944,7 +944,7 @@ func (r *Rabbit) IsAlarmError(err error) bool
 IsAlarmError returns true if the error is alarm\-related
 
 <a name="Rabbit.IsAuthenticationError"></a>
-### func \(\*Rabbit\) [IsAuthenticationError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L831>)
+### func \(\*Rabbit\) [IsAuthenticationError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L831>)
 
 ```go
 func (r *Rabbit) IsAuthenticationError(err error) bool
@@ -953,7 +953,7 @@ func (r *Rabbit) IsAuthenticationError(err error) bool
 IsAuthenticationError returns true if the error is authentication\-related
 
 <a name="Rabbit.IsChannelError"></a>
-### func \(\*Rabbit\) [IsChannelError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L819>)
+### func \(\*Rabbit\) [IsChannelError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L819>)
 
 ```go
 func (r *Rabbit) IsChannelError(err error) bool
@@ -962,7 +962,7 @@ func (r *Rabbit) IsChannelError(err error) bool
 IsChannelError returns true if the error is channel\-related
 
 <a name="Rabbit.IsConnectionError"></a>
-### func \(\*Rabbit\) [IsConnectionError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L807>)
+### func \(\*Rabbit\) [IsConnectionError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L807>)
 
 ```go
 func (r *Rabbit) IsConnectionError(err error) bool
@@ -971,7 +971,7 @@ func (r *Rabbit) IsConnectionError(err error) bool
 IsConnectionError returns true if the error is connection\-related
 
 <a name="Rabbit.IsPermanentError"></a>
-### func \(\*Rabbit\) [IsPermanentError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L780>)
+### func \(\*Rabbit\) [IsPermanentError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L780>)
 
 ```go
 func (r *Rabbit) IsPermanentError(err error) bool
@@ -980,7 +980,7 @@ func (r *Rabbit) IsPermanentError(err error) bool
 IsPermanentError returns true if the error is permanent and should not be retried
 
 <a name="Rabbit.IsResourceError"></a>
-### func \(\*Rabbit\) [IsResourceError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L844>)
+### func \(\*Rabbit\) [IsResourceError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L844>)
 
 ```go
 func (r *Rabbit) IsResourceError(err error) bool
@@ -989,7 +989,7 @@ func (r *Rabbit) IsResourceError(err error) bool
 IsResourceError returns true if the error is resource\-related
 
 <a name="Rabbit.IsRetryableError"></a>
-### func \(\*Rabbit\) [IsRetryableError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L744>)
+### func \(\*Rabbit\) [IsRetryableError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L744>)
 
 ```go
 func (r *Rabbit) IsRetryableError(err error) bool
@@ -998,7 +998,7 @@ func (r *Rabbit) IsRetryableError(err error) bool
 IsRetryableError returns true if the error is retryable
 
 <a name="Rabbit.IsTemporaryError"></a>
-### func \(\*Rabbit\) [IsTemporaryError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L771>)
+### func \(\*Rabbit\) [IsTemporaryError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L771>)
 
 ```go
 func (r *Rabbit) IsTemporaryError(err error) bool
@@ -1007,7 +1007,7 @@ func (r *Rabbit) IsTemporaryError(err error) bool
 IsTemporaryError returns true if the error is temporary
 
 <a name="Rabbit.Publish"></a>
-### func \(\*Rabbit\) [Publish](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/utils.go#L241>)
+### func \(\*Rabbit\) [Publish](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/utils.go#L241>)
 
 ```go
 func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error
@@ -1073,7 +1073,7 @@ log.Println("Message published successfully with trace context")
 ```
 
 <a name="Rabbit.RetryConnection"></a>
-### func \(\*Rabbit\) [RetryConnection](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/setup.go#L229>)
+### func \(\*Rabbit\) [RetryConnection](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/setup.go#L229>)
 
 ```go
 func (rb *Rabbit) RetryConnection(cfg Config)
@@ -1096,7 +1096,7 @@ The method will:
 This provides resilience against network issues and RabbitMQ server restarts.
 
 <a name="Rabbit.TranslateError"></a>
-### func \(\*Rabbit\) [TranslateError](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/errors.go#L227>)
+### func \(\*Rabbit\) [TranslateError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/errors.go#L227>)
 
 ```go
 func (r *Rabbit) TranslateError(err error) error
@@ -1107,7 +1107,7 @@ TranslateError converts AMQP/RabbitMQ\-specific errors into standardized applica
 It maps common RabbitMQ errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="RabbitLifecycleParams"></a>
-## type [RabbitLifecycleParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L73-L79>)
+## type [RabbitLifecycleParams](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L73-L79>)
 
 RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
 
@@ -1122,7 +1122,7 @@ type RabbitLifecycleParams struct {
 ```
 
 <a name="RabbitParams"></a>
-## type [RabbitParams](<https://gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L33-L37>)
+## type [RabbitParams](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/rabbit/fx_module.go#L33-L37>)
 
 RabbitParams groups the dependencies needed to create a Rabbit client
 

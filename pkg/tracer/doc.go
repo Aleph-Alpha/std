@@ -15,8 +15,8 @@
 //
 //	import (
 //		"context"
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/tracer"
-//		"gitlab.aleph-alpha.de/engineering/pharia-data-search/data-go-packages/pkg/logger"
+//		"github.com/Aleph-Alpha/data-go-packages/pkg/tracer"
+//		"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
 //	)
 //
 //	// Create a logger
