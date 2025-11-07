@@ -31,7 +31,6 @@ import (
 var FXModule = fx.Module("qdrant",
 	fx.Provide(
 		NewQdrantClient,
-		NewEmbeddingsStore,
 	),
 	fx.Invoke(RegisterQdrantLifecycle),
 )
@@ -44,12 +43,23 @@ type QdrantParams struct {
 
 // RegisterQdrantLifecycle handles startup/shutdown of the Qdrant client.
 // It ensures proper resource cleanup and logging.
-func RegisterQdrantLifecycle(lc fx.Lifecycle, client *Client) {
+//
+// OnStart:
+//   - Performs a Qdrant health check to verify connectivity.
+//   - Logs a success message once the client is ready.
+//
+// OnStop:
+//   - Ensures the Qdrant client is closed exactly once.
+//   - Logs a shutdown message.
+func RegisterQdrantLifecycle(lc fx.Lifecycle, client *QdrantClient) {
 	var once sync.Once
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			log.Println("[Qdrant] client initialized successfully")
+			if err := client.healthCheck(); err != nil {
+				return err
+			}
+			log.Println("[Qdrant] client initialized and health checked successfully")
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
