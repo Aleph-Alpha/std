@@ -9,51 +9,88 @@ go get github.com/Aleph-Alpha/data-go-packages
 ```
 
 ## Authentication Setup
-Since this is a private repository, you'll need to configure Go to authenticate with GitLab. You have several options:
+Since this is a private repository hosted on GitHub, you'll need to configure Go to authenticate properly. The repository has been moved from GitLab to GitHub under the Aleph-Alpha organization.
 
-### Option 1: Git Configuration
+### Prerequisites
+Ensure you have SSH access configured for GitHub and the Aleph-Alpha organization. Your Git should already be configured with:
+```bash
+git config --global url."git@github.com:Aleph-Alpha/".insteadOf "https://github.com/Aleph-Alpha/"
+```
+
+### Required Configuration
+Configure Go to treat Aleph-Alpha repositories as private by setting these environment variables:
+
+#### Option 1: Using Go's Built-in Configuration (Recommended)
+```bash
+go env -w GOPRIVATE="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
+go env -w GONOPROXY="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
+go env -w GONOSUMDB="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
+```
+
+#### Option 2: Environment Variables in Shell Profile
+Add these lines to your shell profile (`~/.zshrc` for zsh, `~/.bash_profile` or `~/.bashrc` for bash):
 
 ```bash
-go env -w GOPRIVATE=gitlab.aleph-alpha.de
-git config --global url."https://YOUR_USERNAME:YOUR_ACCESS_TOKEN@gitlab.aleph-alpha.de/".insteadOf "https://gitlab.aleph-alpha.de/"
-```
-Replace and with your GitLab credentials. `YOUR_USERNAME``YOUR_ACCESS_TOKEN`
-
-### Option 2: Using .netrc File (Recommended)
-Create or edit `~/.netrc` file (or `_netrc` on Windows) with the following content:
-```vim
-machine gitlab.aleph-alpha.de login YOUR_USERNAME password YOUR_ACCESS_TOKEN
+export GOPRIVATE="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
+export GONOPROXY="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
+export GONOSUMDB="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
 ```
 
-Make sure to set proper permissions:
+Then reload your shell configuration:
 ```bash
-chmod 600 ~/.netrc
+source ~/.zshrc  # or ~/.bash_profile
 ```
 
-### Option 3: Environment Variables in Shell Profile
-You can add the required configurations to your shell profile:
-For Bash users (`~/.bash_profile` or `~/.bashrc`):
+### What These Variables Do
+- **GOPRIVATE**: Tells Go these are private repositories that should bypass the module proxy
+- **GONOPROXY**: Prevents Go from using the public proxy (proxy.golang.org) for these repositories
+- **GONOSUMDB**: Prevents Go from trying to verify checksums using the public checksum database (sum.golang.org)
 
-#### Add to ~/.bash_profile or ~/.bashrc
+### Verification
+After configuration, verify the setup works:
 
-```text
-export GOPRIVATE=gitlab.aleph-alpha.de
+```bash
+# Check environment variables are set
+echo "GOPRIVATE: $GOPRIVATE"
+echo "GONOPROXY: $GONOPROXY" 
+echo "GONOSUMDB: $GONOSUMDB"
+
+# Test module download
+go mod download github.com/Aleph-Alpha/data-go-packages
+go mod tidy
 ```
+
 
 ## IDE Configuration
 If using an IDE like GoLand or VS Code, you may need additional configuration:
-1. **GoLand**: Ensure environment variables are correctly set in:
-   1. Go to **Settings/Preferences** (⌘,)
-   2. Navigate to **Version Control** → **Git**
-   3. Make sure "Use credential helper" is enabled
-   4. Go to **Settings/Preferences** (⌘,)
-   5. Navigate to **Tools** → **Terminal**
-   6. Add the following to the "Environment Variables" field: GOPRIVATE=gitlab.aleph-alpha.de
-   7. Click "Apply" and "OK"
-   8. Restart GoLand's Terminal
 
-2. **VS Code**: Configure git authentication in your settings.json or use the integrated terminal with the correct profile loaded
+### GoLand
+1. Go to **Settings/Preferences** (⌘,)
+2. Navigate to **Go** → **Go Modules**
+3. Ensure "Environment" includes the GOPRIVATE variables:
 
+```text
+GOPRIVATE=gitlab.aleph-alpha.de,github.com/Aleph-Alpha
+GONOPROXY=gitlab.aleph-alpha.de,github.com/Aleph-Alpha
+GONOSUMDB=gitlab.aleph-alpha.de,github.com/Aleph-Alpha
+```
+4. Navigate to **Tools** → **Terminal**
+5. Ensure "Shell path" uses your configured shell profile
+6. Click "Apply" and "OK"
+7. Restart GoLand
+
+### VS Code
+1. Ensure your integrated terminal loads your shell profile with the environment variables
+2. Alternatively, add the variables to your VS Code settings.json:
+```json
+{
+ "go.toolsEnvVars": {
+   "GOPRIVATE": "gitlab.aleph-alpha.de,github.com/Aleph-Alpha",
+   "GONOPROXY": "gitlab.aleph-alpha.de,github.com/Aleph-Alpha",
+   "GONOSUMDB": "gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
+ }
+}
+```
 
 ## Importing Packages
 This module contains several packages that you can import into your project:
@@ -106,7 +143,7 @@ DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLE
 
 # Go Packages Documentation
 
-Generated on Mon Nov  3 17:04:36 CET 2025
+Generated on Tue Nov  4 10:05:17 CET 2025
 
 ## Packages
 - [tracer](docs/pkg/tracer.md)
