@@ -40,7 +40,7 @@ type QdrantClient struct {
 
 const defaultBatchSize = 200 // default chunk size for batch inserts
 
-// ──────────────────────────────────────────────────────────────
+// NewQdrantClient ──────────────────────────────────────────────────────────────
 // NewQdrantClient
 // ──────────────────────────────────────────────────────────────
 //
@@ -54,11 +54,19 @@ const defaultBatchSize = 200 // default chunk size for batch inserts
 //
 //	client, _ := qdrant.NewQdrantClient(qdrant.QdrantParams{Config: cfg})
 func NewQdrantClient(p QdrantParams) (*QdrantClient, error) {
-	log.Printf("[Qdrant] Connecting to endpoint: %s", p.Config.Endpoint)
+	log.Printf("[Qdrant] Connecting to endpoint: %s:%d", p.Config.Endpoint, p.Config.Port)
+
+	// Set default port if not specified
+	port := p.Config.Port
+	if port == 0 {
+		port = 6334
+	}
 
 	client, err := qdrant.NewClient(&qdrant.Config{
-		Host:   p.Config.Endpoint,
-		APIKey: p.Config.ApiKey,
+		Host:                   p.Config.Endpoint,
+		Port:                   port,
+		APIKey:                 p.Config.ApiKey,
+		SkipCompatibilityCheck: !p.Config.CheckCompatibility,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("[Qdrant] failed to initialize client: %w", err)
@@ -104,7 +112,7 @@ func (c *QdrantClient) healthCheck() error {
 	return nil
 }
 
-// ──────────────────────────────────────────────────────────────
+// Close ──────────────────────────────────────────────────────────────
 // Close
 // ──────────────────────────────────────────────────────────────
 //
@@ -117,7 +125,7 @@ func (c *QdrantClient) Close() error {
 	return nil
 }
 
-// ──────────────────────────────────────────────────────────────
+// EnsureCollection ──────────────────────────────────────────────────────────────
 // EnsureCollection
 // ──────────────────────────────────────────────────────────────
 //
@@ -159,7 +167,7 @@ func (c *QdrantClient) EnsureCollection(ctx context.Context, name string) error 
 	return nil
 }
 
-// ──────────────────────────────────────────────────────────────
+// Insert ──────────────────────────────────────────────────────────────
 // Insert
 // ──────────────────────────────────────────────────────────────
 //
@@ -171,7 +179,7 @@ func (c *QdrantClient) Insert(ctx context.Context, input EmbeddingInput) error {
 	return c.BatchInsert(ctx, []EmbeddingInput{input})
 }
 
-// ──────────────────────────────────────────────────────────────
+// BatchInsert ──────────────────────────────────────────────────────────────
 // BatchInsert
 // ──────────────────────────────────────────────────────────────
 //
@@ -242,7 +250,7 @@ func (c *QdrantClient) upsertBatch(ctx context.Context, batch []Embedding) error
 	return nil
 }
 
-// ──────────────────────────────────────────────────────────────
+// Search ──────────────────────────────────────────────────────────────
 // Search
 // ──────────────────────────────────────────────────────────────
 //
@@ -295,7 +303,7 @@ func (c *QdrantClient) Search(ctx context.Context, vector []float32, topK int) (
 	return results, nil
 }
 
-// ──────────────────────────────────────────────────────────────
+// Delete ──────────────────────────────────────────────────────────────
 // Delete
 // ──────────────────────────────────────────────────────────────
 //

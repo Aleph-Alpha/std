@@ -22,8 +22,11 @@ import (
 //	    WithApiKey(os.Getenv("QDRANT_API_KEY")).
 //	    WithTimeout(10 * time.Second)
 type Config struct {
-	// Base URL of the Qdrant server, e.g. "http://localhost:6334".
+	// Hostname of the Qdrant server, e.g. "localhost".
 	Endpoint string `yaml:"endpoint" env:"QDRANT_ENDPOINT"`
+
+	// gRPC port of the Qdrant server. Defaults to 6334.
+	Port int `yaml:"port" env:"QDRANT_PORT"`
 
 	// Optional authentication token for secured deployments.
 	ApiKey string `yaml:"api_key" env:"QDRANT_API_KEY"`
@@ -50,7 +53,8 @@ type Config struct {
 // DefaultConfig provides sensible defaults for most use cases.
 func DefaultConfig() *Config {
 	return &Config{
-		Endpoint:           "http://localhost:6334",
+		Endpoint:           "localhost",
+		Port:               6334,
 		Timeout:            5 * time.Second,
 		ConnectTimeout:     5 * time.Second,
 		KeepAlive:          true,
