@@ -345,6 +345,31 @@ func TestQdrantClientOperations(t *testing.T) {
 	err = client.EnsureCollection(ctx, cfg.Collection)
 	require.NoError(t, err)
 
+	t.Run("GetCollectionByName", func(t *testing.T) {
+		// Fetch collection info using GetCollection
+		info, err := client.GetCollection(ctx, cfg.Collection)
+		assert.NoError(t, err, "expected GetCollection to succeed")
+		assert.NotNil(t, info, "expected non-nil collection info")
+
+		// Validate expected metadata fields
+		assert.GreaterOrEqual(t, int(*info.VectorsCount), 0, "vector count should be >= 0")
+		assert.NotNil(t, info.Config, "collection config should not be nil")
+
+		//Check config internals
+		if info.Config != nil && info.Config.Params != nil {
+			if info.Config.Params.VectorsConfig != nil {
+				t.Logf("Collection vector config: %+v", info.Config.Params.VectorsConfig.Config)
+			}
+		}
+
+		t.Logf("Collection '%s': status=%s, vectors=%d, points=%d",
+			cfg.Collection,
+			info.Status.String(),
+			info.VectorsCount,
+			info.PointsCount,
+		)
+	})
+
 	t.Run("SearchReturnsTopK", func(t *testing.T) {
 		// Insert multiple embeddings (use UUID format)
 		embeddings := make([]EmbeddingInput, 20)

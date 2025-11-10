@@ -5,125 +5,9 @@ import (
 	"fmt"
 	"log"
 	"slices"
-	"time"
 
 	qdrant "github.com/qdrant/go-client/qdrant"
 )
-
-//
-// ──────────────────────────────────────────────────────────────
-//   QDRANT CLIENT WRAPPER
-// ──────────────────────────────────────────────────────────────
-//
-// This file defines a thin wrapper around the official Qdrant Go client,
-// providing application-level operations for managing embeddings,
-// collections, and similarity search.
-//
-// The goal is to abstract away low-level SDK details while preserving
-// fine-grained control over how Qdrant is accessed.
-//
-// Responsibilities:
-//   • Establish and validate connectivity with Qdrant.
-//   • Manage collections (create if missing).
-//   • Insert, batch insert, delete, and search embeddings.
-//   • Offer a safe API suitable for Fx dependency injection.
-//
-
-// QdrantClient wraps the official Qdrant Go client
-// and provides higher-level operations for working with embeddings and vectors.
-
-type QdrantClient struct {
-	api     *qdrant.Client
-	cfg     *Config
-	started bool
-}
-
-const defaultBatchSize = 200 // default chunk size for batch inserts
-
-// NewQdrantClient ──────────────────────────────────────────────────────────────
-// NewQdrantClient
-// ──────────────────────────────────────────────────────────────
-//
-// NewQdrantClient constructs a new instance of QdrantClient and validates
-// connectivity via a health check.
-//
-// The Qdrant Go SDK creates lightweight gRPC connections, so this method
-// performs an immediate health check to fail fast if the service is unreachable.
-//
-// Example:
-//
-//	client, _ := qdrant.NewQdrantClient(qdrant.QdrantParams{Config: cfg})
-func NewQdrantClient(p QdrantParams) (*QdrantClient, error) {
-	log.Printf("[Qdrant] Connecting to endpoint: %s:%d", p.Config.Endpoint, p.Config.Port)
-
-	// Set default port if not specified
-	port := p.Config.Port
-	if port == 0 {
-		port = 6334
-	}
-
-	client, err := qdrant.NewClient(&qdrant.Config{
-		Host:                   p.Config.Endpoint,
-		Port:                   port,
-		APIKey:                 p.Config.ApiKey,
-		SkipCompatibilityCheck: !p.Config.CheckCompatibility,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("[Qdrant] failed to initialize client: %w", err)
-	}
-
-	qc := &QdrantClient{
-		api:     client,
-		cfg:     p.Config,
-		started: true,
-	}
-
-	if err := qc.healthCheck(); err != nil {
-		return nil, fmt.Errorf("[Qdrant] health check failed: %w", err)
-	}
-
-	log.Println("[Qdrant] Client connected successfully")
-	return qc, nil
-}
-
-// ──────────────────────────────────────────────────────────────
-// healthCheck
-// ──────────────────────────────────────────────────────────────
-//
-// healthCheck verifies the availability of the Qdrant service
-// by calling the `/healthz` endpoint through the SDK.
-//
-// It should be lightweight and fast — typically used during startup or readiness probes.
-func (c *QdrantClient) healthCheck() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if c.api == nil {
-		return fmt.Errorf("[Qdrant] client not initialized")
-	}
-
-	resp, err := c.api.HealthCheck(ctx)
-	if err != nil {
-		return fmt.Errorf("[Qdrant] health check failed: %w", err)
-	}
-
-	log.Printf("[Qdrant] Health check passed (title=%s, version=%s, endpoint=%s)", resp.Title, resp.Version, c.cfg.Endpoint)
-
-	return nil
-}
-
-// Close ──────────────────────────────────────────────────────────────
-// Close
-// ──────────────────────────────────────────────────────────────
-//
-// Close gracefully shuts down the Qdrant client.
-//
-// Since the official Qdrant Go SDK doesn’t maintain persistent connections,
-// this is currently a no-op. It exists for lifecycle symmetry and future safety.
-func (c *QdrantClient) Close() error {
-	log.Println("[Qdrant] closing client (no-op)")
-	return nil
-}
 
 // EnsureCollection ──────────────────────────────────────────────────────────────
 // EnsureCollection
@@ -248,6 +132,43 @@ func (c *QdrantClient) upsertBatch(ctx context.Context, batch []Embedding) error
 		return fmt.Errorf("[Qdrant] upsert failed: %w", err)
 	}
 	return nil
+}
+
+// GetCollection ──────────────────────────────────────────────────────────────
+// GetCollection
+// ──────────────────────────────────────────────────────────────
+//
+// GetCollection retrieves detailed information about a specific Qdrant collection.
+//
+// It returns the Qdrant `CollectionInfo` struct if found, or an error if
+// the collection doesn’t exist.
+//
+// Example:
+//
+//	info, err := client.GetCollection(ctx, "my_collection")
+//	if err != nil {
+//	    log.Printf("Collection not found or error: %v", err)
+//	} else {
+//	    log.Printf("Collection '%s' has vector size %d", "my_collection", info.VectorsCount)
+//	}
+func (c *QdrantClient) GetCollection(ctx context.Context, name string) (*qdrant.CollectionInfo, error) {
+	if c.api == nil {
+		return nil, fmt.Errorf("[Qdrant] client not initialized")
+	}
+
+	if name == "" {
+		return nil, fmt.Errorf("collection name cannot be empty")
+	}
+
+	info, err := c.api.GetCollectionInfo(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("[Qdrant] failed to get collection '%s': %w", name, err)
+	}
+
+	log.Printf("[Qdrant] Collection '%s' retrieved (vectors=%d, status=%s)",
+		name, info.VectorsCount, info.Status.String())
+
+	return info, nil
 }
 
 // Search ──────────────────────────────────────────────────────────────
