@@ -347,26 +347,26 @@ func TestQdrantClientOperations(t *testing.T) {
 
 	t.Run("GetCollectionByName", func(t *testing.T) {
 		// Fetch collection info using GetCollection
-		info, err := client.GetCollection(ctx, cfg.Collection)
+		col, err := client.GetCollection(ctx, cfg.Collection)
 		assert.NoError(t, err, "expected GetCollection to succeed")
-		assert.NotNil(t, info, "expected non-nil collection info")
+		assert.NotNil(t, col, "expected non-nil collection info")
 
 		// Validate expected metadata fields
-		assert.GreaterOrEqual(t, int(*info.VectorsCount), 0, "vector count should be >= 0")
-		assert.NotNil(t, info.Config, "collection config should not be nil")
+		assert.GreaterOrEqual(t, int(col.Vectors), 0, "vector count should be >= 0")
+		assert.GreaterOrEqual(t, int(col.Points), 0, "points count should be >= 0")
 
-		//Check config internals
-		if info.Config != nil && info.Config.Params != nil {
-			if info.Config.Params.VectorsConfig != nil {
-				t.Logf("Collection vector config: %+v", info.Config.Params.VectorsConfig.Config)
-			}
-		}
+		// Validate vector config details (size and distance)
+		assert.NotZero(t, col.VectorSize, "vector size should not be zero")
+		assert.NotEmpty(t, col.Distance, "distance metric should not be empty")
 
-		t.Logf("Collection '%s': status=%s, vectors=%d, points=%d",
-			cfg.Collection,
-			info.Status.String(),
-			info.VectorsCount,
-			info.PointsCount,
+		// Log for debugging
+		t.Logf("Collection '%s': status=%s, vectors=%d, points=%d, vectorSize=%d, distance=%s",
+			col.Name,
+			col.Status,
+			col.Vectors,
+			col.Points,
+			col.VectorSize,
+			col.Distance,
 		)
 	})
 

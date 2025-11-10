@@ -138,20 +138,36 @@ func (c *QdrantClient) upsertBatch(ctx context.Context, batch []Embedding) error
 // GetCollection
 // ──────────────────────────────────────────────────────────────
 //
-// GetCollection retrieves detailed information about a specific Qdrant collection.
+// GetCollection retrieves detailed metadata about a specific collection
+// from the connected Qdrant instance.
 //
-// It returns the Qdrant `CollectionInfo` struct if found, or an error if
-// the collection doesn’t exist.
+// It returns a high-level, decoupled `Collection` struct containing
+// core details such as:
+//   • Collection name
+//   • Status (e.g., "Green", "Yellow")
+//   • Total vectors and points
+//   • Vector size (embedding dimension)
+//   • Distance metric (e.g., "Cosine", "Dot", "Euclid")
+//
+// This abstraction intentionally hides Qdrant SDK internals (`qdrant.CollectionInfo`)
+// so that the application layer remains independent of Qdrant’s client library.
 //
 // Example:
 //
-//	info, err := client.GetCollection(ctx, "my_collection")
+//	collection, err := client.GetCollection(ctx, "my_collection")
 //	if err != nil {
-//	    log.Printf("Collection not found or error: %v", err)
-//	} else {
-//	    log.Printf("Collection '%s' has vector size %d", "my_collection", info.VectorsCount)
+//	    log.Printf("Failed to fetch collection info: %v", err)
+//	    return
 //	}
-func (c *QdrantClient) GetCollection(ctx context.Context, name string) (*qdrant.CollectionInfo, error) {
+//	log.Printf("Collection '%s': vectors=%d, points=%d, vector_size=%d, distance=%s",
+//	    collection.Name,
+//	    collection.Vectors,
+//	    collection.Points,
+//	    collection.VectorSize,
+//	    collection.Distance,
+//	)
+
+func (c *QdrantClient) GetCollection(ctx context.Context, name string) (*Collection, error) {
 	if c.api == nil {
 		return nil, fmt.Errorf("[Qdrant] client not initialized")
 	}
@@ -165,10 +181,47 @@ func (c *QdrantClient) GetCollection(ctx context.Context, name string) (*qdrant.
 		return nil, fmt.Errorf("[Qdrant] failed to get collection '%s': %w", name, err)
 	}
 
-	log.Printf("[Qdrant] Collection '%s' retrieved (vectors=%d, status=%s)",
-		name, info.VectorsCount, info.Status.String())
+	size, distance := extractVectorDetails(info)
 
-	return info, nil
+	collection := &Collection{
+		Name:       name,
+		Status:     info.Status.String(),
+		Vectors:    derefUint64(info.VectorsCount),
+		Points:     derefUint64(info.PointsCount),
+		VectorSize: size,
+		Distance:   distance,
+	}
+
+	return collection, nil
+}
+
+// ListCollections ──────────────────────────────────────────────────────────────
+// ListCollections
+// ──────────────────────────────────────────────────────────────
+//
+// ListCollections retrieves all existing collections from Qdrant and returns
+// their names as a string slice. This can be extended to preload metadata
+// using GetCollection for each name if needed.
+//
+// Example:
+//
+//	names, err := client.ListCollections(ctx)
+//	if err != nil {
+//	    log.Fatalf("failed to list collections: %v", err)
+//	}
+//	log.Printf("Found collections: %v", names)
+func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error) {
+	if c.api == nil {
+		return nil, fmt.Errorf("[Qdrant] client not initialized")
+	}
+
+	names, err := c.api.ListCollections(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("[Qdrant] failed to list collections: %w", err)
+	}
+
+	log.Printf("[Qdrant] Found %d collections", len(names))
+	return names, nil
 }
 
 // Search ──────────────────────────────────────────────────────────────

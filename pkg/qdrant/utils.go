@@ -63,3 +63,82 @@ type SearchResultInterface interface {
 	HasVector() bool                   // Whether a vector payload is present
 	GetCollectionName() string         // Name of the Qdrant collection
 }
+
+// Collection ──────────────────────────────────────────────────────────────
+// Collection
+// ──────────────────────────────────────────────────────────────
+//
+// Collection represents a high-level, decoupled view of a Qdrant collection.
+//
+// It provides essential metadata about a vector collection without exposing
+// Qdrant SDK types, allowing the application layer to remain independent
+// of the underlying database implementation.
+//
+// Fields:
+//   • Name        — The unique name of the collection.
+//   • Status      — Current operational state (e.g., "Green", "Yellow").
+//   • VectorSize  — The dimension of stored vectors (e.g., 1536).
+//   • Distance    — The similarity metric used ("Cosine", "Dot", "Euclid").
+//   • Vectors     — Total number of stored vectors in the collection.
+//   • Points      — Total number of indexed points/documents in the collection.
+//
+// This struct serves as an abstraction layer between Qdrant’s low-level
+// protobuf models and the higher-level application logic.
+
+type Collection struct {
+	Name       string
+	Status     string
+	VectorSize int
+	Distance   string
+	Vectors    uint64
+	Points     uint64
+}
+
+// extractVectorDetails ──────────────────────────────────────────────────────────────
+// extractVectorDetails
+// ──────────────────────────────────────────────────────────────
+//
+// extractVectorDetails safely extracts the vector size (embedding dimension)
+// and distance metric (e.g., "Cosine", "Dot", "Euclid") from a Qdrant
+// `CollectionInfo` object.
+//
+// Qdrant represents vector configuration data using a deeply nested protobuf
+// structure with “oneof” wrappers. This helper navigates that hierarchy,
+// performs type assertions, and guards against nil pointer dereferences.
+//
+// It returns:
+//   • int    — vector dimension (size of embedding vectors)
+//   • string — distance metric used for similarity search
+//
+// If any nested field is missing or of an unexpected type, the function
+// gracefully returns default values (0, "").
+//
+// Example:
+//
+//	size, distance := extractVectorDetails(info)
+//	log.Printf("Vector size=%d, distance=%s", size, distance)
+
+func extractVectorDetails(info *qdrant.CollectionInfo) (int, string) {
+	if info == nil ||
+		info.Config == nil ||
+		info.Config.Params == nil ||
+		info.Config.Params.VectorsConfig == nil ||
+		info.Config.Params.VectorsConfig.Config == nil {
+		return 0, ""
+	}
+
+	if cfg, ok := info.Config.Params.VectorsConfig.Config.(*qdrant.VectorsConfig_Params); ok {
+		return int(cfg.Params.Size), cfg.Params.Distance.String()
+	}
+
+	return 0, ""
+}
+
+// derefUint64 safely dereferences a *uint64 pointer.
+// If the pointer is nil, it returns 0 instead of panicking.
+func derefUint64(v *uint64) uint64 {
+	if v != nil {
+		return *v
+	}
+	return 0
+}
