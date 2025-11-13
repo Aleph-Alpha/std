@@ -7,19 +7,13 @@ import (
 )
 
 type Config struct {
-	// Which provider to use: "openai" or "inference"
-	Provider string
-
-	// Shared/API config
-	APIKey   string // For OpenAI or any provider that requires API key
-	Endpoint string // For OpenAI (embeddings endpoint) or inference base URL
-
-	// Inference API specific (used by providers/inference.go)
-	ServiceToken string // e.g., PHARIA internal service token
-	HTTPTimeoutS int    // http timeout seconds (default 30)
+	// Inference endpoint and auth
+	Endpoint     string // Base URL of the Aleph Alpha inference API
+	ServiceToken string // PHARIA internal service token
+	HTTPTimeoutS int    // HTTP timeout seconds (default 30)
 }
 
-// NewConfig reads from environment (no extra deps).
+// NewConfig reads from environment variables.
 func NewConfig() *Config {
 	timeout := 30
 	if v := os.Getenv("EMBEDDING_HTTP_TIMEOUT_SECONDS"); v != "" {
@@ -27,10 +21,10 @@ func NewConfig() *Config {
 			timeout = n
 		}
 	}
+
 	return &Config{
-		Provider:     getenvDefault("EMBEDDING_PROVIDER", "openai"), // "openai" | "inference"
-		APIKey:       os.Getenv("EMBEDDING_API_KEY"),
-		Endpoint:     getenvDefault("EMBEDDING_ENDPOINT", "https://api.openai.com/v1/embeddings"),
+		// Default should point to Aleph Alpha inference API
+		Endpoint:     getenvDefault("EMBEDDING_ENDPOINT", "https://inference-api.product.pharia.com"),
 		ServiceToken: os.Getenv("EMBEDDING_SERVICE_TOKEN"),
 		HTTPTimeoutS: timeout,
 	}
@@ -43,12 +37,13 @@ func getenvDefault(k, def string) string {
 	return def
 }
 
+// Validate ensures required fields are present.
 func (c *Config) Validate() error {
-	if c.Provider == "openai" && c.APIKey == "" {
-		return fmt.Errorf("openai provider requires EMBEDDING_API_KEY")
+	if c.Endpoint == "" {
+		return fmt.Errorf("embedding: missing EMBEDDING_ENDPOINT")
 	}
-	if c.Provider == "inference" && c.ServiceToken == "" {
-		return fmt.Errorf("inference provider requires EMBEDDING_SERVICE_TOKEN")
+	if c.ServiceToken == "" {
+		return fmt.Errorf("embedding: missing EMBEDDING_SERVICE_TOKEN")
 	}
 	return nil
 }

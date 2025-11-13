@@ -19,7 +19,6 @@ var FXModule = fx.Module(
 	fx.Provide(
 		NewConfig,            // -> *Config
 		NewInferenceProvider, // -> Provider
-		NewClient,            // -> *Client
 	),
 
 	fx.Invoke(RegisterEmbeddingLifecycle),
