@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -13,15 +14,19 @@ type InferenceProvider struct {
 	httpClient   *http.Client
 }
 
-func NewInferenceProvider(cfg *Config) (*InferenceProvider, error) {
+func newInferenceProvider(cfg *Config) (*InferenceProvider, error) {
 	if cfg.Endpoint == "" {
 		return nil, fmt.Errorf("inference: missing EMBEDDING_ENDPOINT")
 	}
 	if cfg.ServiceToken == "" {
 		return nil, fmt.Errorf("inference: missing EMBEDDING_SERVICE_TOKEN")
 	}
+
+	// Remove trailing slash if user added it.
+	base := strings.TrimRight(cfg.Endpoint, "/")
+
 	return &InferenceProvider{
-		baseURL:      cfg.Endpoint,
+		baseURL:      base,
 		serviceToken: cfg.ServiceToken,
 		httpClient:   &http.Client{Timeout: time.Duration(cfg.HTTPTimeoutS) * time.Second},
 	}, nil
@@ -57,6 +62,7 @@ func (p *InferenceProvider) CreateBatchEmbeddings(ctx context.Context, texts []s
 		return p.batchSemanticEmbed(ctx, texts, s)
 
 	case StrategyInstruct:
+		// Instruct embeddings are expanded into multiple sequential calls.
 		out := make([][]float64, 0, len(texts))
 		for _, t := range texts {
 			vecs, err := p.instructableEmbed(ctx, t, s)
@@ -85,7 +91,12 @@ func (p *InferenceProvider) semanticEmbed(ctx context.Context, text string, s Em
 		"prompt":           text,
 		"normalize":        s.Normalize,
 		"representation":   normalizeRep(s.Representation),
-		"compress_to_size": compressToSizeOrDefault(s.CompressToSize, 128),
+		"compress_to_size": compressToSizeOrDefault(s.CompressToSize),
+	}
+
+	// hybrid_index: optional
+	if s.HybridIndex != nil {
+		reqBody["hybrid_index"] = *s.HybridIndex // e.g. "bm25"
 	}
 
 	url := fmt.Sprintf("%s/semantic_embed", p.baseURL)
@@ -110,7 +121,11 @@ func (p *InferenceProvider) batchSemanticEmbed(ctx context.Context, texts []stri
 		"prompts":          texts,
 		"normalize":        s.Normalize,
 		"representation":   normalizeRep(s.Representation),
-		"compress_to_size": compressToSizeOrDefault(s.CompressToSize, 128),
+		"compress_to_size": compressToSizeOrDefault(s.CompressToSize),
+	}
+
+	if s.HybridIndex != nil {
+		reqBody["hybrid_index"] = *s.HybridIndex
 	}
 
 	url := fmt.Sprintf("%s/batch_semantic_embed", p.baseURL)
@@ -135,14 +150,14 @@ func (p *InferenceProvider) batchSemanticEmbed(ctx context.Context, texts []stri
 //
 
 func (p *InferenceProvider) instructableEmbed(ctx context.Context, text string, s EmbeddingStrategy) ([][]float64, error) {
-	if s.Instruction == nil || *s.Instruction == "" {
+	if s.Instruction == nil {
 		return nil, fmt.Errorf("inference: instruction required for instruct strategy")
 	}
 
 	reqBody := map[string]any{
 		"model":       s.Model,
 		"input":       text,
-		"instruction": *s.Instruction,
+		"instruction": s.Instruction,
 		"normalize":   s.Normalize,
 	}
 

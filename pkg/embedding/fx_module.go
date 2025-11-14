@@ -17,8 +17,8 @@ var FXModule = fx.Module(
 	"embedding",
 
 	fx.Provide(
-		NewConfig,            // -> *Config
-		NewInferenceProvider, // -> Provider
+		NewConfig, // -> *Config
+		NewClient, // -> *Client
 	),
 
 	fx.Invoke(RegisterEmbeddingLifecycle),
@@ -28,14 +28,12 @@ var FXModule = fx.Module(
 // Lifecycle hook
 // -------------------------------------------------------
 
-func RegisterEmbeddingLifecycle(lc fx.Lifecycle, p Provider) {
+// RegisterEmbeddingLifecycle ensures that the Client (and its provider)
+// are properly cleaned up on application shutdown.
+func RegisterEmbeddingLifecycle(lc fx.Lifecycle, client *Client) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			// Cleanup: close idle HTTP connections, stop goroutines, etc.
-			if c, ok := p.(interface{ Close() error }); ok {
-				return c.Close()
-			}
-			return nil
+			return client.Close()
 		},
 	})
 }

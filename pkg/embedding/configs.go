@@ -6,6 +6,14 @@ import (
 	"strconv"
 )
 
+// EMBEDDING_ENDPOINT → must be the root (no /v1/embeddings appended)
+//
+// Example:
+//    https://inference-api.product.pharia.com
+//
+// DO NOT include suffix like `/v1/embeddings` or `/semantic_embed`.
+// The provider appends paths automatically.
+
 type Config struct {
 	// Inference endpoint and auth
 	Endpoint     string // Base URL of the Aleph Alpha inference API

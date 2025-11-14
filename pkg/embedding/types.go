@@ -2,7 +2,7 @@ package embedding
 
 import "context"
 
-// Strategy enum
+// EmbeddingStrategyType enumerates the supported embedding strategies.
 type EmbeddingStrategyType string
 
 const (
@@ -11,14 +11,35 @@ const (
 	StrategyVLLM     EmbeddingStrategyType = "vllm" // OpenAI-compatible
 )
 
-// High-level strategy config used by callers.
+type HybridIndex string
+
+const (
+	HybridIndexBM25 HybridIndex = "bm25"
+)
+
+// instruction: { "query": "...", "document": "..." }
+type InstructInstruction struct {
+	Query    string `json:"query"`
+	Document string `json:"document"`
+}
+
+// EmbeddingStrategy describes how embeddings should be computed.
+// Different strategies use different subsets of fields.
 type EmbeddingStrategy struct {
-	Type           EmbeddingStrategyType
-	Model          string
-	Instruction    *string // only for instruct
-	Representation *string // "symmetric" | "query" | "document" (semantic)
-	CompressToSize *int    // e.g., 128 (semantic)
-	Normalize      bool
+	Type  EmbeddingStrategyType `json:"type"`
+	Model string                `json:"model"`
+
+	//Instruct only
+	Instruction *InstructInstruction `json:"instruction,omitempty"`
+
+	// Semantic only
+	Representation *string `json:"representation,omitempty"` // "symmetric" | "asymmetric"
+
+	HybridIndex *HybridIndex `json:"hybrid_index,omitempty"`
+
+	// Common flags
+	Normalize      bool `json:"normalize,omitempty"`
+	CompressToSize *int `json:"dimension,omitempty"`
 }
 
 // Provider contract
