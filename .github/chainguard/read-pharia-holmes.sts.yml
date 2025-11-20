@@ -1,0 +1,12 @@
+# Trust policy to allow pharia-holmes repository to access data-go-packages
+# This enables pharia-holmes CI/CD workflows to download this private Go module
+
+# issuer never changes, is the GitHub token issuer
+issuer: https://token.actions.githubusercontent.com
+
+# Allow access from any ref (branch, tag, PR) in pharia-holmes repository
+subject_pattern: "repo:Aleph-Alpha/pharia-holmes:.*"
+
+# Grant read-only access to repository contents
+permissions:
+  contents: read
