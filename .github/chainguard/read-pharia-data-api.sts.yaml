@@ -1,5 +1,5 @@
 issuer: https://token.actions.githubusercontent.com
-subject_pattern: repo:Aleph-Alpha/pharia-data-api:ref:.*
+subject_pattern: "repo:Aleph-Alpha/pharia-data-api:ref:.*"
 
 permissions:
   contents: read
