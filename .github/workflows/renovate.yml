@@ -1,0 +1,13 @@
+name: Renovate
+
+on:
+  schedule:
+    # Run every day at 4:00 AM UTC
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  renovate:
+    uses: Aleph-Alpha/shared-workflows/.github/workflows/renovate.yaml@v0
+    secrets: inherit
+

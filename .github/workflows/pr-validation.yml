@@ -1,0 +1,13 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-validation:
+    uses: Aleph-Alpha/shared-workflows/.github/workflows/pr-validation.yaml@v0
+
