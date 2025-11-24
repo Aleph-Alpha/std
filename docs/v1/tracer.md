@@ -3,7 +3,7 @@
 # tracer
 
 ```go
-import "github.com/Aleph-Alpha/std/pkg/tracer"
+import "github.com/Aleph-Alpha/std/v1/tracer"
 ```
 
 Package tracer provides distributed tracing functionality using OpenTelemetry.
@@ -23,8 +23,8 @@ Basic Usage:
 ```
 import (
 	"context"
-	"github.com/Aleph-Alpha/std/pkg/tracer"
-	"github.com/Aleph-Alpha/std/pkg/logger"
+	"github.com/Aleph-Alpha/std/v1/tracer"
+	"github.com/Aleph-Alpha/std/v1/logger"
 )
 
 // Create a logger
@@ -154,7 +154,7 @@ var FXModule = fx.Module("tracer",
 ```
 
 <a name="RegisterTracerLifecycle"></a>
-## func [RegisterTracerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/fx_module.go#L59>)
+## func [RegisterTracerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/fx_module.go#L59>)
 
 ```go
 func RegisterTracerLifecycle(lc fx.Lifecycle, tracer *Tracer)
@@ -183,7 +183,7 @@ app := fx.New(
 ```
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/configs.go#L6-L34>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/configs.go#L6-L34>)
 
 Config defines the configuration for the OpenTelemetry tracer. It controls service identification, environment settings, and whether traces should be exported to an observability backend.
 
@@ -220,7 +220,7 @@ type Config struct {
 ```
 
 <a name="Span"></a>
-## type [Span](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/utils.go#L31-L68>)
+## type [Span](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L31-L68>)
 
 Span represents a trace span for tracking operations in distributed systems. It provides methods for ending the span, recording errors, and setting attributes.
 
@@ -274,7 +274,7 @@ type Span interface {
 ```
 
 <a name="Tracer"></a>
-## type [Tracer](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/setup.go#L31-L33>)
+## type [Tracer](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/setup.go#L31-L33>)
 
 Tracer provides a simplified API for distributed tracing with OpenTelemetry. It wraps the OpenTelemetry TracerProvider and provides convenient methods for creating spans, recording errors, and propagating trace context across service boundaries.
 
@@ -291,7 +291,7 @@ type Tracer struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/setup.go#L67>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/setup.go#L67>)
 
 ```go
 func NewClient(cfg Config) (*Tracer, error)
@@ -333,7 +333,7 @@ defer span.End()
 ```
 
 <a name="Tracer.GetCarrier"></a>
-### func \(\*Tracer\) [GetCarrier](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/utils.go#L288>)
+### func \(\*Tracer\) [GetCarrier](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L288>)
 
 ```go
 func (t *Tracer) GetCarrier(ctx context.Context) map[string]string
@@ -382,7 +382,7 @@ func makeHttpRequest(ctx context.Context, url string) (*http.Response, error) {
 ```
 
 <a name="Tracer.SetCarrierOnContext"></a>
-### func \(\*Tracer\) [SetCarrierOnContext](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/utils.go#L341>)
+### func \(\*Tracer\) [SetCarrierOnContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L341>)
 
 ```go
 func (t *Tracer) SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context
@@ -432,7 +432,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 ```
 
 <a name="Tracer.StartSpan"></a>
-### func \(\*Tracer\) [StartSpan](<https://github.com/Aleph-Alpha/std/blob/main/pkg/tracer/utils.go#L233>)
+### func \(\*Tracer\) [StartSpan](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L233>)
 
 ```go
 func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, Span)

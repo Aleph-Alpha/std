@@ -16,7 +16,7 @@
 //
 // Basic Usage:
 //
-//	import "github.com/Aleph-Alpha/std/pkg/metrics"
+//	import "github.com/Aleph-Alpha/std/v1/metrics"
 //
 //	// Create a new metrics server manually
 //	cfg := metrics.Config{

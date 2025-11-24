@@ -15,8 +15,8 @@
 // Basic Usage:
 //
 //	import (
-//		"github.com/Aleph-Alpha/std/pkg/rabbit"
-//		"github.com/Aleph-Alpha/std/pkg/logger"
+//		"github.com/Aleph-Alpha/std/v1/rabbit"
+//		"github.com/Aleph-Alpha/std/v1/logger"
 //		"context"
 //		"sync"
 //	)
@@ -75,7 +75,7 @@
 // Publisher Example (sending trace context):
 //
 //	import (
-//		"github.com/Aleph-Alpha/std/pkg/tracer"
+//		"github.com/Aleph-Alpha/std/v1/tracer"
 //		// other imports...
 //	)
 //

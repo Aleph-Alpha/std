@@ -16,7 +16,7 @@
 //
 // Basic Usage:
 //
-//	import "github.com/Aleph-Alpha/std/pkg/logger"
+//	import "github.com/Aleph-Alpha/std/v1/logger"
 //
 //	// Create a new logger using factory
 //	log := logger.NewLoggerClient(logger.Config{

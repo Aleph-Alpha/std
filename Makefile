@@ -12,13 +12,13 @@ docs:
 		go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest; \
 		echo "gomarkdoc installed successfully"; \
 	}; \
-	mkdir -p docs/pkg; \
-	rm -rf docs/pkg/*.md; \
-	for pkg in $$(find pkg -maxdepth 1 -mindepth 1 -type d | grep -v "examples"); do \
+	mkdir -p docs/v1; \
+	rm -rf docs/v1/*.md; \
+	for pkg in $$(find v1 -maxdepth 1 -mindepth 1 -type d | grep -v "examples"); do \
 		pkgname=$$(basename $$pkg); \
 		echo "Processing $$pkgname..."; \
 		gomarkdoc ./$$pkg \
-			--output "docs/pkg/$$pkgname.md" \
+			--output "docs/v1/$$pkgname.md" \
 			--repository.url "https://github.com/Aleph-Alpha/std" \
 			--format github; \
 	done; \
@@ -28,9 +28,9 @@ docs:
 	echo "Generated on $$(date)" >> docs_section.tmp; \
 	echo "" >> docs_section.tmp; \
 	echo "## Packages" >> docs_section.tmp; \
-	for pkg in $$(find pkg -maxdepth 1 -mindepth 1 -type d | grep -v "examples"); do \
+	for pkg in $$(find v1 -maxdepth 1 -mindepth 1 -type d | grep -v "examples"); do \
 		pkgname=$$(basename $$pkg); \
-		echo "- [$$pkgname](docs/pkg/$$pkgname.md)" >> docs_section.tmp; \
+		echo "- [$$pkgname](docs/v1/$$pkgname.md)" >> docs_section.tmp; \
 	done; \
 	if grep -q "# Go Packages Documentation" README.md; then \
 		awk 'BEGIN {p=1} /# Go Packages Documentation/{p=0} /^# [^G]/{p=1} p' README.md > README.tmp; \
@@ -40,12 +40,12 @@ docs:
 		cat docs_section.tmp >> README.md; \
 	fi; \
 	rm docs_section.tmp; \
-	echo "Documentation generated in docs/pkg/ directory and listed in README.md"
+	echo "Documentation generated in docs/v1/ directory and listed in README.md"
 
 # Clean generated documentation and test artifacts
 clean:
 	@echo "Cleaning generated documentation and test artifacts..."
-	@rm -rf docs/pkg/*.md 2>/dev/null || true
+	@rm -rf docs/v1/*.md 2>/dev/null || true
 	@rm -f docs_section.tmp README.tmp test_output.log 2>/dev/null || true
 	@echo "Documentation and test artifacts cleaned."
 

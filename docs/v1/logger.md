@@ -3,7 +3,7 @@
 # logger
 
 ```go
-import "github.com/Aleph-Alpha/std/pkg/logger"
+import "github.com/Aleph-Alpha/std/v1/logger"
 ```
 
 Package logger provides structured logging functionality for Go applications.
@@ -23,7 +23,7 @@ Core Features:
 Basic Usage:
 
 ```
-import "github.com/Aleph-Alpha/std/pkg/logger"
+import "github.com/Aleph-Alpha/std/v1/logger"
 
 // Create a new logger using factory
 log := logger.NewLoggerClient(logger.Config{
@@ -169,7 +169,7 @@ var FXModule = fx.Module("logger",
 ```
 
 <a name="RegisterLoggerLifecycle"></a>
-## func [RegisterLoggerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/fx_module.go#L50>)
+## func [RegisterLoggerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/fx_module.go#L50>)
 
 ```go
 func RegisterLoggerLifecycle(lc fx.Lifecycle, client *Logger)
@@ -191,7 +191,7 @@ This ensures that no log entries are lost if the application shuts down while lo
 Note: This function is automatically invoked by the FXModule and does not need to be called directly in application code.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/configs.go#L25-L60>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/configs.go#L25-L60>)
 
 Config defines the configuration structure for the logger. It contains settings that control the behavior of the logging system.
 
@@ -235,7 +235,7 @@ type Config struct {
 ```
 
 <a name="Logger"></a>
-## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/setup.go#L14-L24>)
+## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L14-L24>)
 
 Logger is a wrapper around Uber's Zap logger. It provides a simplified interface to the underlying Zap logger, with additional functionality specific to the application's needs.
 
@@ -250,7 +250,7 @@ type Logger struct {
 ```
 
 <a name="NewLoggerClient"></a>
-### func [NewLoggerClient](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/setup.go#L53>)
+### func [NewLoggerClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L53>)
 
 ```go
 func NewLoggerClient(cfg Config) *Logger
@@ -288,7 +288,7 @@ log.Info("Application started", nil, nil)
 ```
 
 <a name="Logger.Debug"></a>
-### func \(\*Logger\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L108>)
+### func \(\*Logger\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L108>)
 
 ```go
 func (l *Logger) Debug(msg string, err error, fields ...map[string]interface{})
@@ -313,7 +313,7 @@ logger.Debug("Processing request", nil, map[string]interface{}{
 ```
 
 <a name="Logger.DebugWithContext"></a>
-### func \(\*Logger\) [DebugWithContext](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L213>)
+### func \(\*Logger\) [DebugWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L213>)
 
 ```go
 func (l *Logger) DebugWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
@@ -339,7 +339,7 @@ logger.DebugWithContext(ctx, "Processing request", nil, map[string]interface{}{
 ```
 
 <a name="Logger.Error"></a>
-### func \(\*Logger\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L149>)
+### func \(\*Logger\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L149>)
 
 ```go
 func (l *Logger) Error(msg string, err error, fields ...map[string]interface{})
@@ -366,7 +366,7 @@ if err != nil {
 ```
 
 <a name="Logger.ErrorWithContext"></a>
-### func \(\*Logger\) [ErrorWithContext](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L258>)
+### func \(\*Logger\) [ErrorWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L258>)
 
 ```go
 func (l *Logger) ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
@@ -394,7 +394,7 @@ if err != nil {
 ```
 
 <a name="Logger.Fatal"></a>
-### func \(\*Logger\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L172>)
+### func \(\*Logger\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L172>)
 
 ```go
 func (l *Logger) Fatal(msg string, err error, fields ...map[string]interface{})
@@ -422,7 +422,7 @@ if configErr != nil {
 Note: This function does not return as it terminates the application.
 
 <a name="Logger.FatalWithContext"></a>
-### func \(\*Logger\) [FatalWithContext](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L285>)
+### func \(\*Logger\) [FatalWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L285>)
 
 ```go
 func (l *Logger) FatalWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
@@ -451,7 +451,7 @@ if configErr != nil {
 Note: This function does not return as it terminates the application.
 
 <a name="Logger.Info"></a>
-### func \(\*Logger\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L88>)
+### func \(\*Logger\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L88>)
 
 ```go
 func (l *Logger) Info(msg string, err error, fields ...map[string]interface{})
@@ -475,7 +475,7 @@ logger.Info("User logged in successfully", nil, map[string]interface{}{
 ```
 
 <a name="Logger.InfoWithContext"></a>
-### func \(\*Logger\) [InfoWithContext](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L191>)
+### func \(\*Logger\) [InfoWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L191>)
 
 ```go
 func (l *Logger) InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
@@ -500,7 +500,7 @@ logger.InfoWithContext(ctx, "User logged in successfully", nil, map[string]inter
 ```
 
 <a name="Logger.Warn"></a>
-### func \(\*Logger\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L127>)
+### func \(\*Logger\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L127>)
 
 ```go
 func (l *Logger) Warn(msg string, err error, fields ...map[string]interface{})
@@ -524,7 +524,7 @@ logger.Warn("High resource usage detected", nil, map[string]interface{}{
 ```
 
 <a name="Logger.WarnWithContext"></a>
-### func \(\*Logger\) [WarnWithContext](<https://github.com/Aleph-Alpha/std/blob/main/pkg/logger/utils.go#L234>)
+### func \(\*Logger\) [WarnWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L234>)
 
 ```go
 func (l *Logger) WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})

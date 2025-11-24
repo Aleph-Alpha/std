@@ -15,8 +15,8 @@
 //
 //	import (
 //		"context"
-//		"github.com/Aleph-Alpha/std/pkg/tracer"
-//		"github.com/Aleph-Alpha/std/pkg/logger"
+//		"github.com/Aleph-Alpha/std/v1/tracer"
+//		"github.com/Aleph-Alpha/std/v1/logger"
 //	)
 //
 //	// Create a logger

@@ -3,7 +3,7 @@
 # qdrant
 
 ```go
-import "github.com/Aleph-Alpha/std/pkg/qdrant"
+import "github.com/Aleph-Alpha/std/v1/qdrant"
 ```
 
 Package qdrant provides a modular, dependency\-injected client for the Qdrant vector database.
@@ -24,7 +24,7 @@ Core Features:
 Basic Usage:
 
 ```
-import "github.com/Aleph-Alpha/std/pkg/qdrant"
+import "github.com/Aleph-Alpha/std/v1/qdrant"
 
 // Create a new client
 client, err := qdrant.NewQdrantClient(qdrant.QdrantParams{
@@ -205,7 +205,7 @@ var FXModule = fx.Module("qdrant",
 ```
 
 <a name="RegisterQdrantLifecycle"></a>
-## func [RegisterQdrantLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/fx_module.go#L54>)
+## func [RegisterQdrantLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/fx_module.go#L54>)
 
 ```go
 func RegisterQdrantLifecycle(lc fx.Lifecycle, client *QdrantClient)
@@ -224,7 +224,7 @@ OnStop:
 - Logs a shutdown message.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L24-L51>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L24-L51>)
 
 Config holds connection and behavior settings for the Qdrant client.
 
@@ -279,7 +279,7 @@ type Config struct {
 ```
 
 <a name="DefaultConfig"></a>
-### func [DefaultConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L54>)
+### func [DefaultConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L54>)
 
 ```go
 func DefaultConfig() *Config
@@ -288,7 +288,7 @@ func DefaultConfig() *Config
 DefaultConfig provides sensible defaults for most use cases.
 
 <a name="FromEndpoint"></a>
-### func [FromEndpoint](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L67>)
+### func [FromEndpoint](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L67>)
 
 ```go
 func FromEndpoint(url string) *Config
@@ -297,7 +297,7 @@ func FromEndpoint(url string) *Config
 FromEndpoint returns a default config pre\-filled with a specific endpoint.
 
 <a name="Config.WithApiKey"></a>
-### func \(\*Config\) [WithApiKey](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L74>)
+### func \(\*Config\) [WithApiKey](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L74>)
 
 ```go
 func (c *Config) WithApiKey(key string) *Config
@@ -306,7 +306,7 @@ func (c *Config) WithApiKey(key string) *Config
 Builder\-style helpers \(optional, ergonomic\)
 
 <a name="Config.WithCompatibilityCheck"></a>
-### func \(\*Config\) [WithCompatibilityCheck](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L99>)
+### func \(\*Config\) [WithCompatibilityCheck](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L99>)
 
 ```go
 func (c *Config) WithCompatibilityCheck(enabled bool) *Config
@@ -315,7 +315,7 @@ func (c *Config) WithCompatibilityCheck(enabled bool) *Config
 
 
 <a name="Config.WithCompression"></a>
-### func \(\*Config\) [WithCompression](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L89>)
+### func \(\*Config\) [WithCompression](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L89>)
 
 ```go
 func (c *Config) WithCompression(enabled bool) *Config
@@ -324,7 +324,7 @@ func (c *Config) WithCompression(enabled bool) *Config
 
 
 <a name="Config.WithConnectTimeout"></a>
-### func \(\*Config\) [WithConnectTimeout](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L84>)
+### func \(\*Config\) [WithConnectTimeout](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L84>)
 
 ```go
 func (c *Config) WithConnectTimeout(d time.Duration) *Config
@@ -333,7 +333,7 @@ func (c *Config) WithConnectTimeout(d time.Duration) *Config
 
 
 <a name="Config.WithKeepAlive"></a>
-### func \(\*Config\) [WithKeepAlive](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L94>)
+### func \(\*Config\) [WithKeepAlive](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L94>)
 
 ```go
 func (c *Config) WithKeepAlive(enabled bool) *Config
@@ -342,7 +342,7 @@ func (c *Config) WithKeepAlive(enabled bool) *Config
 
 
 <a name="Config.WithTimeout"></a>
-### func \(\*Config\) [WithTimeout](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/configs.go#L79>)
+### func \(\*Config\) [WithTimeout](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L79>)
 
 ```go
 func (c *Config) WithTimeout(d time.Duration) *Config
@@ -351,7 +351,7 @@ func (c *Config) WithTimeout(d time.Duration) *Config
 
 
 <a name="Embedding"></a>
-## type [Embedding](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L16-L20>)
+## type [Embedding](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L16-L20>)
 
 Embedding represents a dense embedding vector.
 
@@ -364,7 +364,7 @@ type Embedding struct {
 ```
 
 <a name="NewEmbedding"></a>
-### func [NewEmbedding](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L52>)
+### func [NewEmbedding](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L52>)
 
 ```go
 func NewEmbedding(input EmbeddingInput) Embedding
@@ -373,7 +373,7 @@ func NewEmbedding(input EmbeddingInput) Embedding
 NewEmbedding converts a high\-level EmbeddingInput into the internal Embedding type. Having this builder allows for future validation or normalization logic. For now, it performs a shallow copy.
 
 <a name="EmbeddingInput"></a>
-## type [EmbeddingInput](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L9-L13>)
+## type [EmbeddingInput](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L9-L13>)
 
 EmbeddingInput is the type the application provides to insert embeddings. Keeps the app decoupled from internal Qdrant SDK structs.
 
@@ -386,7 +386,7 @@ type EmbeddingInput struct {
 ```
 
 <a name="QdrantClient"></a>
-## type [QdrantClient](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L35-L39>)
+## type [QdrantClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L35-L39>)
 
 
 
@@ -397,7 +397,7 @@ type QdrantClient struct {
 ```
 
 <a name="NewQdrantClient"></a>
-### func [NewQdrantClient](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L56>)
+### func [NewQdrantClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L56>)
 
 ```go
 func NewQdrantClient(p QdrantParams) (*QdrantClient, error)
@@ -416,7 +416,7 @@ client, _ := qdrant.NewQdrantClient(qdrant.QdrantParams{Config: cfg})
 ```
 
 <a name="QdrantClient.BatchInsert"></a>
-### func \(\*QdrantClient\) [BatchInsert](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L194>)
+### func \(\*QdrantClient\) [BatchInsert](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L194>)
 
 ```go
 func (c *QdrantClient) BatchInsert(ctx context.Context, inputs []EmbeddingInput) error
@@ -431,7 +431,7 @@ This method is safe to call for large datasets — it will automatically split i
 Logs batch indices and collection name for debugging.
 
 <a name="QdrantClient.Close"></a>
-### func \(\*QdrantClient\) [Close](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L123>)
+### func \(\*QdrantClient\) [Close](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L123>)
 
 ```go
 func (c *QdrantClient) Close() error
@@ -444,7 +444,7 @@ Close gracefully shuts down the Qdrant client.
 Since the official Qdrant Go SDK doesn’t maintain persistent connections, this is currently a no\-op. It exists for lifecycle symmetry and future safety.
 
 <a name="QdrantClient.Delete"></a>
-### func \(\*QdrantClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L314>)
+### func \(\*QdrantClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L314>)
 
 ```go
 func (c *QdrantClient) Delete(ctx context.Context, ids []string) error
@@ -457,7 +457,7 @@ Delete removes embeddings from a collection by their IDs.
 It constructs a \`DeletePoints\` request containing a list of \`PointId\`s, waits synchronously for completion, and logs the operation status.
 
 <a name="QdrantClient.EnsureCollection"></a>
-### func \(\*QdrantClient\) [EnsureCollection](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L137>)
+### func \(\*QdrantClient\) [EnsureCollection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L137>)
 
 ```go
 func (c *QdrantClient) EnsureCollection(ctx context.Context, name string) error
@@ -470,7 +470,7 @@ EnsureCollection verifies if a given collection exists, and creates it if missin
 It’s safe to call this multiple times — if the collection already exists, the function exits early. This pattern simplifies startup logic for embedding services that may bootstrap their own Qdrant collections.
 
 <a name="QdrantClient.Insert"></a>
-### func \(\*QdrantClient\) [Insert](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L178>)
+### func \(\*QdrantClient\) [Insert](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L178>)
 
 ```go
 func (c *QdrantClient) Insert(ctx context.Context, input EmbeddingInput) error
@@ -483,7 +483,7 @@ Insert adds a single embedding to Qdrant.
 Internally, it reuses the BatchInsert logic to ensure consistent handling of payload serialization and error management.
 
 <a name="QdrantClient.Search"></a>
-### func \(\*QdrantClient\) [Search](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/setup.go#L269>)
+### func \(\*QdrantClient\) [Search](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/setup.go#L269>)
 
 ```go
 func (c *QdrantClient) Search(ctx context.Context, vector []float32, topK int) ([]SearchResultInterface, error)
@@ -508,7 +508,7 @@ most similar stored embeddings.
 Logs the total count of hits for observability.
 
 <a name="QdrantParams"></a>
-## type [QdrantParams](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/fx_module.go#L39-L42>)
+## type [QdrantParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/fx_module.go#L39-L42>)
 
 QdrantParams defines dependencies needed to construct the Qdrant client.
 
@@ -520,7 +520,7 @@ type QdrantParams struct {
 ```
 
 <a name="SearchResult"></a>
-## type [SearchResult](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L23-L29>)
+## type [SearchResult](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L23-L29>)
 
 SearchResult holds results from a similarity search.
 
@@ -535,7 +535,7 @@ type SearchResult struct {
 ```
 
 <a name="SearchResult.GetCollectionName"></a>
-### func \(SearchResult\) [GetCollectionName](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L47>)
+### func \(SearchResult\) [GetCollectionName](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L47>)
 
 ```go
 func (r SearchResult) GetCollectionName() string
@@ -544,7 +544,7 @@ func (r SearchResult) GetCollectionName() string
 GetCollectionName returns the name of the collection from which the result originated.
 
 <a name="SearchResult.GetID"></a>
-### func \(SearchResult\) [GetID](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L32>)
+### func \(SearchResult\) [GetID](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L32>)
 
 ```go
 func (r SearchResult) GetID() string
@@ -553,7 +553,7 @@ func (r SearchResult) GetID() string
 GetID returns the result's unique identifier.
 
 <a name="SearchResult.GetMeta"></a>
-### func \(SearchResult\) [GetMeta](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L38>)
+### func \(SearchResult\) [GetMeta](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L38>)
 
 ```go
 func (r SearchResult) GetMeta() map[string]*qdrant.Value
@@ -562,7 +562,7 @@ func (r SearchResult) GetMeta() map[string]*qdrant.Value
 GetMeta returns the metadata stored with the vector.
 
 <a name="SearchResult.GetScore"></a>
-### func \(SearchResult\) [GetScore](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L35>)
+### func \(SearchResult\) [GetScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L35>)
 
 ```go
 func (r SearchResult) GetScore() float32
@@ -571,7 +571,7 @@ func (r SearchResult) GetScore() float32
 GetScore returns the similarity score associated with the result.
 
 <a name="SearchResult.GetVector"></a>
-### func \(SearchResult\) [GetVector](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L41>)
+### func \(SearchResult\) [GetVector](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L41>)
 
 ```go
 func (r SearchResult) GetVector() []float32
@@ -580,7 +580,7 @@ func (r SearchResult) GetVector() []float32
 GetVector returns the dense embedding vector if available.
 
 <a name="SearchResult.HasVector"></a>
-### func \(SearchResult\) [HasVector](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L44>)
+### func \(SearchResult\) [HasVector](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L44>)
 
 ```go
 func (r SearchResult) HasVector() bool
@@ -589,7 +589,7 @@ func (r SearchResult) HasVector() bool
 HasVector reports whether the result contains a non\-empty vector payload.
 
 <a name="SearchResultInterface"></a>
-## type [SearchResultInterface](<https://github.com/Aleph-Alpha/std/blob/main/pkg/qdrant/utils.go#L58-L65>)
+## type [SearchResultInterface](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L58-L65>)
 
 SearchResultInterface is the public interface for search results. It provides a consistent way to access search results regardless of the underlying implementation.
 

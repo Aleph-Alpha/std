@@ -15,8 +15,8 @@
 // Basic Usage:
 //
 //	import (
-//		"github.com/Aleph-Alpha/std/pkg/postgres"
-//		"github.com/Aleph-Alpha/std/pkg/logger"
+//		"github.com/Aleph-Alpha/std/v1/postgres"
+//		"github.com/Aleph-Alpha/std/v1/logger"
 //	)
 //
 //	// Create a logger

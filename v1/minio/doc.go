@@ -16,8 +16,8 @@
 // Basic Usage:
 //
 //		import (
-//			"github.com/Aleph-Alpha/std/pkg/minio"
-//			"github.com/Aleph-Alpha/std/pkg/logger"
+//			"github.com/Aleph-Alpha/std/v1/minio"
+//			"github.com/Aleph-Alpha/std/v1/logger"
 //		)
 //
 //		// Create a logger (optional)

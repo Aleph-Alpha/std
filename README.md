@@ -97,13 +97,13 @@ This module contains several packages that you can import into your project:
 
 ```go
 // Import the logger package
-import "github.com/Aleph-Alpha/std/pkg/logger"
+import "github.com/Aleph-Alpha/std/v1/logger"
 
 // Import the minio package
-import "github.com/Aleph-Alpha/std/pkg/minio"
+import "github.com/Aleph-Alpha/std/v1/minio"
 
 // Import the rabbit package
-import "github.com/Aleph-Alpha/std/pkg/rabbit"
+import "github.com/Aleph-Alpha/std/v1/rabbit"
 ```
 
 # Running Tests
@@ -146,10 +146,10 @@ DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLE
 Generated on Mon Nov 10 11:21:51 CET 2025
 
 ## Packages
-- [tracer](docs/pkg/tracer.md)
-- [metrics](docs/pkg/metrics.md)
-- [logger](docs/pkg/logger.md)
-- [minio](docs/pkg/minio.md)
-- [postgres](docs/pkg/postgres.md)
-- [qdrant](docs/pkg/qdrant.md)
-- [rabbit](docs/pkg/rabbit.md)
+- [tracer](docs/v1/tracer.md)
+- [metrics](docs/v1/metrics.md)
+- [logger](docs/v1/logger.md)
+- [minio](docs/v1/minio.md)
+- [postgres](docs/v1/postgres.md)
+- [qdrant](docs/v1/qdrant.md)
+- [rabbit](docs/v1/rabbit.md)
