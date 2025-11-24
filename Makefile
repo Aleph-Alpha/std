@@ -1,15 +1,18 @@
 # Makefile at project root
 
-.PHONY: docs test build clean test-with-containers
+# Allow user to override the Go binary path
+GO ?= go
+
+.PHONY: docs test build clean test-with-containers lint fmt install-tools
 
 # Generate documentation using gomarkdoc
 docs:
 	@echo "Generating Markdown documentation..."
 	@echo "Checking for gomarkdoc..."
-	@export PATH="$$(go env GOBIN):$$(go env GOPATH)/bin:$$PATH"; \
+	@export PATH="$$($(GO) env GOBIN):$$($(GO) env GOPATH)/bin:$$PATH"; \
 	which gomarkdoc >/dev/null 2>&1 || { \
 		echo "gomarkdoc not found, installing..."; \
-		go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest; \
+		$(GO) install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest; \
 		echo "gomarkdoc installed successfully"; \
 	}; \
 	mkdir -p docs/v1; \
@@ -51,7 +54,7 @@ clean:
 
 # Build the project
 build:
-	go build ./...
+	$(GO) build ./...
 
 # Function to generate test summary
 define test_summary
@@ -97,7 +100,7 @@ endef
 test:
 	@echo "Running tests..."
 	@echo "===================="
-	@go test -v ./... 2>&1 | tee test_output.log
+	@$(GO) test -v ./... 2>&1 | tee test_output.log
 	$(call test_summary)
 
 # Test with containers - auto-detect Colima and set appropriate variables with detailed summary
@@ -106,9 +109,29 @@ test-with-containers:
 	@echo "===================="
 	@if [ -S "$$HOME/.colima/default/docker.sock" ]; then \
 		echo "Colima detected, running tests with Colima configuration..."; \
-		DOCKER_HOST=unix://$$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLED=true go test -v ./... 2>&1 | tee test_output.log; \
+		DOCKER_HOST=unix://$$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLED=true $(GO) test -v ./... 2>&1 | tee test_output.log; \
 	else \
 		echo "Colima not detected, running standard tests..."; \
-		go test -v ./... 2>&1 | tee test_output.log; \
+		$(GO) test -v ./... 2>&1 | tee test_output.log; \
 	fi
 	$(call test_summary)
+
+# Run linter
+lint:
+	@echo "Running linter..."
+	@# Ensure we use the GOROOT from the selected GO binary and add its bin to PATH
+	GOROOT=$$($(GO) env GOROOT) PATH="$$($(GO) env GOPATH)/bin:$$($(GO) env GOROOT)/bin:$$PATH" golangci-lint run
+
+# Format code
+fmt:
+	@echo "Formatting code..."
+	goimports -w .
+
+# Install development tools
+install-tools:
+	@echo "Installing tools..."
+	$(GO) install github.com/evilmartians/lefthook@latest
+	$(GO) install golang.org/x/tools/cmd/goimports@latest
+	@echo "Installing golangci-lint from source..."
+	# Using direct proxy as fallback for transient git errors if any
+	GOPROXY=https://proxy.golang.org,direct $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
