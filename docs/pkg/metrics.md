@@ -3,7 +3,7 @@
 # metrics
 
 ```go
-import "github.com/Aleph-Alpha/data-go-packages/pkg/metrics"
+import "github.com/Aleph-Alpha/std/pkg/metrics"
 ```
 
 Package metrics provides Prometheus\-based monitoring and metrics collection functionality for Go applications.
@@ -22,7 +22,7 @@ Core Features:
 Basic Usage:
 
 ```
-import "github.com/Aleph-Alpha/data-go-packages/pkg/metrics"
+import "github.com/Aleph-Alpha/std/pkg/metrics"
 
 // Create a new metrics server manually
 cfg := metrics.Config{
@@ -172,7 +172,7 @@ var FXModule = fx.Module("metrics",
 ```
 
 <a name="RegisterMetricsLifecycle"></a>
-## func [RegisterMetricsLifecycle](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/fx_module.go#L61>)
+## func [RegisterMetricsLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/fx_module.go#L61>)
 
 ```go
 func RegisterMetricsLifecycle(lc fx.Lifecycle, m *Metrics, log *logger.Logger)
@@ -196,7 +196,7 @@ This ensures that metrics are available for scraping during the application's li
 Note: This function is automatically invoked by the FXModule and does not need to be called directly in application code.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/configs.go#L8-L61>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/configs.go#L8-L61>)
 
 Config defines the configuration structure for the Prometheus metrics server. It contains settings that control how metrics are exposed and collected.
 
@@ -258,7 +258,7 @@ type Config struct {
 ```
 
 <a name="Metrics"></a>
-## type [Metrics](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L17-L29>)
+## type [Metrics](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L17-L29>)
 
 Metrics encapsulates the Prometheus registry and HTTP server responsible for exposing application metrics.
 
@@ -277,7 +277,7 @@ type Metrics struct {
 ```
 
 <a name="NewMetrics"></a>
-### func [NewMetrics](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L61>)
+### func [NewMetrics](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L61>)
 
 ```go
 func NewMetrics(cfg Config) *Metrics
@@ -315,7 +315,7 @@ go metricsInstance.Server.ListenAndServe()
 Access metrics at: http://localhost:9090/metrics
 
 <a name="Metrics.CreateCounter"></a>
-### func \(\*Metrics\) [CreateCounter](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L141>)
+### func \(\*Metrics\) [CreateCounter](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L141>)
 
 ```go
 func (m *Metrics) CreateCounter(name, help string, labels []string) *prometheus.CounterVec
@@ -324,7 +324,7 @@ func (m *Metrics) CreateCounter(name, help string, labels []string) *prometheus.
 Dynamic metric factories CreateCounter creates a new CounterVec metric and registers it.
 
 <a name="Metrics.CreateGauge"></a>
-### func \(\*Metrics\) [CreateGauge](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L155>)
+### func \(\*Metrics\) [CreateGauge](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L155>)
 
 ```go
 func (m *Metrics) CreateGauge(name, help string, labels []string) *prometheus.GaugeVec
@@ -333,7 +333,7 @@ func (m *Metrics) CreateGauge(name, help string, labels []string) *prometheus.Ga
 CreateGauge creates a new GaugeVec metric and registers it.
 
 <a name="Metrics.CreateHistogram"></a>
-### func \(\*Metrics\) [CreateHistogram](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L148>)
+### func \(\*Metrics\) [CreateHistogram](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L148>)
 
 ```go
 func (m *Metrics) CreateHistogram(name, help string, labels []string, buckets []float64) *prometheus.HistogramVec
@@ -342,7 +342,7 @@ func (m *Metrics) CreateHistogram(name, help string, labels []string, buckets []
 CreateHistogram creates a new HistogramVec metric and registers it.
 
 <a name="Metrics.IncrementRequests"></a>
-### func \(\*Metrics\) [IncrementRequests](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L122>)
+### func \(\*Metrics\) [IncrementRequests](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L122>)
 
 ```go
 func (m *Metrics) IncrementRequests(status string)
@@ -351,7 +351,7 @@ func (m *Metrics) IncrementRequests(status string)
 Default metric methods IncrementRequests increments the request counter with a given status label. Example: metrics.IncrementRequests\("success"\)
 
 <a name="Metrics.ObserveCPUUsage"></a>
-### func \(\*Metrics\) [ObserveCPUUsage](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L135>)
+### func \(\*Metrics\) [ObserveCPUUsage](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L135>)
 
 ```go
 func (m *Metrics) ObserveCPUUsage(value float64, core string)
@@ -360,7 +360,7 @@ func (m *Metrics) ObserveCPUUsage(value float64, core string)
 ObserveCPUUsage sets the CPU usage gauge for a given core. Example: metrics.ObserveCPUUsage\(87.2, "core\_0"\)
 
 <a name="Metrics.RecordRequestDuration"></a>
-### func \(\*Metrics\) [RecordRequestDuration](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/metrics/setup.go#L128>)
+### func \(\*Metrics\) [RecordRequestDuration](<https://github.com/Aleph-Alpha/std/blob/main/pkg/metrics/setup.go#L128>)
 
 ```go
 func (m *Metrics) RecordRequestDuration(start time.Time, endpoint string)

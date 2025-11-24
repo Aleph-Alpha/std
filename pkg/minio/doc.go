@@ -16,8 +16,8 @@
 // Basic Usage:
 //
 //		import (
-//			"github.com/Aleph-Alpha/data-go-packages/pkg/minio"
-//			"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+//			"github.com/Aleph-Alpha/std/pkg/minio"
+//			"github.com/Aleph-Alpha/std/pkg/logger"
 //		)
 //
 //		// Create a logger (optional)

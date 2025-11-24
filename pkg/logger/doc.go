@@ -16,7 +16,7 @@
 //
 // Basic Usage:
 //
-//	import "github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+//	import "github.com/Aleph-Alpha/std/pkg/logger"
 //
 //	// Create a new logger using factory
 //	log := logger.NewLoggerClient(logger.Config{

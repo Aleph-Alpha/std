@@ -18,7 +18,7 @@
 //
 // Basic Usage:
 //
-//	import "github.com/Aleph-Alpha/data-go-packages/pkg/qdrant"
+//	import "github.com/Aleph-Alpha/std/pkg/qdrant"
 //
 //	// Create a new client
 //	client, err := qdrant.NewQdrantClient(qdrant.QdrantParams{

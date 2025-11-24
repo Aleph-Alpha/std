@@ -5,7 +5,7 @@
 To use this package in your Go project, add it as a dependency:
 
 ```bash
-go get github.com/Aleph-Alpha/data-go-packages
+go get github.com/Aleph-Alpha/std
 ```
 
 ## Authentication Setup
@@ -56,7 +56,7 @@ echo "GONOPROXY: $GONOPROXY"
 echo "GONOSUMDB: $GONOSUMDB"
 
 # Test module download
-go mod download github.com/Aleph-Alpha/data-go-packages
+go mod download github.com/Aleph-Alpha/std
 go mod tidy
 ```
 
@@ -97,13 +97,13 @@ This module contains several packages that you can import into your project:
 
 ```go
 // Import the logger package
-import "github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+import "github.com/Aleph-Alpha/std/pkg/logger"
 
 // Import the minio package
-import "github.com/Aleph-Alpha/data-go-packages/pkg/minio"
+import "github.com/Aleph-Alpha/std/pkg/minio"
 
 // Import the rabbit package
-import "github.com/Aleph-Alpha/data-go-packages/pkg/rabbit"
+import "github.com/Aleph-Alpha/std/pkg/rabbit"
 ```
 
 # Running Tests

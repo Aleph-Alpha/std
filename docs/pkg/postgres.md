@@ -3,7 +3,7 @@
 # postgres
 
 ```go
-import "github.com/Aleph-Alpha/data-go-packages/pkg/postgres"
+import "github.com/Aleph-Alpha/std/pkg/postgres"
 ```
 
 Package postgres provides functionality for interacting with PostgreSQL databases.
@@ -23,8 +23,8 @@ Basic Usage:
 
 ```
 import (
-	"github.com/Aleph-Alpha/data-go-packages/pkg/postgres"
-	"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+	"github.com/Aleph-Alpha/std/pkg/postgres"
+	"github.com/Aleph-Alpha/std/pkg/logger"
 )
 
 // Create a logger
@@ -379,7 +379,7 @@ var FXModule = fx.Module("postgres",
 ```
 
 <a name="RegisterPostgresLifecycle"></a>
-## func [RegisterPostgresLifecycle](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/fx_module.go#L87>)
+## func [RegisterPostgresLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/fx_module.go#L87>)
 
 ```go
 func RegisterPostgresLifecycle(params PostgresLifeCycleParams)
@@ -390,7 +390,7 @@ RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database co
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/configs.go#L7-L13>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/configs.go#L7-L13>)
 
 Config represents the complete configuration for a PostgresSQL database connection. It encapsulates both the basic connection parameters and detailed connection pool settings.
 
@@ -405,7 +405,7 @@ type Config struct {
 ```
 
 <a name="Connection"></a>
-## type [Connection](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/configs.go#L17-L36>)
+## type [Connection](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/configs.go#L17-L36>)
 
 Connection holds the basic parameters required to connect to a PostgresSQL database. These parameters are used to construct the database connection string.
 
@@ -433,7 +433,7 @@ type Connection struct {
 ```
 
 <a name="ConnectionDetails"></a>
-## type [ConnectionDetails](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/configs.go#L41-L57>)
+## type [ConnectionDetails](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/configs.go#L41-L57>)
 
 ConnectionDetails holds configuration settings for the database connection pool. These settings help optimize performance and resource usage by controlling how database connections are created, reused, and expired.
 
@@ -458,7 +458,7 @@ type ConnectionDetails struct {
 ```
 
 <a name="ErrorCategory"></a>
-## type [ErrorCategory](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/errors.go#L889>)
+## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/errors.go#L889>)
 
 ErrorCategory represents different categories of database errors
 
@@ -485,7 +485,7 @@ const (
 ```
 
 <a name="Migration"></a>
-## type [Migration](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L42-L58>)
+## type [Migration](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L42-L58>)
 
 Migration represents a single database migration with all its metadata and content. Each migration contains the SQL to execute and information about its purpose and identity.
 
@@ -510,7 +510,7 @@ type Migration struct {
 ```
 
 <a name="MigrationDirection"></a>
-## type [MigrationDirection](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L30>)
+## type [MigrationDirection](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L30>)
 
 MigrationDirection specifies the direction of the migration, indicating whether it's applying a change or reverting one.
 
@@ -531,7 +531,7 @@ const (
 ```
 
 <a name="MigrationHistoryRecord"></a>
-## type [MigrationHistoryRecord](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L63-L87>)
+## type [MigrationHistoryRecord](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L63-L87>)
 
 MigrationHistoryRecord represents a record in the migration history table. It tracks when and how each migration was applied, enabling the system to determine which migrations have been run and providing an audit trail.
 
@@ -564,7 +564,7 @@ type MigrationHistoryRecord struct {
 ```
 
 <a name="MigrationType"></a>
-## type [MigrationType](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L16>)
+## type [MigrationType](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L16>)
 
 MigrationType defines the type of migration, categorizing the purpose of the change. This helps track and organize migrations based on their impact on the database.
 
@@ -587,7 +587,7 @@ const (
 ```
 
 <a name="Postgres"></a>
-## type [Postgres](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/setup.go#L18-L27>)
+## type [Postgres](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/setup.go#L18-L27>)
 
 Postgres is a thread\-safe wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations. It guards all database operations with a mutex to ensure thread safety and includes mechanisms for graceful shutdown and connection health monitoring.
 
@@ -599,7 +599,7 @@ type Postgres struct {
 ```
 
 <a name="NewPostgres"></a>
-### func [NewPostgres](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/setup.go#L33>)
+### func [NewPostgres](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/setup.go#L33>)
 
 ```go
 func NewPostgres(cfg Config) (*Postgres, error)
@@ -608,7 +608,7 @@ func NewPostgres(cfg Config) (*Postgres, error)
 NewPostgres creates a new Postgres instance with the provided configuration and Logger. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it logs a fatal error and terminates.
 
 <a name="NewPostgresClientWithDI"></a>
-### func [NewPostgresClientWithDI](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/fx_module.go#L61>)
+### func [NewPostgresClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/fx_module.go#L61>)
 
 ```go
 func NewPostgresClientWithDI(params PostgresParams) (*Postgres, error)
@@ -643,7 +643,7 @@ app := fx.New(
 This function delegates to the standard NewPostgres function, maintaining the same initialization logic while enabling seamless integration with dependency injection.
 
 <a name="Postgres.AutoMigrate"></a>
-### func \(\*Postgres\) [AutoMigrate](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L99>)
+### func \(\*Postgres\) [AutoMigrate](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L99>)
 
 ```go
 func (p *Postgres) AutoMigrate(models ...interface{}) error
@@ -660,7 +660,7 @@ Returns an error if any part of the migration process fails.
 This method is useful during development or for simple applications, but for production systems, explicit migrations are recommended.
 
 <a name="Postgres.Count"></a>
-### func \(\*Postgres\) [Count](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L268>)
+### func \(\*Postgres\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L268>)
 
 ```go
 func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error
@@ -685,7 +685,7 @@ err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 ```
 
 <a name="Postgres.Create"></a>
-### func \(\*Postgres\) [Create](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L63>)
+### func \(\*Postgres\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L63>)
 
 ```go
 func (p *Postgres) Create(ctx context.Context, value interface{}) error
@@ -708,7 +708,7 @@ err := db.Create(ctx, &user)
 ```
 
 <a name="Postgres.CreateMigration"></a>
-### func \(\*Postgres\) [CreateMigration](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L451>)
+### func \(\*Postgres\) [CreateMigration](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L451>)
 
 ```go
 func (p *Postgres) CreateMigration(migrationsDir, name string, migrationType MigrationType) (string, error)
@@ -734,7 +734,7 @@ if err == nil {
 ```
 
 <a name="Postgres.DB"></a>
-### func \(\*Postgres\) [DB](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/utils.go#L14>)
+### func \(\*Postgres\) [DB](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/utils.go#L14>)
 
 ```go
 func (p *Postgres) DB() *gorm.DB
@@ -745,7 +745,7 @@ DB returns the underlying GORM DB Client instance. This method provides direct a
 Use this method when you need to perform operations not covered by the wrapper methods or when you need to access specific GORM functionality. Note that direct usage bypasses some of the safety mechanisms, so use it with care.
 
 <a name="Postgres.Delete"></a>
-### func \(\*Postgres\) [Delete](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L214>)
+### func \(\*Postgres\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L214>)
 
 ```go
 func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error)
@@ -780,7 +780,7 @@ rowsAffected, err := db.Delete(ctx, &user)
 ```
 
 <a name="Postgres.Exec"></a>
-### func \(\*Postgres\) [Exec](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L244>)
+### func \(\*Postgres\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L244>)
 
 ```go
 func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error)
@@ -811,7 +811,7 @@ fmt.Printf("Updated %d users\n", rowsAffected)
 ```
 
 <a name="Postgres.Find"></a>
-### func \(\*Postgres\) [Find](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L21>)
+### func \(\*Postgres\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L21>)
 
 ```go
 func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -835,7 +835,7 @@ err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 ```
 
 <a name="Postgres.First"></a>
-### func \(\*Postgres\) [First](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L42>)
+### func \(\*Postgres\) [First](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L42>)
 
 ```go
 func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -859,7 +859,7 @@ err := db.First(ctx, &user, "email = ?", "user@example.com")
 ```
 
 <a name="Postgres.GetErrorCategory"></a>
-### func \(\*Postgres\) [GetErrorCategory](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/errors.go#L906>)
+### func \(\*Postgres\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/errors.go#L906>)
 
 ```go
 func (p *Postgres) GetErrorCategory(err error) ErrorCategory
@@ -868,7 +868,7 @@ func (p *Postgres) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="Postgres.GetMigrationStatus"></a>
-### func \(\*Postgres\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L385>)
+### func \(\*Postgres\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L385>)
 
 ```go
 func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string) ([]map[string]interface{}, error)
@@ -895,7 +895,7 @@ if err == nil {
 ```
 
 <a name="Postgres.GracefulShutdown"></a>
-### func \(\*Postgres\) [GracefulShutdown](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/fx_module.go#L130>)
+### func \(\*Postgres\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/fx_module.go#L130>)
 
 ```go
 func (p *Postgres) GracefulShutdown() error
@@ -904,7 +904,7 @@ func (p *Postgres) GracefulShutdown() error
 
 
 <a name="Postgres.IsCritical"></a>
-### func \(\*Postgres\) [IsCritical](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/errors.go#L979>)
+### func \(\*Postgres\) [IsCritical](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/errors.go#L979>)
 
 ```go
 func (p *Postgres) IsCritical(err error) bool
@@ -913,7 +913,7 @@ func (p *Postgres) IsCritical(err error) bool
 IsCritical returns true if the error indicates a serious system problem
 
 <a name="Postgres.IsRetryable"></a>
-### func \(\*Postgres\) [IsRetryable](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/errors.go#L934>)
+### func \(\*Postgres\) [IsRetryable](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/errors.go#L934>)
 
 ```go
 func (p *Postgres) IsRetryable(err error) bool
@@ -922,7 +922,7 @@ func (p *Postgres) IsRetryable(err error) bool
 IsRetryable returns true if the error might be resolved by retrying the operation
 
 <a name="Postgres.IsTemporary"></a>
-### func \(\*Postgres\) [IsTemporary](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/errors.go#L958>)
+### func \(\*Postgres\) [IsTemporary](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/errors.go#L958>)
 
 ```go
 func (p *Postgres) IsTemporary(err error) bool
@@ -931,7 +931,7 @@ func (p *Postgres) IsTemporary(err error) bool
 IsTemporary returns true if the error is likely temporary and might resolve itself
 
 <a name="Postgres.MigrateDown"></a>
-### func \(\*Postgres\) [MigrateDown](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L249>)
+### func \(\*Postgres\) [MigrateDown](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L249>)
 
 ```go
 func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error
@@ -953,7 +953,7 @@ err := db.MigrateDown(ctx, "./migrations")
 ```
 
 <a name="Postgres.MigrateUp"></a>
-### func \(\*Postgres\) [MigrateUp](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/migrations.go#L151>)
+### func \(\*Postgres\) [MigrateUp](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/migrations.go#L151>)
 
 ```go
 func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error
@@ -975,7 +975,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="Postgres.MonitorConnection"></a>
-### func \(\*Postgres\) [MonitorConnection](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/setup.go#L136>)
+### func \(\*Postgres\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/setup.go#L136>)
 
 ```go
 func (p *Postgres) MonitorConnection(ctx context.Context)
@@ -986,7 +986,7 @@ MonitorConnection periodically checks the health of the database connection and 
 The function respects context cancellation and shutdown signals, ensuring proper resource cleanup and graceful termination when requested.
 
 <a name="Postgres.Query"></a>
-### func \(\*Postgres\) [Query](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L28>)
+### func \(\*Postgres\) [Query](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L28>)
 
 ```go
 func (p *Postgres) Query(ctx context.Context) *QueryBuilder
@@ -1012,7 +1012,7 @@ err := db.Query(ctx).
 ```
 
 <a name="Postgres.RetryConnection"></a>
-### func \(\*Postgres\) [RetryConnection](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/setup.go#L94>)
+### func \(\*Postgres\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/setup.go#L94>)
 
 ```go
 func (p *Postgres) RetryConnection(ctx context.Context)
@@ -1023,7 +1023,7 @@ RetryConnection continuously attempts to reconnect to the PostgresSQL database w
 It implements two nested loops: \- The outer loop waits for retry signals \- The inner loop attempts reconnection until successful
 
 <a name="Postgres.Save"></a>
-### func \(\*Postgres\) [Save](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L84>)
+### func \(\*Postgres\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L84>)
 
 ```go
 func (p *Postgres) Save(ctx context.Context, value interface{}) error
@@ -1046,7 +1046,7 @@ err := db.Save(ctx, &user)
 ```
 
 <a name="Postgres.Transaction"></a>
-### func \(\*Postgres\) [Transaction](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/transactions.go#L39>)
+### func \(\*Postgres\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/transactions.go#L39>)
 
 ```go
 func (p *Postgres) Transaction(ctx context.Context, fn func(pg *Postgres) error) error
@@ -1068,7 +1068,7 @@ err := pg.Transaction(ctx, func(txPg *Postgres) error {
 ```
 
 <a name="Postgres.TranslateError"></a>
-### func \(\*Postgres\) [TranslateError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/errors.go#L168>)
+### func \(\*Postgres\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/errors.go#L168>)
 
 ```go
 func (p *Postgres) TranslateError(err error) error
@@ -1079,7 +1079,7 @@ TranslateError converts GORM/database\-specific errors into standardized applica
 It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Postgres.Update"></a>
-### func \(\*Postgres\) [Update](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L118>)
+### func \(\*Postgres\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L118>)
 
 ```go
 func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error)
@@ -1115,7 +1115,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumn"></a>
-### func \(\*Postgres\) [UpdateColumn](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L149>)
+### func \(\*Postgres\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L149>)
 
 ```go
 func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error)
@@ -1147,7 +1147,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumns"></a>
-### func \(\*Postgres\) [UpdateColumns](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L181>)
+### func \(\*Postgres\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L181>)
 
 ```go
 func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error)
@@ -1181,7 +1181,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateWhere"></a>
-### func \(\*Postgres\) [UpdateWhere](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/basic_ops.go#L300>)
+### func \(\*Postgres\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/basic_ops.go#L300>)
 
 ```go
 func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error)
@@ -1217,7 +1217,7 @@ fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="PostgresLifeCycleParams"></a>
-## type [PostgresLifeCycleParams](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/fx_module.go#L72-L77>)
+## type [PostgresLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/fx_module.go#L72-L77>)
 
 PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management. This struct combines all the components required to properly manage the lifecycle of a Postgres Client within an fx application, including startup, monitoring, and graceful shutdown.
 
@@ -1233,7 +1233,7 @@ type PostgresLifeCycleParams struct {
 ```
 
 <a name="PostgresParams"></a>
-## type [PostgresParams](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/fx_module.go#L27-L31>)
+## type [PostgresParams](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/fx_module.go#L27-L31>)
 
 PostgresParams groups the dependencies needed to create a Postgres Client via dependency injection. This struct is designed to work with Uber's fx dependency injection framework and provides the necessary parameters for initializing a Postgres database connection.
 
@@ -1248,7 +1248,7 @@ type PostgresParams struct {
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L39-L45>)
+## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L39-L45>)
 
 QueryBuilder provides a fluent interface for building complex database queries. It wraps GORM's query building capabilities with thread\-safety and automatic resource cleanup. The builder maintains a chain of query modifiers that are applied when a terminal method is called.
 
@@ -1259,7 +1259,7 @@ type QueryBuilder struct {
 ```
 
 <a name="QueryBuilder.Clauses"></a>
-### func \(\*QueryBuilder\) [Clauses](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L714>)
+### func \(\*QueryBuilder\) [Clauses](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L714>)
 
 ```go
 func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder
@@ -1286,7 +1286,7 @@ qb.Clauses(clause.GroupBy{
 ```
 
 <a name="QueryBuilder.Count"></a>
-### func \(\*QueryBuilder\) [Count](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L383>)
+### func \(\*QueryBuilder\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L383>)
 
 ```go
 func (qb *QueryBuilder) Count(count *int64) error
@@ -1308,7 +1308,7 @@ err := qb.Where("active = ?", true).Count(&count)
 ```
 
 <a name="QueryBuilder.CreateInBatches"></a>
-### func \(\*QueryBuilder\) [CreateInBatches](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L738>)
+### func \(\*QueryBuilder\) [CreateInBatches](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L738>)
 
 ```go
 func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error)
@@ -1338,7 +1338,7 @@ fmt.Printf("Created %d records\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Delete"></a>
-### func \(\*QueryBuilder\) [Delete](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L430>)
+### func \(\*QueryBuilder\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L430>)
 
 ```go
 func (qb *QueryBuilder) Delete(value interface{}) (int64, error)
@@ -1366,7 +1366,7 @@ fmt.Printf("Deleted %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Distinct"></a>
-### func \(\*QueryBuilder\) [Distinct](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L477>)
+### func \(\*QueryBuilder\) [Distinct](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L477>)
 
 ```go
 func (qb *QueryBuilder) Distinct(args ...interface{}) *QueryBuilder
@@ -1388,7 +1388,7 @@ qb.Distinct().Where("age > ?", 18).Find(&users) // SELECT DISTINCT * FROM users 
 ```
 
 <a name="QueryBuilder.Done"></a>
-### func \(\*QueryBuilder\) [Done](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L794>)
+### func \(\*QueryBuilder\) [Done](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L794>)
 
 ```go
 func (qb *QueryBuilder) Done()
@@ -1408,7 +1408,7 @@ if someCondition {
 ```
 
 <a name="QueryBuilder.Find"></a>
-### func \(\*QueryBuilder\) [Find](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L332>)
+### func \(\*QueryBuilder\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L332>)
 
 ```go
 func (qb *QueryBuilder) Find(dest interface{}) error
@@ -1430,7 +1430,7 @@ err := qb.Where("active = ?", true).Find(&users)
 ```
 
 <a name="QueryBuilder.First"></a>
-### func \(\*QueryBuilder\) [First](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L349>)
+### func \(\*QueryBuilder\) [First](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L349>)
 
 ```go
 func (qb *QueryBuilder) First(dest interface{}) error
@@ -1452,7 +1452,7 @@ err := qb.Where("email = ?", "user@example.com").First(&user)
 ```
 
 <a name="QueryBuilder.FirstOrCreate"></a>
-### func \(\*QueryBuilder\) [FirstOrCreate](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L777>)
+### func \(\*QueryBuilder\) [FirstOrCreate](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L777>)
 
 ```go
 func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error
@@ -1475,7 +1475,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
 ```
 
 <a name="QueryBuilder.FirstOrInit"></a>
-### func \(\*QueryBuilder\) [FirstOrInit](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L759>)
+### func \(\*QueryBuilder\) [FirstOrInit](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L759>)
 
 ```go
 func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error
@@ -1498,7 +1498,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrInit(&user)
 ```
 
 <a name="QueryBuilder.ForKeyShare"></a>
-### func \(\*QueryBuilder\) [ForKeyShare](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L646>)
+### func \(\*QueryBuilder\) [ForKeyShare](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L646>)
 
 ```go
 func (qb *QueryBuilder) ForKeyShare() *QueryBuilder
@@ -1515,7 +1515,7 @@ qb.Where("id = ?", userID).ForKeyShare().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForNoKeyUpdate"></a>
-### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L632>)
+### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L632>)
 
 ```go
 func (qb *QueryBuilder) ForNoKeyUpdate() *QueryBuilder
@@ -1532,7 +1532,7 @@ qb.Where("id = ?", userID).ForNoKeyUpdate().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForShare"></a>
-### func \(\*QueryBuilder\) [ForShare](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L567>)
+### func \(\*QueryBuilder\) [ForShare](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L567>)
 
 ```go
 func (qb *QueryBuilder) ForShare() *QueryBuilder
@@ -1550,7 +1550,7 @@ qb.ForShare().Where("status = ?", "active").Find(&users) // Prevents updates but
 ```
 
 <a name="QueryBuilder.ForShareSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L598>)
+### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L598>)
 
 ```go
 func (qb *QueryBuilder) ForShareSkipLocked() *QueryBuilder
@@ -1567,7 +1567,7 @@ qb.Where("category = ?", "news").ForShareSkipLocked().Find(&articles)
 ```
 
 <a name="QueryBuilder.ForUpdate"></a>
-### func \(\*QueryBuilder\) [ForUpdate](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L552>)
+### func \(\*QueryBuilder\) [ForUpdate](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L552>)
 
 ```go
 func (qb *QueryBuilder) ForUpdate() *QueryBuilder
@@ -1585,7 +1585,7 @@ qb.ForUpdate().Where("status = ?", "pending").Find(&orders) // Locks all matchin
 ```
 
 <a name="QueryBuilder.ForUpdateNoWait"></a>
-### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L615>)
+### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L615>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateNoWait() *QueryBuilder
@@ -1602,7 +1602,7 @@ qb.Where("id = ?", accountID).ForUpdateNoWait().First(&account)
 ```
 
 <a name="QueryBuilder.ForUpdateSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L582>)
+### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L582>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateSkipLocked() *QueryBuilder
@@ -1620,7 +1620,7 @@ qb.ForUpdateSkipLocked().Where("processed = ?", false).First(&task)
 ```
 
 <a name="QueryBuilder.Group"></a>
-### func \(\*QueryBuilder\) [Group](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L200>)
+### func \(\*QueryBuilder\) [Group](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L200>)
 
 ```go
 func (qb *QueryBuilder) Group(query string) *QueryBuilder
@@ -1642,7 +1642,7 @@ qb.Group("department, location")
 ```
 
 <a name="QueryBuilder.Having"></a>
-### func \(\*QueryBuilder\) [Having](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L217>)
+### func \(\*QueryBuilder\) [Having](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L217>)
 
 ```go
 func (qb *QueryBuilder) Having(query interface{}, args ...interface{}) *QueryBuilder
@@ -1664,7 +1664,7 @@ qb.Group("department").Having("COUNT(*) > ?", 3)
 ```
 
 <a name="QueryBuilder.Joins"></a>
-### func \(\*QueryBuilder\) [Joins](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L129>)
+### func \(\*QueryBuilder\) [Joins](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L129>)
 
 ```go
 func (qb *QueryBuilder) Joins(query string, args ...interface{}) *QueryBuilder
@@ -1686,7 +1686,7 @@ qb.Joins("JOIN orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Last"></a>
-### func \(\*QueryBuilder\) [Last](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L366>)
+### func \(\*QueryBuilder\) [Last](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L366>)
 
 ```go
 func (qb *QueryBuilder) Last(dest interface{}) error
@@ -1708,7 +1708,7 @@ err := qb.Where("department = ?", "Engineering").Order("joined_at ASC").Last(&us
 ```
 
 <a name="QueryBuilder.LeftJoin"></a>
-### func \(\*QueryBuilder\) [LeftJoin](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L146>)
+### func \(\*QueryBuilder\) [LeftJoin](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L146>)
 
 ```go
 func (qb *QueryBuilder) LeftJoin(query string, args ...interface{}) *QueryBuilder
@@ -1730,7 +1730,7 @@ qb.LeftJoin("orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Limit"></a>
-### func \(\*QueryBuilder\) [Limit](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L249>)
+### func \(\*QueryBuilder\) [Limit](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L249>)
 
 ```go
 func (qb *QueryBuilder) Limit(limit int) *QueryBuilder
@@ -1751,7 +1751,7 @@ qb.Limit(10) // Return at most 10 records
 ```
 
 <a name="QueryBuilder.MapRows"></a>
-### func \(\*QueryBuilder\) [MapRows](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/row_scanner.go#L66>)
+### func \(\*QueryBuilder\) [MapRows](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/row_scanner.go#L66>)
 
 ```go
 func (qb *QueryBuilder) MapRows(destSlice interface{}, mapFn func(*gorm.DB) error) error
@@ -1765,7 +1765,7 @@ Parameters:
 - mapFn: A function that defines how to map rows from the database to your slice items
 
 <a name="QueryBuilder.Model"></a>
-### func \(\*QueryBuilder\) [Model](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L298>)
+### func \(\*QueryBuilder\) [Model](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L298>)
 
 ```go
 func (qb *QueryBuilder) Model(value interface{}) *QueryBuilder
@@ -1786,7 +1786,7 @@ qb.Model(&User{}).Where("active = ?", true).Count(&count)
 ```
 
 <a name="QueryBuilder.Not"></a>
-### func \(\*QueryBuilder\) [Not](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L112>)
+### func \(\*QueryBuilder\) [Not](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L112>)
 
 ```go
 func (qb *QueryBuilder) Not(query interface{}, args ...interface{}) *QueryBuilder
@@ -1808,7 +1808,7 @@ qb.Not("status = ?", "deleted")
 ```
 
 <a name="QueryBuilder.Offset"></a>
-### func \(\*QueryBuilder\) [Offset](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L265>)
+### func \(\*QueryBuilder\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L265>)
 
 ```go
 func (qb *QueryBuilder) Offset(offset int) *QueryBuilder
@@ -1829,7 +1829,7 @@ qb.Offset(20).Limit(10) // Skip 20 records and return the next 10
 ```
 
 <a name="QueryBuilder.OnConflict"></a>
-### func \(\*QueryBuilder\) [OnConflict](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L666>)
+### func \(\*QueryBuilder\) [OnConflict](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L666>)
 
 ```go
 func (qb *QueryBuilder) OnConflict(onConflict clause.OnConflict) *QueryBuilder
@@ -1853,7 +1853,7 @@ qb.OnConflict(clause.OnConflict{
 ```
 
 <a name="QueryBuilder.Or"></a>
-### func \(\*QueryBuilder\) [Or](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L95>)
+### func \(\*QueryBuilder\) [Or](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L95>)
 
 ```go
 func (qb *QueryBuilder) Or(query interface{}, args ...interface{}) *QueryBuilder
@@ -1875,7 +1875,7 @@ qb.Where("status = ?", "active").Or("status = ?", "pending")
 ```
 
 <a name="QueryBuilder.Order"></a>
-### func \(\*QueryBuilder\) [Order](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L234>)
+### func \(\*QueryBuilder\) [Order](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L234>)
 
 ```go
 func (qb *QueryBuilder) Order(value interface{}) *QueryBuilder
@@ -1897,7 +1897,7 @@ qb.Order("age ASC, name DESC")
 ```
 
 <a name="QueryBuilder.Pluck"></a>
-### func \(\*QueryBuilder\) [Pluck](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L457>)
+### func \(\*QueryBuilder\) [Pluck](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L457>)
 
 ```go
 func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error)
@@ -1927,7 +1927,7 @@ fmt.Printf("Found %d email addresses\n", rowsFound)
 ```
 
 <a name="QueryBuilder.Preload"></a>
-### func \(\*QueryBuilder\) [Preload](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L183>)
+### func \(\*QueryBuilder\) [Preload](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L183>)
 
 ```go
 func (qb *QueryBuilder) Preload(query string, args ...interface{}) *QueryBuilder
@@ -1950,7 +1950,7 @@ qb.Preload("Orders", "state = ?", "paid")
 ```
 
 <a name="QueryBuilder.QueryRow"></a>
-### func \(\*QueryBuilder\) [QueryRow](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/row_scanner.go#L36>)
+### func \(\*QueryBuilder\) [QueryRow](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/row_scanner.go#L36>)
 
 ```go
 func (qb *QueryBuilder) QueryRow() RowScanner
@@ -1959,7 +1959,7 @@ func (qb *QueryBuilder) QueryRow() RowScanner
 QueryRow executes a query expected to return a single row and returns a RowScanner for it. This method is optimized for queries that return exactly one row of data and provides a simplified interface for scanning the values from that row.
 
 <a name="QueryBuilder.QueryRows"></a>
-### func \(\*QueryBuilder\) [QueryRows](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/row_scanner.go#L44>)
+### func \(\*QueryBuilder\) [QueryRows](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/row_scanner.go#L44>)
 
 ```go
 func (qb *QueryBuilder) QueryRows() (RowsScanner, error)
@@ -1968,7 +1968,7 @@ func (qb *QueryBuilder) QueryRows() (RowsScanner, error)
 QueryRows executes a query that returns multiple rows and returns a RowsScanner for them. This method provides an iterator\-style interface for processing multiple rows returned by a query, allowing for efficient traversal of large result sets.
 
 <a name="QueryBuilder.Raw"></a>
-### func \(\*QueryBuilder\) [Raw](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L282>)
+### func \(\*QueryBuilder\) [Raw](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L282>)
 
 ```go
 func (qb *QueryBuilder) Raw(sql string, values ...interface{}) *QueryBuilder
@@ -1990,7 +1990,7 @@ qb.Raw("SELECT * FROM users WHERE created_at > ?", time.Now().AddDate(0, -1, 0))
 ```
 
 <a name="QueryBuilder.Returning"></a>
-### func \(\*QueryBuilder\) [Returning](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L684>)
+### func \(\*QueryBuilder\) [Returning](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L684>)
 
 ```go
 func (qb *QueryBuilder) Returning(columns ...string) *QueryBuilder
@@ -2012,7 +2012,7 @@ qb.Where("status = ?", "pending").Returning("*").Updates(map[string]interface{}{
 ```
 
 <a name="QueryBuilder.RightJoin"></a>
-### func \(\*QueryBuilder\) [RightJoin](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L164>)
+### func \(\*QueryBuilder\) [RightJoin](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L164>)
 
 ```go
 func (qb *QueryBuilder) RightJoin(query string, args ...interface{}) *QueryBuilder
@@ -2034,7 +2034,7 @@ qb.RightJoin("orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Scan"></a>
-### func \(\*QueryBuilder\) [Scan](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L315>)
+### func \(\*QueryBuilder\) [Scan](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L315>)
 
 ```go
 func (qb *QueryBuilder) Scan(dest interface{}) error
@@ -2056,7 +2056,7 @@ err := qb.Raw("SELECT COUNT(*) as count FROM users").Scan(&result)
 ```
 
 <a name="QueryBuilder.ScanRow"></a>
-### func \(\*QueryBuilder\) [ScanRow](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/row_scanner.go#L53>)
+### func \(\*QueryBuilder\) [ScanRow](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/row_scanner.go#L53>)
 
 ```go
 func (qb *QueryBuilder) ScanRow(dest interface{}) error
@@ -2065,7 +2065,7 @@ func (qb *QueryBuilder) ScanRow(dest interface{}) error
 ScanRow is a convenience method to scan a single row directly into a struct. This is a higher\-level alternative to QueryRow that automatically maps column values to struct fields based on naming conventions or field tags. It's useful when you need to map a row to a predefined data structure.
 
 <a name="QueryBuilder.Scopes"></a>
-### func \(\*QueryBuilder\) [Scopes](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L537>)
+### func \(\*QueryBuilder\) [Scopes](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L537>)
 
 ```go
 func (qb *QueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) *QueryBuilder
@@ -2096,7 +2096,7 @@ qb.Scopes(ActiveUsers).Count(&count)
 ```
 
 <a name="QueryBuilder.Select"></a>
-### func \(\*QueryBuilder\) [Select](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L60>)
+### func \(\*QueryBuilder\) [Select](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L60>)
 
 ```go
 func (qb *QueryBuilder) Select(query interface{}, args ...interface{}) *QueryBuilder
@@ -2119,7 +2119,7 @@ qb.Select("COUNT(*) as user_count")
 ```
 
 <a name="QueryBuilder.Table"></a>
-### func \(\*QueryBuilder\) [Table](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L495>)
+### func \(\*QueryBuilder\) [Table](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L495>)
 
 ```go
 func (qb *QueryBuilder) Table(name string) *QueryBuilder
@@ -2142,7 +2142,7 @@ qb.Table("user_stats").Select("department, COUNT(*) as count").Group("department
 ```
 
 <a name="QueryBuilder.Unscoped"></a>
-### func \(\*QueryBuilder\) [Unscoped](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L511>)
+### func \(\*QueryBuilder\) [Unscoped](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L511>)
 
 ```go
 func (qb *QueryBuilder) Unscoped() *QueryBuilder
@@ -2161,7 +2161,7 @@ qb.Unscoped().Count(&count) // Counts all records including soft-deleted
 ```
 
 <a name="QueryBuilder.Updates"></a>
-### func \(\*QueryBuilder\) [Updates](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L405>)
+### func \(\*QueryBuilder\) [Updates](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L405>)
 
 ```go
 func (qb *QueryBuilder) Updates(values interface{}) (int64, error)
@@ -2189,7 +2189,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Where"></a>
-### func \(\*QueryBuilder\) [Where](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/query_builder.go#L78>)
+### func \(\*QueryBuilder\) [Where](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/query_builder.go#L78>)
 
 ```go
 func (qb *QueryBuilder) Where(query interface{}, args ...interface{}) *QueryBuilder
@@ -2212,7 +2212,7 @@ qb.Where("status = ?", "active")
 ```
 
 <a name="RowScanner"></a>
-## type [RowScanner](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/row_scanner.go#L10-L14>)
+## type [RowScanner](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/row_scanner.go#L10-L14>)
 
 RowScanner provides an interface for scanning a single row of data. It abstracts the process of parsing column values into Go variables, allowing for efficient handling of individual rows returned from a query.
 
@@ -2225,7 +2225,7 @@ type RowScanner interface {
 ```
 
 <a name="RowsScanner"></a>
-## type [RowsScanner](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/postgres/row_scanner.go#L19-L31>)
+## type [RowsScanner](<https://github.com/Aleph-Alpha/std/blob/main/pkg/postgres/row_scanner.go#L19-L31>)
 
 RowsScanner provides an interface for iterating through rows of data returned by a query. It extends RowScanner functionality with methods for navigation and error handling, allowing for efficient processing of result sets with multiple rows.
 

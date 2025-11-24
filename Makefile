@@ -19,7 +19,7 @@ docs:
 		echo "Processing $$pkgname..."; \
 		gomarkdoc ./$$pkg \
 			--output "docs/pkg/$$pkgname.md" \
-			--repository.url "https://github.com/Aleph-Alpha/data-go-packages" \
+			--repository.url "https://github.com/Aleph-Alpha/std" \
 			--format github; \
 	done; \
 	echo "Updating root README.md with package links..."; \

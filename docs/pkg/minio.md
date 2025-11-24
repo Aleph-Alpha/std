@@ -3,7 +3,7 @@
 # minio
 
 ```go
-import "github.com/Aleph-Alpha/data-go-packages/pkg/minio"
+import "github.com/Aleph-Alpha/std/pkg/minio"
 ```
 
 Package minio provides functionality for interacting with MinIO/S3\-compatible object storage.
@@ -23,8 +23,8 @@ Basic Usage:
 
 ```
 import (
-		"github.com/Aleph-Alpha/data-go-packages/pkg/minio"
-		"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+		"github.com/Aleph-Alpha/std/pkg/minio"
+		"github.com/Aleph-Alpha/std/pkg/logger"
 	)
 
 	// Create a logger (optional)
@@ -498,7 +498,7 @@ var FXModule = fx.Module("minio",
 ```
 
 <a name="RegisterLifecycle"></a>
-## func [RegisterLifecycle](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/fx_module.go#L65>)
+## func [RegisterLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/fx_module.go#L65>)
 
 ```go
 func RegisterLifecycle(params MinioLifeCycleParams)
@@ -517,7 +517,7 @@ The function registers two background goroutines: 1. A connection monitor that c
 On application shutdown, it ensures these goroutines are properly terminated and waits for their completion before allowing the application to exit.
 
 <a name="AMQPNotification"></a>
-## type [AMQPNotification](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L189-L222>)
+## type [AMQPNotification](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L189-L222>)
 
 AMQPNotification defines an AMQP notification target. AMQP notifications can be used with systems like RabbitMQ.
 
@@ -559,7 +559,7 @@ type AMQPNotification struct {
 ```
 
 <a name="BaseNotification"></a>
-## type [BaseNotification](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L157-L172>)
+## type [BaseNotification](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L157-L172>)
 
 BaseNotification contains common properties for all notification types. This is embedded in specific notification target types.
 
@@ -583,7 +583,7 @@ type BaseNotification struct {
 ```
 
 <a name="BufferPool"></a>
-## type [BufferPool](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L214-L229>)
+## type [BufferPool](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L214-L229>)
 
 BufferPool implements an advanced pool of bytes.Buffers with size limits and monitoring. It prevents memory leaks by limiting buffer sizes and pool capacity.
 
@@ -594,7 +594,7 @@ type BufferPool struct {
 ```
 
 <a name="NewBufferPool"></a>
-### func [NewBufferPool](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L236>)
+### func [NewBufferPool](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L236>)
 
 ```go
 func NewBufferPool() *BufferPool
@@ -605,7 +605,7 @@ NewBufferPool creates a new BufferPool instance with default configuration. The 
 Returns a configured BufferPool ready for use.
 
 <a name="NewBufferPoolWithConfig"></a>
-### func [NewBufferPoolWithConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L247>)
+### func [NewBufferPoolWithConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L247>)
 
 ```go
 func NewBufferPoolWithConfig(config BufferPoolConfig) *BufferPool
@@ -620,7 +620,7 @@ Parameters:
 Returns a configured BufferPool ready for use.
 
 <a name="BufferPool.Cleanup"></a>
-### func \(\*BufferPool\) [Cleanup](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L355>)
+### func \(\*BufferPool\) [Cleanup](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L355>)
 
 ```go
 func (bp *BufferPool) Cleanup()
@@ -629,7 +629,7 @@ func (bp *BufferPool) Cleanup()
 Cleanup forces cleanup of the buffer pool, releasing all buffers. This is useful during shutdown or when memory pressure is high.
 
 <a name="BufferPool.Get"></a>
-### func \(\*BufferPool\) [Get](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L268>)
+### func \(\*BufferPool\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L268>)
 
 ```go
 func (bp *BufferPool) Get() *bytes.Buffer
@@ -640,7 +640,7 @@ Get returns a buffer from the pool. The returned buffer may be newly allocated o
 Returns a \*bytes.Buffer that should be returned to the pool when no longer needed.
 
 <a name="BufferPool.GetStats"></a>
-### func \(\*BufferPool\) [GetStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L328>)
+### func \(\*BufferPool\) [GetStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L328>)
 
 ```go
 func (bp *BufferPool) GetStats() BufferPoolStats
@@ -649,7 +649,7 @@ func (bp *BufferPool) GetStats() BufferPoolStats
 GetStats returns current buffer pool statistics for monitoring. This is useful for understanding memory usage patterns and pool effectiveness.
 
 <a name="BufferPool.Put"></a>
-### func \(\*BufferPool\) [Put](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L281>)
+### func \(\*BufferPool\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L281>)
 
 ```go
 func (bp *BufferPool) Put(b *bytes.Buffer)
@@ -662,7 +662,7 @@ Parameters:
 - b: The buffer to return to the pool
 
 <a name="BufferPoolConfig"></a>
-## type [BufferPoolConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L194-L201>)
+## type [BufferPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L194-L201>)
 
 BufferPoolConfig contains configuration for the buffer pool
 
@@ -678,7 +678,7 @@ type BufferPoolConfig struct {
 ```
 
 <a name="DefaultBufferPoolConfig"></a>
-### func [DefaultBufferPoolConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L204>)
+### func [DefaultBufferPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L204>)
 
 ```go
 func DefaultBufferPoolConfig() BufferPoolConfig
@@ -687,7 +687,7 @@ func DefaultBufferPoolConfig() BufferPoolConfig
 DefaultBufferPoolConfig returns the default buffer pool configuration
 
 <a name="BufferPoolStats"></a>
-## type [BufferPoolStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L309-L324>)
+## type [BufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L309-L324>)
 
 Stats returns statistics about buffer pool usage for monitoring and debugging.
 
@@ -711,7 +711,7 @@ type BufferPoolStats struct {
 ```
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L40-L55>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L40-L55>)
 
 Config defines the top\-level configuration for MinIO. This structure contains all configuration options for the MinIO client, organized into logical sections for different aspects of functionality.
 
@@ -735,7 +735,7 @@ type Config struct {
 ```
 
 <a name="ConnectionConfig"></a>
-## type [ConnectionConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L59-L80>)
+## type [ConnectionConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L59-L80>)
 
 ConnectionConfig contains MinIO server connection details. These parameters are required to establish a connection to a MinIO server.
 
@@ -765,7 +765,7 @@ type ConnectionConfig struct {
 ```
 
 <a name="ConnectionPoolConfig"></a>
-## type [ConnectionPoolConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L375-L384>)
+## type [ConnectionPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L375-L384>)
 
 ConnectionPoolConfig contains configuration for connection management
 
@@ -783,7 +783,7 @@ type ConnectionPoolConfig struct {
 ```
 
 <a name="DefaultConnectionPoolConfig"></a>
-### func [DefaultConnectionPoolConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L387>)
+### func [DefaultConnectionPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L387>)
 
 ```go
 func DefaultConnectionPoolConfig() ConnectionPoolConfig
@@ -792,7 +792,7 @@ func DefaultConnectionPoolConfig() ConnectionPoolConfig
 DefaultConnectionPoolConfig returns default connection pool configuration
 
 <a name="DownloadConfig"></a>
-## type [DownloadConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L104-L115>)
+## type [DownloadConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L104-L115>)
 
 DownloadConfig defines parameters that control download behavior. These settings optimize memory usage when downloading objects of different sizes.
 
@@ -812,7 +812,7 @@ type DownloadConfig struct {
 ```
 
 <a name="ErrorCategory"></a>
-## type [ErrorCategory](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/errors.go#L549>)
+## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/errors.go#L549>)
 
 ErrorCategory represents different categories of MinIO errors
 
@@ -843,7 +843,7 @@ const (
 ```
 
 <a name="KafkaNotification"></a>
-## type [KafkaNotification](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L242-L254>)
+## type [KafkaNotification](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L242-L254>)
 
 KafkaNotification defines a Kafka notification target. Kafka notifications publish events to a Kafka topic.
 
@@ -864,7 +864,7 @@ type KafkaNotification struct {
 ```
 
 <a name="KafkaSASLAuth"></a>
-## type [KafkaSASLAuth](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L258-L267>)
+## type [KafkaSASLAuth](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L258-L267>)
 
 KafkaSASLAuth contains Kafka SASL authentication details. SASL is used for authenticating with Kafka brokers.
 
@@ -882,7 +882,7 @@ type KafkaSASLAuth struct {
 ```
 
 <a name="LoggerAdapter"></a>
-## type [LoggerAdapter](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L36-L44>)
+## type [LoggerAdapter](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L36-L44>)
 
 LoggerAdapter adapts the logger package's Logger to implement MinioLogger interface. This allows seamless integration with the structured logger from the logger package.
 
@@ -893,7 +893,7 @@ type LoggerAdapter struct {
 ```
 
 <a name="LoggerAdapter.Debug"></a>
-### func \(\*LoggerAdapter\) [Debug](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L59>)
+### func \(\*LoggerAdapter\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L59>)
 
 ```go
 func (la *LoggerAdapter) Debug(msg string, err error, fields ...map[string]any)
@@ -902,7 +902,7 @@ func (la *LoggerAdapter) Debug(msg string, err error, fields ...map[string]any)
 Debug implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Error"></a>
-### func \(\*LoggerAdapter\) [Error](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L77>)
+### func \(\*LoggerAdapter\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L77>)
 
 ```go
 func (la *LoggerAdapter) Error(msg string, err error, fields ...map[string]any)
@@ -911,7 +911,7 @@ func (la *LoggerAdapter) Error(msg string, err error, fields ...map[string]any)
 Error implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Fatal"></a>
-### func \(\*LoggerAdapter\) [Fatal](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L83>)
+### func \(\*LoggerAdapter\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L83>)
 
 ```go
 func (la *LoggerAdapter) Fatal(msg string, err error, fields ...map[string]any)
@@ -920,7 +920,7 @@ func (la *LoggerAdapter) Fatal(msg string, err error, fields ...map[string]any)
 Fatal implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Info"></a>
-### func \(\*LoggerAdapter\) [Info](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L65>)
+### func \(\*LoggerAdapter\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L65>)
 
 ```go
 func (la *LoggerAdapter) Info(msg string, err error, fields ...map[string]any)
@@ -929,7 +929,7 @@ func (la *LoggerAdapter) Info(msg string, err error, fields ...map[string]any)
 Info implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="LoggerAdapter.Warn"></a>
-### func \(\*LoggerAdapter\) [Warn](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L71>)
+### func \(\*LoggerAdapter\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L71>)
 
 ```go
 func (la *LoggerAdapter) Warn(msg string, err error, fields ...map[string]any)
@@ -938,7 +938,7 @@ func (la *LoggerAdapter) Warn(msg string, err error, fields ...map[string]any)
 Warn implements MinioLogger interface by delegating to the wrapped logger
 
 <a name="MQTTNotification"></a>
-## type [MQTTNotification](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L271-L295>)
+## type [MQTTNotification](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L271-L295>)
 
 MQTTNotification defines an MQTT notification target. MQTT notifications publish events to an MQTT broker.
 
@@ -971,7 +971,7 @@ type MQTTNotification struct {
 ```
 
 <a name="Minio"></a>
-## type [Minio](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L161-L191>)
+## type [Minio](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L161-L191>)
 
 Minio represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and thread\-safety.
 
@@ -987,7 +987,7 @@ type Minio struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L659>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L659>)
 
 ```go
 func NewClient(config Config, logger MinioLogger) (*Minio, error)
@@ -1019,7 +1019,7 @@ if err != nil {
 ```
 
 <a name="NewMinioClientWithDI"></a>
-### func [NewMinioClientWithDI](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/fx_module.go#L39>)
+### func [NewMinioClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/fx_module.go#L39>)
 
 ```go
 func NewMinioClientWithDI(params MinioParams) (*Minio, error)
@@ -1028,7 +1028,7 @@ func NewMinioClientWithDI(params MinioParams) (*Minio, error)
 
 
 <a name="Minio.AbortMultipartUpload"></a>
-### func \(\*Minio\) [AbortMultipartUpload](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L411>)
+### func \(\*Minio\) [AbortMultipartUpload](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L411>)
 
 ```go
 func (m *Minio) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error
@@ -1051,7 +1051,7 @@ err := minioClient.AbortMultipartUpload(ctx, "uploads/myfile.zip", uploadID)
 ```
 
 <a name="Minio.CleanupIncompleteUploads"></a>
-### func \(\*Minio\) [CleanupIncompleteUploads](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L535>)
+### func \(\*Minio\) [CleanupIncompleteUploads](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L535>)
 
 ```go
 func (m *Minio) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error
@@ -1075,7 +1075,7 @@ err := minioClient.CleanupIncompleteUploads(ctx, "uploads/", 24*time.Hour)
 ```
 
 <a name="Minio.CleanupResources"></a>
-### func \(\*Minio\) [CleanupResources](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L1066>)
+### func \(\*Minio\) [CleanupResources](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L1066>)
 
 ```go
 func (m *Minio) CleanupResources()
@@ -1091,7 +1091,7 @@ defer minioClient.CleanupResources()
 ```
 
 <a name="Minio.CompleteMultipartUpload"></a>
-### func \(\*Minio\) [CompleteMultipartUpload](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L441>)
+### func \(\*Minio\) [CompleteMultipartUpload](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L441>)
 
 ```go
 func (m *Minio) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error
@@ -1122,7 +1122,7 @@ err := minioClient.CompleteMultipartUpload(
 ```
 
 <a name="Minio.Delete"></a>
-### func \(\*Minio\) [Delete](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/object_utils.go#L225>)
+### func \(\*Minio\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/object_utils.go#L225>)
 
 ```go
 func (m *Minio) Delete(ctx context.Context, objectKey string) error
@@ -1147,7 +1147,7 @@ if err == nil {
 ```
 
 <a name="Minio.GenerateMultipartPresignedGetURLs"></a>
-### func \(\*Minio\) [GenerateMultipartPresignedGetURLs](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_get_utils.go#L99-L104>)
+### func \(\*Minio\) [GenerateMultipartPresignedGetURLs](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_get_utils.go#L99-L104>)
 
 ```go
 func (m *Minio) GenerateMultipartPresignedGetURLs(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration) (MultipartPresignedGet, error)
@@ -1179,7 +1179,7 @@ download, err := minioClient.GenerateMultipartPresignedGetURLs(
 ```
 
 <a name="Minio.GenerateMultipartUploadURLs"></a>
-### func \(\*Minio\) [GenerateMultipartUploadURLs](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L251-L257>)
+### func \(\*Minio\) [GenerateMultipartUploadURLs](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L251-L257>)
 
 ```go
 func (m *Minio) GenerateMultipartUploadURLs(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration) (MultipartUpload, error)
@@ -1213,7 +1213,7 @@ upload, err := minioClient.GenerateMultipartUploadURLs(
 ```
 
 <a name="Minio.Get"></a>
-### func \(\*Minio\) [Get](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/object_utils.go#L81>)
+### func \(\*Minio\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/object_utils.go#L81>)
 
 ```go
 func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error)
@@ -1244,7 +1244,7 @@ if err == nil {
 ```
 
 <a name="Minio.GetBufferPoolStats"></a>
-### func \(\*Minio\) [GetBufferPoolStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L1037>)
+### func \(\*Minio\) [GetBufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L1037>)
 
 ```go
 func (m *Minio) GetBufferPoolStats() BufferPoolStats
@@ -1265,7 +1265,7 @@ fmt.Printf("Buffers in pool: %d\n", stats.CurrentPoolSize)
 ```
 
 <a name="Minio.GetErrorCategory"></a>
-### func \(\*Minio\) [GetErrorCategory](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/errors.go#L570>)
+### func \(\*Minio\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/errors.go#L570>)
 
 ```go
 func (m *Minio) GetErrorCategory(err error) ErrorCategory
@@ -1274,7 +1274,7 @@ func (m *Minio) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="Minio.GetResourceStats"></a>
-### func \(\*Minio\) [GetResourceStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L1019>)
+### func \(\*Minio\) [GetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L1019>)
 
 ```go
 func (m *Minio) GetResourceStats() ResourceStats
@@ -1296,7 +1296,7 @@ fmt.Printf("Average request duration: %v\n", stats.AverageRequestDuration)
 ```
 
 <a name="Minio.GracefulShutdown"></a>
-### func \(\*Minio\) [GracefulShutdown](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/fx_module.go#L133>)
+### func \(\*Minio\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/fx_module.go#L133>)
 
 ```go
 func (m *Minio) GracefulShutdown()
@@ -1325,7 +1325,7 @@ func processFiles() {
 ```
 
 <a name="Minio.IsPermanentError"></a>
-### func \(\*Minio\) [IsPermanentError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/errors.go#L628>)
+### func \(\*Minio\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/errors.go#L628>)
 
 ```go
 func (m *Minio) IsPermanentError(err error) bool
@@ -1334,7 +1334,7 @@ func (m *Minio) IsPermanentError(err error) bool
 IsPermanentError returns true if the error is permanent and should not be retried
 
 <a name="Minio.IsRetryableError"></a>
-### func \(\*Minio\) [IsRetryableError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/errors.go#L606>)
+### func \(\*Minio\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/errors.go#L606>)
 
 ```go
 func (m *Minio) IsRetryableError(err error) bool
@@ -1343,7 +1343,7 @@ func (m *Minio) IsRetryableError(err error) bool
 IsRetryableError returns true if the error is retryable
 
 <a name="Minio.IsTemporaryError"></a>
-### func \(\*Minio\) [IsTemporaryError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/errors.go#L623>)
+### func \(\*Minio\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/errors.go#L623>)
 
 ```go
 func (m *Minio) IsTemporaryError(err error) bool
@@ -1352,7 +1352,7 @@ func (m *Minio) IsTemporaryError(err error) bool
 IsTemporaryError returns true if the error is temporary
 
 <a name="Minio.ListIncompleteUploads"></a>
-### func \(\*Minio\) [ListIncompleteUploads](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L505>)
+### func \(\*Minio\) [ListIncompleteUploads](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L505>)
 
 ```go
 func (m *Minio) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error)
@@ -1382,7 +1382,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedGet"></a>
-### func \(\*Minio\) [PreSignedGet](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_get_utils.go#L259>)
+### func \(\*Minio\) [PreSignedGet](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_get_utils.go#L259>)
 
 ```go
 func (m *Minio) PreSignedGet(ctx context.Context, objectKey string) (string, error)
@@ -1410,7 +1410,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedHeadObject"></a>
-### func \(\*Minio\) [PreSignedHeadObject](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L574>)
+### func \(\*Minio\) [PreSignedHeadObject](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L574>)
 
 ```go
 func (m *Minio) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error)
@@ -1438,7 +1438,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedPut"></a>
-### func \(\*Minio\) [PreSignedPut](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L604>)
+### func \(\*Minio\) [PreSignedPut](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L604>)
 
 ```go
 func (m *Minio) PreSignedPut(ctx context.Context, objectKey string) (string, error)
@@ -1466,7 +1466,7 @@ if err == nil {
 ```
 
 <a name="Minio.Put"></a>
-### func \(\*Minio\) [Put](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/object_utils.go#L37>)
+### func \(\*Minio\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/object_utils.go#L37>)
 
 ```go
 func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error)
@@ -1500,7 +1500,7 @@ if err == nil {
 ```
 
 <a name="Minio.ResetResourceStats"></a>
-### func \(\*Minio\) [ResetResourceStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L1053>)
+### func \(\*Minio\) [ResetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L1053>)
 
 ```go
 func (m *Minio) ResetResourceStats()
@@ -1518,7 +1518,7 @@ stats := minioClient.GetResourceStats()
 ```
 
 <a name="Minio.StreamGet"></a>
-### func \(\*Minio\) [StreamGet](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/object_utils.go#L144>)
+### func \(\*Minio\) [StreamGet](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/object_utils.go#L144>)
 
 ```go
 func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error)
@@ -1527,7 +1527,7 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 StreamGet downloads a file from MinIO and sends chunks through a channel
 
 <a name="Minio.TranslateError"></a>
-### func \(\*Minio\) [TranslateError](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/errors.go#L174>)
+### func \(\*Minio\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/errors.go#L174>)
 
 ```go
 func (m *Minio) TranslateError(err error) error
@@ -1538,7 +1538,7 @@ TranslateError converts MinIO\-specific errors into standardized application err
 It maps common MinIO errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="MinioLifeCycleParams"></a>
-## type [MinioLifeCycleParams](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/fx_module.go#L43-L48>)
+## type [MinioLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/fx_module.go#L43-L48>)
 
 
 
@@ -1552,7 +1552,7 @@ type MinioLifeCycleParams struct {
 ```
 
 <a name="MinioLogger"></a>
-## type [MinioLogger](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L21-L32>)
+## type [MinioLogger](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L21-L32>)
 
 MinioLogger defines the logging interface used by MinIO client. This interface allows for flexible logger injection while maintaining compatibility with both structured loggers \(like the logger package\) and simple loggers.
 
@@ -1572,7 +1572,7 @@ type MinioLogger interface {
 ```
 
 <a name="NewLoggerAdapter"></a>
-### func [NewLoggerAdapter](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L48-L54>)
+### func [NewLoggerAdapter](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L48-L54>)
 
 ```go
 func NewLoggerAdapter(logger interface {
@@ -1587,7 +1587,7 @@ func NewLoggerAdapter(logger interface {
 NewLoggerAdapter creates a new LoggerAdapter that wraps the logger package's Logger. This function provides a bridge between the logger package and MinIO's logging interface.
 
 <a name="MinioParams"></a>
-## type [MinioParams](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/fx_module.go#L31-L37>)
+## type [MinioParams](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/fx_module.go#L31-L37>)
 
 
 
@@ -1602,7 +1602,7 @@ type MinioParams struct {
 ```
 
 <a name="MockLogger"></a>
-## type [MockLogger](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L19-L23>)
+## type [MockLogger](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L19-L23>)
 
 MockLogger is a mock of Logger interface.
 
@@ -1613,7 +1613,7 @@ type MockLogger struct {
 ```
 
 <a name="NewMockLogger"></a>
-### func [NewMockLogger](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L31>)
+### func [NewMockLogger](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L31>)
 
 ```go
 func NewMockLogger(ctrl *gomock.Controller) *MockLogger
@@ -1622,7 +1622,7 @@ func NewMockLogger(ctrl *gomock.Controller) *MockLogger
 NewMockLogger creates a new mock instance.
 
 <a name="MockLogger.Debug"></a>
-### func \(\*MockLogger\) [Debug](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L43>)
+### func \(\*MockLogger\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L43>)
 
 ```go
 func (m *MockLogger) Debug(msg string, err error, fields ...map[string]any)
@@ -1631,7 +1631,7 @@ func (m *MockLogger) Debug(msg string, err error, fields ...map[string]any)
 Debug mocks base method.
 
 <a name="MockLogger.EXPECT"></a>
-### func \(\*MockLogger\) [EXPECT](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L38>)
+### func \(\*MockLogger\) [EXPECT](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L38>)
 
 ```go
 func (m *MockLogger) EXPECT() *MockLoggerMockRecorder
@@ -1640,7 +1640,7 @@ func (m *MockLogger) EXPECT() *MockLoggerMockRecorder
 EXPECT returns an object that allows the caller to indicate expected use.
 
 <a name="MockLogger.Error"></a>
-### func \(\*MockLogger\) [Error](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L60>)
+### func \(\*MockLogger\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L60>)
 
 ```go
 func (m *MockLogger) Error(msg string, err error, fields ...map[string]any)
@@ -1649,7 +1649,7 @@ func (m *MockLogger) Error(msg string, err error, fields ...map[string]any)
 Error mocks base method.
 
 <a name="MockLogger.Fatal"></a>
-### func \(\*MockLogger\) [Fatal](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L77>)
+### func \(\*MockLogger\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L77>)
 
 ```go
 func (m *MockLogger) Fatal(msg string, err error, fields ...map[string]any)
@@ -1658,7 +1658,7 @@ func (m *MockLogger) Fatal(msg string, err error, fields ...map[string]any)
 Fatal mocks base method.
 
 <a name="MockLogger.Info"></a>
-### func \(\*MockLogger\) [Info](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L94>)
+### func \(\*MockLogger\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L94>)
 
 ```go
 func (m *MockLogger) Info(msg string, err error, fields ...map[string]any)
@@ -1667,7 +1667,7 @@ func (m *MockLogger) Info(msg string, err error, fields ...map[string]any)
 Info mocks base method.
 
 <a name="MockLogger.Warn"></a>
-### func \(\*MockLogger\) [Warn](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L111>)
+### func \(\*MockLogger\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L111>)
 
 ```go
 func (m *MockLogger) Warn(msg string, err error, fields ...map[string]any)
@@ -1676,7 +1676,7 @@ func (m *MockLogger) Warn(msg string, err error, fields ...map[string]any)
 Warn mocks base method.
 
 <a name="MockLoggerMockRecorder"></a>
-## type [MockLoggerMockRecorder](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L26-L28>)
+## type [MockLoggerMockRecorder](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L26-L28>)
 
 MockLoggerMockRecorder is the mock recorder for MockLogger.
 
@@ -1687,7 +1687,7 @@ type MockLoggerMockRecorder struct {
 ```
 
 <a name="MockLoggerMockRecorder.Debug"></a>
-### func \(\*MockLoggerMockRecorder\) [Debug](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L53>)
+### func \(\*MockLoggerMockRecorder\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L53>)
 
 ```go
 func (mr *MockLoggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Call
@@ -1696,7 +1696,7 @@ func (mr *MockLoggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Cal
 Debug indicates an expected call of Debug.
 
 <a name="MockLoggerMockRecorder.Error"></a>
-### func \(\*MockLoggerMockRecorder\) [Error](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L70>)
+### func \(\*MockLoggerMockRecorder\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L70>)
 
 ```go
 func (mr *MockLoggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Call
@@ -1705,7 +1705,7 @@ func (mr *MockLoggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Cal
 Error indicates an expected call of Error.
 
 <a name="MockLoggerMockRecorder.Fatal"></a>
-### func \(\*MockLoggerMockRecorder\) [Fatal](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L87>)
+### func \(\*MockLoggerMockRecorder\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L87>)
 
 ```go
 func (mr *MockLoggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Call
@@ -1714,7 +1714,7 @@ func (mr *MockLoggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Cal
 Fatal indicates an expected call of Fatal.
 
 <a name="MockLoggerMockRecorder.Info"></a>
-### func \(\*MockLoggerMockRecorder\) [Info](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L104>)
+### func \(\*MockLoggerMockRecorder\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L104>)
 
 ```go
 func (mr *MockLoggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
@@ -1723,7 +1723,7 @@ func (mr *MockLoggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
 Info indicates an expected call of Info.
 
 <a name="MockLoggerMockRecorder.Warn"></a>
-### func \(\*MockLoggerMockRecorder\) [Warn](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/mock_logger.go#L121>)
+### func \(\*MockLoggerMockRecorder\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/mock_logger.go#L121>)
 
 ```go
 func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
@@ -1732,7 +1732,7 @@ func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
 Warn indicates an expected call of Warn.
 
 <a name="MultipartPresignedGet"></a>
-## type [MultipartPresignedGet](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_get_utils.go#L37-L61>)
+## type [MultipartPresignedGet](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_get_utils.go#L37-L61>)
 
 MultipartPresignedGet is an interface for accessing multipart download info
 
@@ -1765,7 +1765,7 @@ type MultipartPresignedGet interface {
 ```
 
 <a name="MultipartPresignedGetInfo"></a>
-## type [MultipartPresignedGetInfo](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_get_utils.go#L13-L34>)
+## type [MultipartPresignedGetInfo](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_get_utils.go#L13-L34>)
 
 MultipartPresignedGetInfo contains information for downloading an object in parts
 
@@ -1795,7 +1795,7 @@ type MultipartPresignedGetInfo struct {
 ```
 
 <a name="MultipartUpload"></a>
-## type [MultipartUpload](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L50-L80>)
+## type [MultipartUpload](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L50-L80>)
 
 MultipartUpload represents a multipart upload session. This interface provides methods to access information about a multipart upload while hiding the internal implementation details.
 
@@ -1834,7 +1834,7 @@ type MultipartUpload interface {
 ```
 
 <a name="MultipartUploadInfo"></a>
-## type [MultipartUploadInfo](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/presigned_put_utils.go#L18-L45>)
+## type [MultipartUploadInfo](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/presigned_put_utils.go#L18-L45>)
 
 MultipartUploadInfo contains all information needed for a multipart upload. This structure holds all the details required for managing and completing a multipart upload, including upload identifiers, presigned URLs for each part, and sizing information.
 
@@ -1870,7 +1870,7 @@ type MultipartUploadInfo struct {
 ```
 
 <a name="NotificationConfig"></a>
-## type [NotificationConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L135-L153>)
+## type [NotificationConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L135-L153>)
 
 NotificationConfig defines the configuration for event notifications. MinIO can send notifications when events occur on buckets \(e.g., object created\).
 
@@ -1897,7 +1897,7 @@ type NotificationConfig struct {
 ```
 
 <a name="PresignedConfig"></a>
-## type [PresignedConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L119-L131>)
+## type [PresignedConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L119-L131>)
 
 PresignedConfig contains configuration options for presigned URLs. Presigned URLs allow temporary access to objects without requiring AWS credentials.
 
@@ -1918,7 +1918,7 @@ type PresignedConfig struct {
 ```
 
 <a name="RedisNotification"></a>
-## type [RedisNotification](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L226-L238>)
+## type [RedisNotification](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L226-L238>)
 
 RedisNotification defines a Redis notification target. Redis notifications publish events to a Redis pub/sub channel or list.
 
@@ -1939,7 +1939,7 @@ type RedisNotification struct {
 ```
 
 <a name="ResourceMonitor"></a>
-## type [ResourceMonitor](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L397-L428>)
+## type [ResourceMonitor](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L397-L428>)
 
 ResourceMonitor tracks resource usage, performance metrics, and connection health
 
@@ -1950,7 +1950,7 @@ type ResourceMonitor struct {
 ```
 
 <a name="NewResourceMonitor"></a>
-### func [NewResourceMonitor](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L431>)
+### func [NewResourceMonitor](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L431>)
 
 ```go
 func NewResourceMonitor(bufferPool *BufferPool) *ResourceMonitor
@@ -1959,7 +1959,7 @@ func NewResourceMonitor(bufferPool *BufferPool) *ResourceMonitor
 NewResourceMonitor creates a new resource monitor instance
 
 <a name="ResourceMonitor.GetStats"></a>
-### func \(\*ResourceMonitor\) [GetStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L546>)
+### func \(\*ResourceMonitor\) [GetStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L546>)
 
 ```go
 func (rm *ResourceMonitor) GetStats() ResourceStats
@@ -1968,7 +1968,7 @@ func (rm *ResourceMonitor) GetStats() ResourceStats
 GetStats returns comprehensive resource usage statistics
 
 <a name="ResourceMonitor.RecordConnectionAttempt"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionAttempt](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L442>)
+### func \(\*ResourceMonitor\) [RecordConnectionAttempt](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L442>)
 
 ```go
 func (rm *ResourceMonitor) RecordConnectionAttempt()
@@ -1977,7 +1977,7 @@ func (rm *ResourceMonitor) RecordConnectionAttempt()
 RecordConnectionAttempt records a connection attempt
 
 <a name="ResourceMonitor.RecordConnectionClosure"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionClosure](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L458>)
+### func \(\*ResourceMonitor\) [RecordConnectionClosure](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L458>)
 
 ```go
 func (rm *ResourceMonitor) RecordConnectionClosure()
@@ -1986,7 +1986,7 @@ func (rm *ResourceMonitor) RecordConnectionClosure()
 RecordConnectionClosure records a connection closure
 
 <a name="ResourceMonitor.RecordConnectionFailure"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionFailure](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L453>)
+### func \(\*ResourceMonitor\) [RecordConnectionFailure](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L453>)
 
 ```go
 func (rm *ResourceMonitor) RecordConnectionFailure()
@@ -1995,7 +1995,7 @@ func (rm *ResourceMonitor) RecordConnectionFailure()
 RecordConnectionFailure records a failed connection
 
 <a name="ResourceMonitor.RecordConnectionSuccess"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionSuccess](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L447>)
+### func \(\*ResourceMonitor\) [RecordConnectionSuccess](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L447>)
 
 ```go
 func (rm *ResourceMonitor) RecordConnectionSuccess()
@@ -2004,7 +2004,7 @@ func (rm *ResourceMonitor) RecordConnectionSuccess()
 RecordConnectionSuccess records a successful connection
 
 <a name="ResourceMonitor.RecordMemoryUsage"></a>
-### func \(\*ResourceMonitor\) [RecordMemoryUsage](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L495>)
+### func \(\*ResourceMonitor\) [RecordMemoryUsage](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L495>)
 
 ```go
 func (rm *ResourceMonitor) RecordMemoryUsage(bytes int64)
@@ -2013,7 +2013,7 @@ func (rm *ResourceMonitor) RecordMemoryUsage(bytes int64)
 RecordMemoryUsage records current memory usage
 
 <a name="ResourceMonitor.RecordRequest"></a>
-### func \(\*ResourceMonitor\) [RecordRequest](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L463>)
+### func \(\*ResourceMonitor\) [RecordRequest](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L463>)
 
 ```go
 func (rm *ResourceMonitor) RecordRequest() func(success bool)
@@ -2022,7 +2022,7 @@ func (rm *ResourceMonitor) RecordRequest() func(success bool)
 RecordRequest records the start of a request and returns a function to record completion
 
 <a name="ResourceMonitor.ResetStats"></a>
-### func \(\*ResourceMonitor\) [ResetStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L612>)
+### func \(\*ResourceMonitor\) [ResetStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L612>)
 
 ```go
 func (rm *ResourceMonitor) ResetStats()
@@ -2031,7 +2031,7 @@ func (rm *ResourceMonitor) ResetStats()
 ResetStats resets all statistics counters
 
 <a name="ResourceStats"></a>
-## type [ResourceStats](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/setup.go#L509-L543>)
+## type [ResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/setup.go#L509-L543>)
 
 ResourceStats contains comprehensive resource usage statistics
 
@@ -2074,7 +2074,7 @@ type ResourceStats struct {
 ```
 
 <a name="UploadConfig"></a>
-## type [UploadConfig](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L84-L100>)
+## type [UploadConfig](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L84-L100>)
 
 UploadConfig defines the configuration for upload constraints. These parameters control how objects are uploaded, particularly for large objects.
 
@@ -2099,7 +2099,7 @@ type UploadConfig struct {
 ```
 
 <a name="WebhookNotification"></a>
-## type [WebhookNotification](<https://github.com/Aleph-Alpha/data-go-packages/blob/main/pkg/minio/configs.go#L176-L185>)
+## type [WebhookNotification](<https://github.com/Aleph-Alpha/std/blob/main/pkg/minio/configs.go#L176-L185>)
 
 WebhookNotification defines a webhook notification target. Webhook notifications send HTTP POST requests to a specified endpoint.
 

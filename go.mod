@@ -1,4 +1,4 @@
-module github.com/Aleph-Alpha/data-go-packages
+module github.com/Aleph-Alpha/std
 
 go 1.24.2
 

@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+	"github.com/Aleph-Alpha/std/pkg/logger"
 )
 
 // FXModule defines the Fx module for the metrics package.

@@ -15,8 +15,8 @@
 //
 //	import (
 //		"context"
-//		"github.com/Aleph-Alpha/data-go-packages/pkg/tracer"
-//		"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+//		"github.com/Aleph-Alpha/std/pkg/tracer"
+//		"github.com/Aleph-Alpha/std/pkg/logger"
 //	)
 //
 //	// Create a logger

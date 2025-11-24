@@ -15,8 +15,8 @@
 // Basic Usage:
 //
 //	import (
-//		"github.com/Aleph-Alpha/data-go-packages/pkg/rabbit"
-//		"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+//		"github.com/Aleph-Alpha/std/pkg/rabbit"
+//		"github.com/Aleph-Alpha/std/pkg/logger"
 //		"context"
 //		"sync"
 //	)
@@ -75,7 +75,7 @@
 // Publisher Example (sending trace context):
 //
 //	import (
-//		"github.com/Aleph-Alpha/data-go-packages/pkg/tracer"
+//		"github.com/Aleph-Alpha/std/pkg/tracer"
 //		// other imports...
 //	)
 //

@@ -15,8 +15,8 @@
 // Basic Usage:
 //
 //	import (
-//		"github.com/Aleph-Alpha/data-go-packages/pkg/postgres"
-//		"github.com/Aleph-Alpha/data-go-packages/pkg/logger"
+//		"github.com/Aleph-Alpha/std/pkg/postgres"
+//		"github.com/Aleph-Alpha/std/pkg/logger"
 //	)
 //
 //	// Create a logger
