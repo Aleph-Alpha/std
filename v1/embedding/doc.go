@@ -67,7 +67,6 @@
 //
 //   - EMBEDDING_ENDPOINT
 //     Base URL of the inference service (no trailing path or slash).
-//     Example: https://inference-api.product.pharia.com
 //
 //   - EMBEDDING_SERVICE_TOKEN
 //     Internal PHARIA service token for authentication.

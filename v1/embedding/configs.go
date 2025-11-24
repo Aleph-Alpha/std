@@ -8,9 +8,6 @@ import (
 
 // EMBEDDING_ENDPOINT → must be the root (no /v1/embeddings appended)
 //
-// Example:
-//    https://inference-api.product.pharia.com
-//
 // DO NOT include suffix like `/v1/embeddings` or `/semantic_embed`.
 // The provider appends paths automatically.
 
@@ -32,17 +29,10 @@ func NewConfig() *Config {
 
 	return &Config{
 		// Default should point to Aleph Alpha inference API
-		Endpoint:     getenvDefault("EMBEDDING_ENDPOINT", "https://inference-api.product.pharia.com"),
+		Endpoint:     os.Getenv("EMBEDDING_ENDPOINT"),
 		ServiceToken: os.Getenv("EMBEDDING_SERVICE_TOKEN"),
 		HTTPTimeoutS: timeout,
 	}
-}
-
-func getenvDefault(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
 }
 
 // Validate ensures required fields are present.
