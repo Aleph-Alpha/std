@@ -2,9 +2,10 @@ package postgres
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
-	"strings"
 )
 
 // Common database error types that can be used by consumers of this package.

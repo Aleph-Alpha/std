@@ -3,10 +3,11 @@ package minio
 import (
 	"context"
 	"fmt"
-	"github.com/minio/minio-go/v7"
 	"math"
 	"net/url"
 	"time"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // MultipartPresignedGetInfo contains information for downloading an object in parts

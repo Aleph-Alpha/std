@@ -434,9 +434,6 @@ func (r *Rabbit) translateNetworkError(netErr net.Error) error {
 	if netErr.Timeout() {
 		return ErrTimeout
 	}
-	if netErr.Temporary() {
-		return ErrNetworkError
-	}
 	return ErrNetworkError
 }
 

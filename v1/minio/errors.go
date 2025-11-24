@@ -2,9 +2,10 @@ package minio
 
 import (
 	"errors"
-	"github.com/minio/minio-go/v7"
 	"net/url"
 	"strings"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // Common object storage error types that can be used by consumers of this package.
