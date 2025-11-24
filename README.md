@@ -1,4 +1,13 @@
-# Prerequisites
+<div align="center">
+  <img src="logo.png" alt="Pharia Data Standard Library Logo" width="200"/>
+  <h1>Pharia Data Standard Library</h1>
+
+  [![Go Report Card](https://goreportcard.com/badge/github.com/Aleph-Alpha/std)](https://goreportcard.com/report/github.com/Aleph-Alpha/std)
+  [![GoDoc](https://godoc.org/github.com/Aleph-Alpha/std?status.svg)](https://godoc.org/github.com/Aleph-Alpha/std)
+  [![License](https://img.shields.io/github/license/Aleph-Alpha/std.svg)](https://github.com/Aleph-Alpha/std/blob/main/LICENSE)
+</div>
+
+Standard library packages for Go services at Pharia Data (Aleph Alpha). This repository provides common utilities and clients for services such as logging, metrics, database access, and message queues.
 
 ## Adding as a Dependency
 
@@ -8,91 +17,8 @@ To use this package in your Go project, add it as a dependency:
 go get github.com/Aleph-Alpha/std
 ```
 
-## Authentication Setup
-Since this is a private repository hosted on GitHub, you'll need to configure Go to authenticate properly. The repository has been moved from GitLab to GitHub under the Aleph-Alpha organization.
-
-### Prerequisites
-Ensure you have SSH access configured for GitHub and the Aleph-Alpha organization. Your Git should already be configured with:
-```bash
-git config --global url."git@github.com:Aleph-Alpha/".insteadOf "https://github.com/Aleph-Alpha/"
-```
-
-### Required Configuration
-Configure Go to treat Aleph-Alpha repositories as private by setting these environment variables:
-
-#### Option 1: Using Go's Built-in Configuration (Recommended)
-```bash
-go env -w GOPRIVATE="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
-go env -w GONOPROXY="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
-go env -w GONOSUMDB="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
-```
-
-#### Option 2: Environment Variables in Shell Profile
-Add these lines to your shell profile (`~/.zshrc` for zsh, `~/.bash_profile` or `~/.bashrc` for bash):
-
-```bash
-export GOPRIVATE="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
-export GONOPROXY="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
-export GONOSUMDB="gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
-```
-
-Then reload your shell configuration:
-```bash
-source ~/.zshrc  # or ~/.bash_profile
-```
-
-### What These Variables Do
-- **GOPRIVATE**: Tells Go these are private repositories that should bypass the module proxy
-- **GONOPROXY**: Prevents Go from using the public proxy (proxy.golang.org) for these repositories
-- **GONOSUMDB**: Prevents Go from trying to verify checksums using the public checksum database (sum.golang.org)
-
-### Verification
-After configuration, verify the setup works:
-
-```bash
-# Check environment variables are set
-echo "GOPRIVATE: $GOPRIVATE"
-echo "GONOPROXY: $GONOPROXY" 
-echo "GONOSUMDB: $GONOSUMDB"
-
-# Test module download
-go mod download github.com/Aleph-Alpha/std
-go mod tidy
-```
-
-
-## IDE Configuration
-If using an IDE like GoLand or VS Code, you may need additional configuration:
-
-### GoLand
-1. Go to **Settings/Preferences** (⌘,)
-2. Navigate to **Go** → **Go Modules**
-3. Ensure "Environment" includes the GOPRIVATE variables:
-
-```text
-GOPRIVATE=gitlab.aleph-alpha.de,github.com/Aleph-Alpha
-GONOPROXY=gitlab.aleph-alpha.de,github.com/Aleph-Alpha
-GONOSUMDB=gitlab.aleph-alpha.de,github.com/Aleph-Alpha
-```
-4. Navigate to **Tools** → **Terminal**
-5. Ensure "Shell path" uses your configured shell profile
-6. Click "Apply" and "OK"
-7. Restart GoLand
-
-### VS Code
-1. Ensure your integrated terminal loads your shell profile with the environment variables
-2. Alternatively, add the variables to your VS Code settings.json:
-```json
-{
- "go.toolsEnvVars": {
-   "GOPRIVATE": "gitlab.aleph-alpha.de,github.com/Aleph-Alpha",
-   "GONOPROXY": "gitlab.aleph-alpha.de,github.com/Aleph-Alpha",
-   "GONOSUMDB": "gitlab.aleph-alpha.de,github.com/Aleph-Alpha"
- }
-}
-```
-
 ## Importing Packages
+
 This module contains several packages that you can import into your project:
 
 ```go
@@ -139,7 +65,6 @@ If you need more control, you can run tests manually:
 ```bash
 DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLED=true go test -v ./...
 ```
-
 
 # Go Packages Documentation
 
