@@ -6,10 +6,9 @@ import (
 	"strconv"
 )
 
-// EMBEDDING_ENDPOINT → must be the root (no /v1/embeddings appended)
-//
-// DO NOT include suffix like `/v1/embeddings` or `/semantic_embed`.
-// The provider appends paths automatically.
+// EMBEDDING_ENDPOINT must point to the root of the OpenAI-compatible inference
+// service (no /v1/embeddings appended). The provider appends paths
+// automatically, so callers only need to supply the host base URL.
 
 type Config struct {
 	// Inference endpoint and auth

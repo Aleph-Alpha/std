@@ -29,14 +29,9 @@ func NewClient(cfg *Config) (*Client, error) {
 	return &Client{provider: p}, nil
 }
 
-// CreateEmbeddings executes a single embedding request.
-func (c *Client) CreateEmbeddings(ctx context.Context, texts []string, strategy EmbeddingStrategy) ([][]float64, error) {
-	return c.provider.CreateEmbeddings(ctx, texts, strategy)
-}
-
-// CreateBatchEmbeddings executes a batch embedding request.
-func (c *Client) CreateBatchEmbeddings(ctx context.Context, texts []string, strategy EmbeddingStrategy) ([][]float64, error) {
-	return c.provider.CreateBatchEmbeddings(ctx, texts, strategy)
+// Create executes an embedding request for one or more texts.
+func (c *Client) Create(ctx context.Context, model string, texts ...string) ([][]float64, error) {
+	return c.provider.Create(ctx, model, texts...)
 }
 
 // Close allows the client to release any internal resources used by the provider.

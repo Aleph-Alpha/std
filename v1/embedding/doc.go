@@ -13,49 +13,14 @@
 //
 // Once created, the client can generate embeddings via:
 //
-//	client.CreateEmbeddings(ctx, []string{"hello"}, strategy)
+//	client.Create(ctx, "model-name", "hello")
 //
 // or batch embeddings via:
 //
-//	client.CreateBatchEmbeddings(ctx, []string{"a", "b", "c"}, strategy)
+//	client.Create(ctx, "model-name", "a", "b", "c")
 //
-// All endpoint routing is automatically determined by the EmbeddingStrategy.
-//
-// # Strategy-Based Embeddings
-//
-// Embedding behavior is configured using EmbeddingStrategy. Each strategy type
-// maps to a specific model family and inference endpoint:
-//
-//   - StrategySemantic
-//     Uses the semantic embedding endpoint.
-//     Supports:
-//
-//   - representation: "symmetric" or "asymmetric"
-//
-//   - optional compress_to_size (integer dimensions)
-//
-//   - optional hybrid_index (e.g. "bm25")
-//
-//   - optional normalization
-//
-//   - StrategyInstruct
-//     Uses the instruct embedding endpoint.
-//     Requires an instruction:
-//     { query: "...", document: "..." }
-//     Batch requests are internally expanded into repeated single-item calls.
-//
-//   - StrategyVLLM
-//     Uses the OpenAI-compatible /v1/embeddings endpoint.
-//     Supports both single and batch embeddings without special handling.
-//
-// Example strategy:
-//
-//	strategy := embedding.EmbeddingStrategy{
-//	    Type:            embedding.StrategySemantic,
-//	    Model:           "luminous-base",
-//	    Representation:  pointerTo("symmetric"),
-//	    CompressToSize:  pointerTo(128),
-//	}
+// This package exclusively supports OpenAI-compatible embeddings via the
+// /v1/embeddings endpoint.
 //
 // # Configuration
 //
@@ -102,41 +67,15 @@
 //	    }),
 //	)
 //
-// # Design Notes
-//
-//   - Only a single provider implementation exists (inferenceProvider). It is
-//     unexported on purpose to keep all endpoint-level complexity internal.
-//
-//   - The Client exposes a stable, minimal API surface:
-//     CreateEmbeddings
-//     CreateBatchEmbeddings
-//     with all routing logic, JSON shapes, and backend rules handled internally.
-//
-//   - Representation values are strictly validated:
-//     "symmetric" or "asymmetric"
-//     with automatic fallback to "symmetric".
-//
-//   - compress_to_size is forwarded directly to the backend as an integer.
-//     No variant mapping (e.g., "variant128") is performed.
-//
-//   - Batch instruct embeddings are expanded into multiple sequential calls,
-//     matching the backend's behavior.
-//
 // # Summary
 //
 // The embedding package provides:
 //
-//   - A clean, stable API for all embedding types (semantic, instruct, vLLM).
-//   - Automatic routing based on strategy.
-//   - Consistent behavior across models and endpoints.
+//   - A clean, stable API for OpenAI-compatible embeddings.
 //   - A no-leak abstraction over the Aleph Alpha inference service.
 //
-// For most applications, only three operations are needed:
+// Usage:
 //
 //	client := embedding.NewClient(cfg)
-//	client.CreateEmbeddings(ctx, texts, strategy)
-//	client.CreateBatchEmbeddings(ctx, texts, strategy)
-//
-// Everything else—including endpoint selection, request formats,
-// authentication, batching behavior, and normalization—is handled internally.
+//	client.Create(ctx, "model-name", texts...)
 package embedding
