@@ -186,7 +186,7 @@ func (c *QdrantClient) GetCollection(ctx context.Context, name string) (*Collect
 	collection := &Collection{
 		Name:       name,
 		Status:     info.Status.String(),
-		Vectors:    derefUint64(info.VectorsCount),
+		Vectors:    derefUint64(info.IndexedVectorsCount),
 		Points:     derefUint64(info.PointsCount),
 		VectorSize: size,
 		Distance:   distance,
