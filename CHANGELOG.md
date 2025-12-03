@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Aleph-Alpha/std/compare/v0.2.0...v0.2.1) (2025-12-03)
+
+
+### Bug Fixes
+
+* **embedding:** update endpoint URL and error message in inference provider ([df29810](https://github.com/Aleph-Alpha/std/commit/df29810b63fdc77291f11e8a3ae6bc666b021ccf))
+
 ## [0.2.0](https://github.com/Aleph-Alpha/std/compare/v0.1.0...v0.2.0) (2025-12-02)
 
 
