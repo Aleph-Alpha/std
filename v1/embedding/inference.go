@@ -47,7 +47,7 @@ func (p *InferenceProvider) Create(ctx context.Context, model string, texts ...s
 		"input": texts,
 	}
 
-	url := fmt.Sprintf("%s/v1/embeddings", p.baseURL)
+	url := fmt.Sprintf("%s/embeddings", p.baseURL)
 
 	var parsed struct {
 		Data []struct {
@@ -60,7 +60,7 @@ func (p *InferenceProvider) Create(ctx context.Context, model string, texts ...s
 	}
 
 	if len(parsed.Data) == 0 {
-		return nil, fmt.Errorf("inference: v1/embeddings empty data")
+		return nil, fmt.Errorf("inference: embeddings empty data")
 	}
 
 	out := make([][]float64, len(parsed.Data))
