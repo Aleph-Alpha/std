@@ -240,13 +240,37 @@ func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error) {
 //	most similar stored embeddings.
 //
 // Logs the total count of hits for observability.
-func (c *QdrantClient) Search(ctx context.Context, vector []float32, topK int) ([]SearchResultInterface, error) {
+func (c *QdrantClient) Search(ctx context.Context, collectionName string, vector []float32, topK int, searchStoreID string) ([]SearchResultInterface, error) {
+	if collectionName == "" {
+		return nil, fmt.Errorf("collection name cannot be empty")
+	}
+
 	limit := uint64(topK)
 	req := &qdrant.QueryPoints{
-		CollectionName: c.cfg.Collection,
+		CollectionName: collectionName,
 		Query:          qdrant.NewQuery(vector...),
 		Limit:          &limit,
 		WithPayload:    qdrant.NewWithPayload(true),
+	}
+
+	//Filter for search_store_id
+	if searchStoreID != "" {
+		req.Filter = &qdrant.Filter{
+			Must: []*qdrant.Condition{
+				{
+					ConditionOneOf: &qdrant.Condition_Field{
+						Field: &qdrant.FieldCondition{
+							Key: "search_store_id",
+							Match: &qdrant.Match{
+								MatchValue: &qdrant.Match_Keyword{
+									Keyword: searchStoreID,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
 	}
 
 	resp, err := c.api.Query(ctx, req)
