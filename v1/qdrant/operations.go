@@ -231,6 +231,7 @@ func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error) {
 // Search performs a similarity search in the configured collection.
 //
 // Parameters:
+//   - collectionName — the collection to search in
 //   - vector — the query embedding to search against.
 //   - topK   — maximum number of nearest results to return.
 //
@@ -238,46 +239,147 @@ func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error) {
 //
 //	A slice of `SearchResultInterface` instances representing the
 //	most similar stored embeddings.
+// func (c *QdrantClient) Search(ctx context.Context, collectionName string, vector []float32, topK int) ([]SearchResultInterface, error) {
+// 	if err := validateSearchInput(collectionName, vector, topK); err != nil {
+// 		return nil, err
+// 	}
+
+// 	limit := uint64(topK)
+// 	req := &qdrant.QueryPoints{
+// 		CollectionName: collectionName,
+// 		Query:          qdrant.NewQuery(vector...),
+// 		Limit:          &limit,
+// 		WithPayload:    qdrant.NewWithPayload(true),
+// 	}
+
+// 	resp, err := c.api.Query(ctx, req)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("[Qdrant] search failed: %w", err)
+// 	}
+
+// 	results, err := c.parseSearchResults(resp)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	log.Printf("[Qdrant] Search returned %d results", len(results))
+// 	return results, nil
+// }
+
+// SearchWithFilter ──────────────────────────────────────────────────────────────
+// SearchWithFilter
+// ──────────────────────────────────────────────────────────────
 //
-// Logs the total count of hits for observability.
-func (c *QdrantClient) Search(ctx context.Context, collectionName string, vector []float32, topK int, searchStoreID string) ([]SearchResultInterface, error) {
-	if collectionName == "" {
-		return nil, fmt.Errorf("collection name cannot be empty")
+// SearchWithFilter performs a similarity search with required filters (AND logic).
+// Returns error if filters is nil or empty - use Search() for unfiltered searches.
+//
+// Parameters:
+//   - collectionName — the collection to search in
+//   - vector — the query embedding to search against
+//   - topK — maximum number of nearest results to return
+//   - filters — required key-value filters (all must match)
+//
+// Returns:
+//
+//	A slice of SearchResultInterface instances matching the filter criteria.
+// func (c *QdrantClient) SearchWithFilter(ctx context.Context, collectionName string, vector []float32, topK int, filters map[string]string) ([]SearchResultInterface, error) {
+// 	if err := validateSearchInput(collectionName, vector, topK); err != nil {
+// 		return nil, err
+// 	}
+
+// 	if len(filters) == 0 {
+// 		return nil, fmt.Errorf("filters cannot be empty, use Search() for unfiltered searches")
+// 	}
+
+// 	limit := uint64(topK)
+// 	req := &qdrant.QueryPoints{
+// 		CollectionName: collectionName,
+// 		Query:          qdrant.NewQuery(vector...),
+// 		Limit:          &limit,
+// 		WithPayload:    qdrant.NewWithPayload(true),
+// 		Filter:         buildFilter(filters),
+// 	}
+
+// 	resp, err := c.api.Query(ctx, req)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("[Qdrant] search failed: %w", err)
+// 	}
+
+// 	results, err := c.parseSearchResults(resp)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	log.Printf("[Qdrant] SearchWithFilter returned %d results", len(results))
+// 	return results, nil
+// }
+
+// SearchBatch ──────────────────────────────────────────────────────────────
+// SearchBatch
+// ──────────────────────────────────────────────────────────────
+//
+// SearchBatch performs multiple searches and returns results for each request.
+// Each request can optionally include filters.
+//
+// Parameters:
+//   - requests — variadic SearchRequest structs, each containing:
+//   - CollectionName: the collection to search in
+//   - Vector: the query embedding
+//   - TopK: maximum number of results per request
+//   - Filters: optional key-value filters (AND logic)
+//
+// Returns:
+//
+//	A slice of result slices — one []SearchResultInterface per request.
+//
+// Example:
+//
+//	results, err := client.SearchBatch(ctx,
+//	    SearchRequest{CollectionName: "docs", Vector: vec1, TopK: 10, Filters: map[string]string{"partition_id": "store-A"}},
+//	    SearchRequest{CollectionName: "docs", Vector: vec2, TopK: 5},
+//	)
+//	// results[0] = results for first request
+//	// results[1] = results for second request
+func (c *QdrantClient) Search(ctx context.Context, requests ...SearchRequest) ([][]SearchResultInterface, error) {
+	if len(requests) == 0 {
+		return nil, fmt.Errorf("at least one search request is required")
 	}
 
-	limit := uint64(topK)
-	req := &qdrant.QueryPoints{
-		CollectionName: collectionName,
-		Query:          qdrant.NewQuery(vector...),
-		Limit:          &limit,
-		WithPayload:    qdrant.NewWithPayload(true),
-	}
+	results := make([][]SearchResultInterface, 0, len(requests))
 
-	//Filter for search_store_id
-	if searchStoreID != "" {
-		req.Filter = &qdrant.Filter{
-			Must: []*qdrant.Condition{
-				{
-					ConditionOneOf: &qdrant.Condition_Field{
-						Field: &qdrant.FieldCondition{
-							Key: "search_store_id",
-							Match: &qdrant.Match{
-								MatchValue: &qdrant.Match_Keyword{
-									Keyword: searchStoreID,
-								},
-							},
-						},
-					},
-				},
-			},
+	for i, searchReq := range requests {
+		if err := validateSearchInput(searchReq.CollectionName, searchReq.Vector, searchReq.TopK); err != nil {
+			return nil, fmt.Errorf("request [%d]: %w", i, err)
 		}
+
+		limit := uint64(searchReq.TopK)
+		req := &qdrant.QueryPoints{
+			CollectionName: searchReq.CollectionName,
+			Query:          qdrant.NewQuery(searchReq.Vector...),
+			Limit:          &limit,
+			WithPayload:    qdrant.NewWithPayload(true),
+			Filter:         buildFilter(searchReq.Filters),
+		}
+
+		resp, err := c.api.Query(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("request [%d] search failed: %w", i, err)
+		}
+
+		res, err := c.parseSearchResults(resp)
+		if err != nil {
+			return nil, fmt.Errorf("request [%d] parse failed: %w", i, err)
+		}
+
+		results = append(results, res)
+		log.Printf("[Qdrant] SearchBatch request [%d] returned %d results", i, len(res))
 	}
 
-	resp, err := c.api.Query(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("[Qdrant] search failed: %w", err)
-	}
+	return results, nil
+}
 
+// parseSearchResults converts Qdrant response to SearchResultInterface slice
+func (c *QdrantClient) parseSearchResults(resp []*qdrant.ScoredPoint) ([]SearchResultInterface, error) {
 	results := make([]SearchResultInterface, 0, len(resp))
 	for _, r := range resp {
 		var id string
@@ -296,8 +398,6 @@ func (c *QdrantClient) Search(ctx context.Context, collectionName string, vector
 			Meta:  r.Payload,
 		})
 	}
-
-	log.Printf("[Qdrant] Search returned %d results", len(results))
 	return results, nil
 }
 

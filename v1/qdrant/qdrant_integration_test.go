@@ -233,8 +233,14 @@ func TestQdrantWithFXModule(t *testing.T) {
 
 		// Search for the inserted embedding
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		results, err := qdrantClient.Search(ctx, collectionName, embedding.Vector, 5, "")
+		batchResults, err := qdrantClient.Search(ctx, SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embedding.Vector,
+			TopK:           5,
+		})
 		assert.NoError(t, err)
+		assert.Greater(t, len(batchResults), 0)
+		results := batchResults[0]
 		assert.Greater(t, len(results), 0)
 
 		// Verify the result
@@ -280,9 +286,13 @@ func TestQdrantWithFXModule(t *testing.T) {
 
 		// Search and verify
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		results, err := qdrantClient.Search(ctx, collectionName, embeddings[0].Vector, 10, "")
+		batchResults, err := qdrantClient.Search(ctx, SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+		})
 		assert.NoError(t, err)
-		assert.Greater(t, len(results), 0)
+		assert.Greater(t, len(batchResults[0]), 0)
 
 		// Clean up
 		ids := make([]string, len(embeddings))
@@ -387,14 +397,22 @@ func TestQdrantClientOperations(t *testing.T) {
 		time.Sleep(1 * time.Second) // Allow time for indexing
 
 		// Search with topK = 5
-		results, err := client.Search(ctx, cfg.Collection, embeddings[0].Vector, 5, "")
+		batchResults, err := client.Search(ctx, SearchRequest{
+			CollectionName: cfg.Collection,
+			Vector:         embeddings[0].Vector,
+			TopK:           5,
+		})
 		assert.NoError(t, err)
-		assert.LessOrEqual(t, len(results), 5)
+		assert.LessOrEqual(t, len(batchResults[0]), 5)
 
 		// Search with topK = 10
-		results, err = client.Search(ctx, cfg.Collection, embeddings[0].Vector, 10, "")
+		batchResults, err = client.Search(ctx, SearchRequest{
+			CollectionName: cfg.Collection,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+		})
 		assert.NoError(t, err)
-		assert.LessOrEqual(t, len(results), 10)
+		assert.LessOrEqual(t, len(batchResults[0]), 10)
 
 		// Clean up
 		ids := make([]string, len(embeddings))
@@ -424,12 +442,16 @@ func TestQdrantClientOperations(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Search and verify metadata
-		results, err := client.Search(ctx, cfg.Collection, embedding.Vector, 1, "")
+		batchResults, err := client.Search(ctx, SearchRequest{
+			CollectionName: cfg.Collection,
+			Vector:         embedding.Vector,
+			TopK:           1,
+		})
 		assert.NoError(t, err)
-		assert.Greater(t, len(results), 0)
+		assert.Greater(t, len(batchResults[0]), 0)
 
-		if len(results) > 0 {
-			meta := results[0].GetMeta()
+		if len(batchResults[0]) > 0 {
+			meta := batchResults[0][0].GetMeta()
 			assert.NotNil(t, meta)
 		}
 
@@ -468,9 +490,13 @@ func TestQdrantClientOperations(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// Verify some embeddings exist
-		results, err := client.Search(ctx, collectionName, embeddings[0].Vector, 10, "")
+		batchResults, err := client.Search(ctx, SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+		})
 		assert.NoError(t, err)
-		assert.Greater(t, len(results), 0)
+		assert.Greater(t, len(batchResults[0]), 0)
 
 		// Clean up
 		ids := make([]string, len(embeddings))
@@ -535,7 +561,11 @@ func TestQdrantErrorHandling(t *testing.T) {
 
 	t.Run("SearchOnNonExistentCollection", func(t *testing.T) {
 		vector := generateRandomVector(1536)
-		_, err := client.Search(ctx, "non_existent_collection", vector, 5, "")
+		_, err := client.Search(ctx, SearchRequest{
+			CollectionName: "non_existent_collection",
+			Vector:         vector,
+			TopK:           5,
+		})
 		assert.Error(t, err)
 	})
 }
