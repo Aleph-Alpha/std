@@ -37,7 +37,10 @@ type QdrantClient struct {
 	started bool
 }
 
-const defaultBatchSize = 200 // default chunk size for batch inserts
+const (
+	defaultBatchSize      = 200 // default chunk size for batch inserts
+	maxConcurrentSearches = 10  // default maximum concurrent searches
+)
 
 // NewQdrantClient ──────────────────────────────────────────────────────────────
 // NewQdrantClient

@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	qdrant "github.com/qdrant/go-client/qdrant"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
 // EnsureCollection ──────────────────────────────────────────────────────────────
@@ -314,11 +316,30 @@ func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error) {
 // 	return results, nil
 // }
 
-// SearchBatch ──────────────────────────────────────────────────────────────
-// SearchBatch
+// executeSearch performs a single search request against Qdrant
+func (c *QdrantClient) executeSearch(ctx context.Context, searchReq SearchRequest) ([]SearchResultInterface, error) {
+	limit := uint64(searchReq.TopK)
+	req := &qdrant.QueryPoints{
+		CollectionName: searchReq.CollectionName,
+		Query:          qdrant.NewQuery(searchReq.Vector...),
+		Limit:          &limit,
+		WithPayload:    qdrant.NewWithPayload(true),
+		Filter:         buildFilter(searchReq.Filters),
+	}
+
+	resp, err := c.api.Query(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
+	}
+
+	return c.parseSearchResults(resp)
+}
+
+// Search ──────────────────────────────────────────────────────────────
+// Search
 // ──────────────────────────────────────────────────────────────
 //
-// SearchBatch performs multiple searches and returns results for each request.
+// Search performs multiple searches and returns results for each request.
 // Each request can optionally include filters.
 //
 // Parameters:
@@ -334,7 +355,7 @@ func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error) {
 //
 // Example:
 //
-//	results, err := client.SearchBatch(ctx,
+//	results, err := client.Search(ctx,
 //	    SearchRequest{CollectionName: "docs", Vector: vec1, TopK: 10, Filters: map[string]string{"partition_id": "store-A"}},
 //	    SearchRequest{CollectionName: "docs", Vector: vec2, TopK: 5},
 //	)
@@ -345,34 +366,46 @@ func (c *QdrantClient) Search(ctx context.Context, requests ...SearchRequest) ([
 		return nil, fmt.Errorf("at least one search request is required")
 	}
 
-	results := make([][]SearchResultInterface, 0, len(requests))
+	log.Printf("[Qdrant] Starting search batch with %d requests", len(requests))
 
+	// Validate all requests first (fail fast)
 	for i, searchReq := range requests {
 		if err := validateSearchInput(searchReq.CollectionName, searchReq.Vector, searchReq.TopK); err != nil {
 			return nil, fmt.Errorf("request [%d]: %w", i, err)
 		}
+	}
 
-		limit := uint64(searchReq.TopK)
-		req := &qdrant.QueryPoints{
-			CollectionName: searchReq.CollectionName,
-			Query:          qdrant.NewQuery(searchReq.Vector...),
-			Limit:          &limit,
-			WithPayload:    qdrant.NewWithPayload(true),
-			Filter:         buildFilter(searchReq.Filters),
-		}
+	results := make([][]SearchResultInterface, len(requests))
 
-		resp, err := c.api.Query(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("request [%d] search failed: %w", i, err)
-		}
+	// Create errgroup with context
+	g, ctx := errgroup.WithContext(ctx)
 
-		res, err := c.parseSearchResults(resp)
-		if err != nil {
-			return nil, fmt.Errorf("request [%d] parse failed: %w", i, err)
-		}
+	// Semaphore to limit concurrency
+	sem := semaphore.NewWeighted(maxConcurrentSearches)
 
-		results = append(results, res)
-		log.Printf("[Qdrant] SearchBatch request [%d] returned %d results", i, len(res))
+	for i, searchReq := range requests {
+		i, searchReq := i, searchReq // Capture loop variables
+
+		g.Go(func() error {
+			// Acquire semaphore (blocks if at max concurrency)
+			if err := sem.Acquire(ctx, 1); err != nil {
+				return fmt.Errorf("request [%d]: failed to acquire semaphore: %w", i, err)
+			}
+			defer sem.Release(1)
+
+			res, err := c.executeSearch(ctx, searchReq)
+			if err != nil {
+				return fmt.Errorf("request [%d]: search failed: %w", i, err)
+			}
+
+			results[i] = res
+			log.Printf("[Qdrant] Search request [%d] returned %d results", i, len(res))
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("search batch failed: %w", err)
 	}
 
 	return results, nil
