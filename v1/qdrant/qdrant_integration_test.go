@@ -168,7 +168,7 @@ func TestQdrantWithFXModule(t *testing.T) {
 				return &Config{
 					Endpoint:           containerInstance.Host,
 					Port:               portNum,
-					Collection:         "test_collection",
+					DefaultCollection:  "test_collection",
 					CheckCompatibility: false,
 					Timeout:            10 * time.Second,
 				}
@@ -212,10 +212,10 @@ func TestQdrantWithFXModule(t *testing.T) {
 		require.NoError(t, err)
 
 		// Temporarily change collection for these tests
-		originalCollection := qdrantClient.cfg.Collection
-		qdrantClient.cfg.Collection = collectionName
+		originalCollection := qdrantClient.cfg.DefaultCollection
+		qdrantClient.cfg.DefaultCollection = collectionName
 		defer func() {
-			qdrantClient.cfg.Collection = originalCollection
+			qdrantClient.cfg.DefaultCollection = originalCollection
 		}()
 
 		// Insert single embedding (use numeric ID or UUID format)
@@ -261,10 +261,10 @@ func TestQdrantWithFXModule(t *testing.T) {
 		require.NoError(t, err)
 
 		// Temporarily change collection
-		originalCollection := qdrantClient.cfg.Collection
-		qdrantClient.cfg.Collection = collectionName
+		originalCollection := qdrantClient.cfg.DefaultCollection
+		qdrantClient.cfg.DefaultCollection = collectionName
 		defer func() {
-			qdrantClient.cfg.Collection = originalCollection
+			qdrantClient.cfg.DefaultCollection = originalCollection
 		}()
 
 		// Create multiple embeddings (use UUID format)
@@ -341,7 +341,7 @@ func TestQdrantClientOperations(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		Collection:         "test_operations",
+		DefaultCollection:  "test_operations",
 		CheckCompatibility: false,
 		Timeout:            10 * time.Second,
 	}
@@ -352,12 +352,12 @@ func TestQdrantClientOperations(t *testing.T) {
 	defer client.Close()
 
 	// Ensure collection exists
-	err = client.EnsureCollection(ctx, cfg.Collection)
+	err = client.EnsureCollection(ctx, cfg.DefaultCollection)
 	require.NoError(t, err)
 
 	t.Run("GetCollectionByName", func(t *testing.T) {
 		// Fetch collection info using GetCollection
-		col, err := client.GetCollection(ctx, cfg.Collection)
+		col, err := client.GetCollection(ctx, cfg.DefaultCollection)
 		assert.NoError(t, err, "expected GetCollection to succeed")
 		assert.NotNil(t, col, "expected non-nil collection info")
 
@@ -398,7 +398,7 @@ func TestQdrantClientOperations(t *testing.T) {
 
 		// Search with topK = 5
 		batchResults, err := client.Search(ctx, SearchRequest{
-			CollectionName: cfg.Collection,
+			CollectionName: cfg.DefaultCollection,
 			Vector:         embeddings[0].Vector,
 			TopK:           5,
 		})
@@ -407,7 +407,7 @@ func TestQdrantClientOperations(t *testing.T) {
 
 		// Search with topK = 10
 		batchResults, err = client.Search(ctx, SearchRequest{
-			CollectionName: cfg.Collection,
+			CollectionName: cfg.DefaultCollection,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
 		})
@@ -443,7 +443,7 @@ func TestQdrantClientOperations(t *testing.T) {
 
 		// Search and verify metadata
 		batchResults, err := client.Search(ctx, SearchRequest{
-			CollectionName: cfg.Collection,
+			CollectionName: cfg.DefaultCollection,
 			Vector:         embedding.Vector,
 			TopK:           1,
 		})
@@ -466,10 +466,10 @@ func TestQdrantClientOperations(t *testing.T) {
 		require.NoError(t, err)
 
 		// Temporarily change collection
-		originalCollection := client.cfg.Collection
-		client.cfg.Collection = collectionName
+		originalCollection := client.cfg.DefaultCollection
+		client.cfg.DefaultCollection = collectionName
 		defer func() {
-			client.cfg.Collection = originalCollection
+			client.cfg.DefaultCollection = originalCollection
 		}()
 
 		// Create a large batch (more than defaultBatchSize, use UUID format)
@@ -531,7 +531,7 @@ func TestQdrantErrorHandling(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		Collection:         "test_errors",
+		DefaultCollection:  "test_errors",
 		CheckCompatibility: false,
 		Timeout:            10 * time.Second,
 	}
@@ -544,7 +544,7 @@ func TestQdrantErrorHandling(t *testing.T) {
 	t.Run("InvalidEndpoint", func(t *testing.T) {
 		invalidCfg := &Config{
 			Endpoint:           "invalid-host:9999",
-			Collection:         "test",
+			DefaultCollection:  "test",
 			CheckCompatibility: false,
 			Timeout:            2 * time.Second,
 		}
@@ -593,7 +593,7 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		Collection:         "test_collection",
+		DefaultCollection:  "test_collection",
 		CheckCompatibility: false,
 		Timeout:            5 * time.Second,
 	}
@@ -608,7 +608,7 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	require.NoError(t, err, "Qdrant health check failed")
 
 	// Ensure collection exists
-	err = client.EnsureCollection(context.Background(), cfg.Collection)
+	err = client.EnsureCollection(context.Background(), cfg.DefaultCollection)
 	require.NoError(t, err, "failed to ensure collection")
 
 	// Close client

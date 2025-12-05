@@ -32,7 +32,7 @@ type Config struct {
 	ApiKey string `yaml:"api_key" env:"QDRANT_API_KEY"`
 
 	// Default collection name this client operates on.
-	Collection string `yaml:"collection" env:"QDRANT_COLLECTION"`
+	DefaultCollection string `yaml:"default_collection" env:"QDRANT_DEFAULT_COLLECTION"`
 
 	// Maximum request duration before timing out.
 	Timeout time.Duration `yaml:"timeout" env:"QDRANT_TIMEOUT"`

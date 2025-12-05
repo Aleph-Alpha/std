@@ -61,8 +61,8 @@ func (c *QdrantClient) EnsureCollection(ctx context.Context, name string) error 
 //
 // Internally, it reuses the BatchInsert logic to ensure consistent handling
 // of payload serialization and error management.
-func (c *QdrantClient) Insert(ctx context.Context, input EmbeddingInput) error {
-	return c.BatchInsert(ctx, []EmbeddingInput{input})
+func (c *QdrantClient) Insert(ctx context.Context, input EmbeddingInput, collection ...string) error {
+	return c.BatchInsert(ctx, []EmbeddingInput{input}, collection...)
 }
 
 // BatchInsert ──────────────────────────────────────────────────────────────
@@ -77,10 +77,12 @@ func (c *QdrantClient) Insert(ctx context.Context, input EmbeddingInput) error {
 // multiple upserts sequentially.
 //
 // Logs batch indices and collection name for debugging.
-func (c *QdrantClient) BatchInsert(ctx context.Context, inputs []EmbeddingInput) error {
+func (c *QdrantClient) BatchInsert(ctx context.Context, inputs []EmbeddingInput, collection ...string) error {
 	if len(inputs) == 0 {
 		return nil
 	}
+
+	collectionName := resolveCollectionName(c.cfg.DefaultCollection, collection...)
 
 	// Convert all inputs into internal embeddings
 	embeddings := make([]Embedding, len(inputs))
@@ -95,10 +97,10 @@ func (c *QdrantClient) BatchInsert(ctx context.Context, inputs []EmbeddingInput)
 		}
 		batch := embeddings[start:end]
 
-		if err := c.upsertBatch(ctx, batch); err != nil {
+		if err := c.upsertBatch(ctx, batch, collectionName); err != nil {
 			return fmt.Errorf("[Qdrant] batch upsert failed at [%d:%d]: %w", start, end, err)
 		}
-		log.Printf("[Qdrant] Inserted batch [%d:%d] (collection=%s)", start, end, c.cfg.Collection)
+		log.Printf("[Qdrant] Inserted batch [%d:%d] (collection=%s)", start, end, collectionName)
 	}
 
 	return nil
@@ -113,7 +115,7 @@ func (c *QdrantClient) BatchInsert(ctx context.Context, inputs []EmbeddingInput)
 // Converts Embedding structs into Qdrant’s `PointStruct` objects and
 // triggers a blocking insert (`Wait=true`) to ensure data persistence
 // before returning.
-func (c *QdrantClient) upsertBatch(ctx context.Context, batch []Embedding) error {
+func (c *QdrantClient) upsertBatch(ctx context.Context, batch []Embedding, collectionName string) error {
 	points := make([]*qdrant.PointStruct, 0, len(batch))
 	for _, e := range batch {
 		points = append(points, &qdrant.PointStruct{
@@ -125,7 +127,7 @@ func (c *QdrantClient) upsertBatch(ctx context.Context, batch []Embedding) error
 
 	wait := true
 	req := &qdrant.UpsertPoints{
-		CollectionName: c.cfg.Collection,
+		CollectionName: collectionName,
 		Points:         points,
 		Wait:           &wait,
 	}
@@ -442,10 +444,12 @@ func (c *QdrantClient) parseSearchResults(resp []*qdrant.ScoredPoint) ([]SearchR
 //
 // It constructs a `DeletePoints` request containing a list of `PointId`s,
 // waits synchronously for completion, and logs the operation status.
-func (c *QdrantClient) Delete(ctx context.Context, ids []string) error {
+func (c *QdrantClient) Delete(ctx context.Context, ids []string, collection ...string) error {
 	if len(ids) == 0 {
 		return nil
 	}
+
+	collectionName := resolveCollectionName(c.cfg.DefaultCollection, collection...)
 
 	qdrantIDs := make([]*qdrant.PointId, 0, len(ids))
 	for _, id := range ids {
@@ -454,7 +458,7 @@ func (c *QdrantClient) Delete(ctx context.Context, ids []string) error {
 
 	wait := true
 	req := &qdrant.DeletePoints{
-		CollectionName: c.cfg.Collection,
+		CollectionName: collectionName,
 		Points: &qdrant.PointsSelector{
 			PointsSelectorOneOf: &qdrant.PointsSelector_Points{
 				Points: &qdrant.PointsIdsList{Ids: qdrantIDs},
@@ -469,6 +473,6 @@ func (c *QdrantClient) Delete(ctx context.Context, ids []string) error {
 	}
 
 	log.Printf("[Qdrant] Delete completed (status=%s, collection=%s)",
-		resp.Status.String(), c.cfg.Collection)
+		resp.Status.String(), collectionName)
 	return nil
 }
