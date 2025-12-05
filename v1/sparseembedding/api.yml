@@ -1,0 +1,160 @@
+# actual openapi version of this spec is 3.1.0 but oapi-codegen only supports 3.0.0 so we need to downgrade
+openapi: 3.0.0
+info:
+  title: FastAPI
+  version: 0.1.37
+servers:
+- url: /
+paths:
+  /:
+    get:
+      description: Says hello!
+      operationId: root__get
+      responses:
+        "200":
+          content:
+            text/plain:
+              schema:
+                type: string
+          description: Successful Response
+      summary: Root
+  /embed/bm25:
+    post:
+      description: |-
+        Returns the BM25 embedding of the given text. The service will automatically
+        detect the language of the text if you do not specify it. The average word count is after stemming
+        and removal of stopwords; there's no nice way of calculating this, so a good estimate is about ~60%
+        of the original word count.
+      operationId: embed_bm25_embed_bm25_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BM25EmbedRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SparseEmbedding'
+          description: Successful Response
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Embed Bm25
+components:
+  schemas:
+    BM25EmbedRequest:
+      example:
+        language: arabic
+        text: text
+        average_word_count: 0
+      properties:
+        text:
+          title: Text
+          type: string
+        average_word_count:
+          default: 256
+          title: Average Word Count
+          type: integer
+        language:
+          $ref: '#/components/schemas/Language'
+      required:
+      - text
+      title: BM25EmbedRequest
+    HTTPValidationError:
+      example:
+        detail:
+        - msg: msg
+          loc:
+          - ValidationError_loc_inner
+          - ValidationError_loc_inner
+          type: type
+        - msg: msg
+          loc:
+          - ValidationError_loc_inner
+          - ValidationError_loc_inner
+          type: type
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+      title: HTTPValidationError
+    Language:
+      description: Supported languages.
+      enum:
+      - arabic
+      - basque
+      - catalan
+      - danish
+      - dutch
+      - english
+      - finnish
+      - french
+      - german
+      - greek
+      - hungarian
+      - indonesian
+      - italian
+      - norwegian
+      - portuguese
+      - romanian
+      - russian
+      - spanish
+      - swedish
+      - turkish
+      title: Language
+      type: string
+    SparseEmbedding:
+      example:
+        indices:
+        - 6
+        - 6
+        values:
+        - 0.8008281904610115
+        - 0.8008281904610115
+      properties:
+        values:
+          items:
+            type: number
+          type: array
+        indices:
+          items:
+            type: integer
+          type: array
+      required:
+      - indices
+      - values
+      title: SparseEmbedding
+    ValidationError:
+      example:
+        msg: msg
+        loc:
+        - ValidationError_loc_inner
+        - ValidationError_loc_inner
+        type: type
+      properties:
+        loc:
+          items:
+            $ref: '#/components/schemas/ValidationError_loc_inner'
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ValidationError_loc_inner:
+      anyOf:
+      - type: string
+      - type: integer
