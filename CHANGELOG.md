@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/Aleph-Alpha/std/compare/v0.3.0...v0.4.0) (2025-12-05)
+
+
+### Features
+
+* trigger release ([39ab22f](https://github.com/Aleph-Alpha/std/commit/39ab22f160392eb53eb5bcd05110039dd5fb641a))
+
 ## [0.3.0](https://github.com/Aleph-Alpha/std/compare/v0.2.1...v0.3.0) (2025-12-05)
 
 
