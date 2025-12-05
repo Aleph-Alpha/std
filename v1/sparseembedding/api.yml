@@ -1,3 +1,4 @@
+# actual openapi version of this spec is 3.1.0 but oapi-codegen only supports 3.0.0 so we need to downgrade
 openapi: 3.0.0
 info:
   title: FastAPI
