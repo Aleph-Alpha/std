@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Aleph-Alpha/std/compare/v0.4.0...v0.5.0) (2025-12-05)
+
+
+### Features
+
+* add sparse embedding service go client ([#18](https://github.com/Aleph-Alpha/std/issues/18)) ([e4ab9b8](https://github.com/Aleph-Alpha/std/commit/e4ab9b84be2085a832d38731d649b9cfd2faf7d7))
+
 ## [0.4.0](https://github.com/Aleph-Alpha/std/compare/v0.3.0...v0.4.0) (2025-12-05)
 
 
