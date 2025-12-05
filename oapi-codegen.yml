@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+package: v1/sparse_embedding_service
+output: v1/sparse_embedding_service/client.gen.go
+generate:
+  models: true
+  client: true
