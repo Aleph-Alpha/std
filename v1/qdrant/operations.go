@@ -61,8 +61,8 @@ func (c *QdrantClient) EnsureCollection(ctx context.Context, name string) error 
 //
 // Internally, it reuses the BatchInsert logic to ensure consistent handling
 // of payload serialization and error management.
-func (c *QdrantClient) Insert(ctx context.Context, input EmbeddingInput, collection ...string) error {
-	return c.BatchInsert(ctx, []EmbeddingInput{input}, collection...)
+func (c *QdrantClient) Insert(ctx context.Context, collectionName string, input EmbeddingInput) error {
+	return c.BatchInsert(ctx, collectionName, []EmbeddingInput{input})
 }
 
 // BatchInsert ──────────────────────────────────────────────────────────────
@@ -77,12 +77,14 @@ func (c *QdrantClient) Insert(ctx context.Context, input EmbeddingInput, collect
 // multiple upserts sequentially.
 //
 // Logs batch indices and collection name for debugging.
-func (c *QdrantClient) BatchInsert(ctx context.Context, inputs []EmbeddingInput, collection ...string) error {
+func (c *QdrantClient) BatchInsert(ctx context.Context, collectionName string, inputs []EmbeddingInput) error {
 	if len(inputs) == 0 {
 		return nil
 	}
 
-	collectionName := resolveCollectionName(c.cfg.DefaultCollection, collection...)
+	if collectionName == "" {
+		return fmt.Errorf("collection name cannot be empty")
+	}
 
 	// Convert all inputs into internal embeddings
 	embeddings := make([]Embedding, len(inputs))
@@ -444,12 +446,14 @@ func (c *QdrantClient) parseSearchResults(resp []*qdrant.ScoredPoint) ([]SearchR
 //
 // It constructs a `DeletePoints` request containing a list of `PointId`s,
 // waits synchronously for completion, and logs the operation status.
-func (c *QdrantClient) Delete(ctx context.Context, ids []string, collection ...string) error {
+func (c *QdrantClient) Delete(ctx context.Context, collectionName string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
 
-	collectionName := resolveCollectionName(c.cfg.DefaultCollection, collection...)
+	if collectionName == "" {
+		return fmt.Errorf("collection name cannot be empty")
+	}
 
 	qdrantIDs := make([]*qdrant.PointId, 0, len(ids))
 	for _, id := range ids {
