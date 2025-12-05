@@ -23,14 +23,15 @@
 //	// Create a new client
 //	client, err := qdrant.NewQdrantClient(qdrant.QdrantParams{
 //		Config: &qdrant.Config{
-//			Endpoint:   "localhost:6334",
-//			ApiKey:     "",
-//			Collection: "documents",
+//			Endpoint: "localhost:6334",
+//			ApiKey:   "",
 //		},
 //	})
 //	if err != nil {
 //		log.Fatal(err)
 //	}
+//
+//	collectionName := "documents"
 //
 //	// Insert single embedding
 //	input := qdrant.EmbeddingInput{
@@ -38,19 +39,23 @@
 //		Vector: []float32{0.12, 0.43, 0.85},
 //		Meta:   map[string]any{"title": "My Document"},
 //	}
-//	if err := client.Insert(ctx, input); err != nil {
+//	if err := client.Insert(ctx, collectionName, input); err != nil {
 //		log.Fatal(err)
 //	}
 //
 //	// Batch insert embeddings
 //	batch := []qdrant.EmbeddingInput{input1, input2, input3}
-//	if err := client.BatchInsert(ctx, batch); err != nil {
+//	if err := client.BatchInsert(ctx, collectionName, batch); err != nil {
 //		log.Fatal(err)
 //	}
 //
 //	// Perform similarity search
-//	results, err := client.Search(ctx, queryVector, 5)
-//	for _, res := range results {
+//	results, err := client.Search(ctx, qdrant.SearchRequest{
+//		CollectionName: collectionName,
+//		Vector:         queryVector,
+//		TopK:           5,
+//	})
+//	for _, res := range results[0] {
 //		fmt.Printf("ID=%s Score=%.4f\n", res.GetID(), res.GetScore())
 //	}
 //
@@ -91,7 +96,6 @@
 //
 //	QDRANT_ENDPOINT=http://localhost:6334
 //	QDRANT_API_KEY=your-api-key
-//	QDRANT_COLLECTION=documents
 //
 // Performance Considerations:
 //
