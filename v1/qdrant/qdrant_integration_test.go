@@ -168,7 +168,7 @@ func TestQdrantWithFXModule(t *testing.T) {
 				return &Config{
 					Endpoint:           containerInstance.Host,
 					Port:               portNum,
-					Collection:         "test_collection",
+					DefaultCollection:  "test_collection",
 					CheckCompatibility: false,
 					Timeout:            10 * time.Second,
 				}
@@ -212,10 +212,10 @@ func TestQdrantWithFXModule(t *testing.T) {
 		require.NoError(t, err)
 
 		// Temporarily change collection for these tests
-		originalCollection := qdrantClient.cfg.Collection
-		qdrantClient.cfg.Collection = collectionName
+		originalCollection := qdrantClient.cfg.DefaultCollection
+		qdrantClient.cfg.DefaultCollection = collectionName
 		defer func() {
-			qdrantClient.cfg.Collection = originalCollection
+			qdrantClient.cfg.DefaultCollection = originalCollection
 		}()
 
 		// Insert single embedding (use numeric ID or UUID format)
@@ -233,8 +233,14 @@ func TestQdrantWithFXModule(t *testing.T) {
 
 		// Search for the inserted embedding
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		results, err := qdrantClient.Search(ctx, embedding.Vector, 5)
+		batchResults, err := qdrantClient.Search(ctx, SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embedding.Vector,
+			TopK:           5,
+		})
 		assert.NoError(t, err)
+		assert.Greater(t, len(batchResults), 0)
+		results := batchResults[0]
 		assert.Greater(t, len(results), 0)
 
 		// Verify the result
@@ -255,10 +261,10 @@ func TestQdrantWithFXModule(t *testing.T) {
 		require.NoError(t, err)
 
 		// Temporarily change collection
-		originalCollection := qdrantClient.cfg.Collection
-		qdrantClient.cfg.Collection = collectionName
+		originalCollection := qdrantClient.cfg.DefaultCollection
+		qdrantClient.cfg.DefaultCollection = collectionName
 		defer func() {
-			qdrantClient.cfg.Collection = originalCollection
+			qdrantClient.cfg.DefaultCollection = originalCollection
 		}()
 
 		// Create multiple embeddings (use UUID format)
@@ -280,9 +286,13 @@ func TestQdrantWithFXModule(t *testing.T) {
 
 		// Search and verify
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		results, err := qdrantClient.Search(ctx, embeddings[0].Vector, 10)
+		batchResults, err := qdrantClient.Search(ctx, SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+		})
 		assert.NoError(t, err)
-		assert.Greater(t, len(results), 0)
+		assert.Greater(t, len(batchResults[0]), 0)
 
 		// Clean up
 		ids := make([]string, len(embeddings))
@@ -331,7 +341,7 @@ func TestQdrantClientOperations(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		Collection:         "test_operations",
+		DefaultCollection:  "test_operations",
 		CheckCompatibility: false,
 		Timeout:            10 * time.Second,
 	}
@@ -342,12 +352,12 @@ func TestQdrantClientOperations(t *testing.T) {
 	defer client.Close()
 
 	// Ensure collection exists
-	err = client.EnsureCollection(ctx, cfg.Collection)
+	err = client.EnsureCollection(ctx, cfg.DefaultCollection)
 	require.NoError(t, err)
 
 	t.Run("GetCollectionByName", func(t *testing.T) {
 		// Fetch collection info using GetCollection
-		col, err := client.GetCollection(ctx, cfg.Collection)
+		col, err := client.GetCollection(ctx, cfg.DefaultCollection)
 		assert.NoError(t, err, "expected GetCollection to succeed")
 		assert.NotNil(t, col, "expected non-nil collection info")
 
@@ -387,14 +397,22 @@ func TestQdrantClientOperations(t *testing.T) {
 		time.Sleep(1 * time.Second) // Allow time for indexing
 
 		// Search with topK = 5
-		results, err := client.Search(ctx, embeddings[0].Vector, 5)
+		batchResults, err := client.Search(ctx, SearchRequest{
+			CollectionName: cfg.DefaultCollection,
+			Vector:         embeddings[0].Vector,
+			TopK:           5,
+		})
 		assert.NoError(t, err)
-		assert.LessOrEqual(t, len(results), 5)
+		assert.LessOrEqual(t, len(batchResults[0]), 5)
 
 		// Search with topK = 10
-		results, err = client.Search(ctx, embeddings[0].Vector, 10)
+		batchResults, err = client.Search(ctx, SearchRequest{
+			CollectionName: cfg.DefaultCollection,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+		})
 		assert.NoError(t, err)
-		assert.LessOrEqual(t, len(results), 10)
+		assert.LessOrEqual(t, len(batchResults[0]), 10)
 
 		// Clean up
 		ids := make([]string, len(embeddings))
@@ -424,12 +442,16 @@ func TestQdrantClientOperations(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Search and verify metadata
-		results, err := client.Search(ctx, embedding.Vector, 1)
+		batchResults, err := client.Search(ctx, SearchRequest{
+			CollectionName: cfg.DefaultCollection,
+			Vector:         embedding.Vector,
+			TopK:           1,
+		})
 		assert.NoError(t, err)
-		assert.Greater(t, len(results), 0)
+		assert.Greater(t, len(batchResults[0]), 0)
 
-		if len(results) > 0 {
-			meta := results[0].GetMeta()
+		if len(batchResults[0]) > 0 {
+			meta := batchResults[0][0].GetMeta()
 			assert.NotNil(t, meta)
 		}
 
@@ -444,10 +466,10 @@ func TestQdrantClientOperations(t *testing.T) {
 		require.NoError(t, err)
 
 		// Temporarily change collection
-		originalCollection := client.cfg.Collection
-		client.cfg.Collection = collectionName
+		originalCollection := client.cfg.DefaultCollection
+		client.cfg.DefaultCollection = collectionName
 		defer func() {
-			client.cfg.Collection = originalCollection
+			client.cfg.DefaultCollection = originalCollection
 		}()
 
 		// Create a large batch (more than defaultBatchSize, use UUID format)
@@ -468,9 +490,13 @@ func TestQdrantClientOperations(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// Verify some embeddings exist
-		results, err := client.Search(ctx, embeddings[0].Vector, 10)
+		batchResults, err := client.Search(ctx, SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+		})
 		assert.NoError(t, err)
-		assert.Greater(t, len(results), 0)
+		assert.Greater(t, len(batchResults[0]), 0)
 
 		// Clean up
 		ids := make([]string, len(embeddings))
@@ -505,7 +531,7 @@ func TestQdrantErrorHandling(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		Collection:         "test_errors",
+		DefaultCollection:  "test_errors",
 		CheckCompatibility: false,
 		Timeout:            10 * time.Second,
 	}
@@ -518,7 +544,7 @@ func TestQdrantErrorHandling(t *testing.T) {
 	t.Run("InvalidEndpoint", func(t *testing.T) {
 		invalidCfg := &Config{
 			Endpoint:           "invalid-host:9999",
-			Collection:         "test",
+			DefaultCollection:  "test",
 			CheckCompatibility: false,
 			Timeout:            2 * time.Second,
 		}
@@ -534,15 +560,12 @@ func TestQdrantErrorHandling(t *testing.T) {
 	})
 
 	t.Run("SearchOnNonExistentCollection", func(t *testing.T) {
-		// Temporarily change to non-existent collection
-		originalCollection := client.cfg.Collection
-		client.cfg.Collection = "non_existent_collection"
-		defer func() {
-			client.cfg.Collection = originalCollection
-		}()
-
 		vector := generateRandomVector(1536)
-		_, err := client.Search(ctx, vector, 5)
+		_, err := client.Search(ctx, SearchRequest{
+			CollectionName: "non_existent_collection",
+			Vector:         vector,
+			TopK:           5,
+		})
 		assert.Error(t, err)
 	})
 }
@@ -570,7 +593,7 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		Collection:         "test_collection",
+		DefaultCollection:  "test_collection",
 		CheckCompatibility: false,
 		Timeout:            5 * time.Second,
 	}
@@ -585,7 +608,7 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	require.NoError(t, err, "Qdrant health check failed")
 
 	// Ensure collection exists
-	err = client.EnsureCollection(context.Background(), cfg.Collection)
+	err = client.EnsureCollection(context.Background(), cfg.DefaultCollection)
 	require.NoError(t, err, "failed to ensure collection")
 
 	// Close client

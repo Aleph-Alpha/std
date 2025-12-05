@@ -1,6 +1,8 @@
 package qdrant
 
 import (
+	"fmt"
+
 	qdrant "github.com/qdrant/go-client/qdrant"
 )
 
@@ -94,6 +96,53 @@ type Collection struct {
 	Points     uint64
 }
 
+// SearchRequest represents a single search request for batch operations
+type SearchRequest struct {
+	CollectionName string
+	Vector         []float32
+	TopK           int
+	Filters        map[string]string //Optional: key-value filters
+}
+
+// validateSearchInput validates common search parameters
+func validateSearchInput(collectionName string, vector []float32, topK int) error {
+	if collectionName == "" {
+		return fmt.Errorf("collection name cannot be empty")
+	}
+	if len(vector) == 0 {
+		return fmt.Errorf("vector cannot be empty")
+	}
+	if topK <= 0 {
+		return fmt.Errorf("topK must be greater than 0")
+	}
+	return nil
+}
+
+// buildFilter constructs a Qdrant filter from key-value pairs (AND logic)
+func buildFilter(filters map[string]string) *qdrant.Filter {
+	if len(filters) == 0 {
+		return nil
+	}
+
+	conditions := make([]*qdrant.Condition, 0, len(filters))
+	for key, value := range filters {
+		conditions = append(conditions, &qdrant.Condition{
+			ConditionOneOf: &qdrant.Condition_Field{
+				Field: &qdrant.FieldCondition{
+					Key: key,
+					Match: &qdrant.Match{
+						MatchValue: &qdrant.Match_Keyword{
+							Keyword: value,
+						},
+					},
+				},
+			},
+		})
+	}
+
+	return &qdrant.Filter{Must: conditions}
+}
+
 // extractVectorDetails ──────────────────────────────────────────────────────────────
 // extractVectorDetails
 // ──────────────────────────────────────────────────────────────
@@ -141,4 +190,13 @@ func derefUint64(v *uint64) uint64 {
 		return *v
 	}
 	return 0
+}
+
+// resolveCollectionName returns the first non-empty collection name from the variadic parameter,
+// or falls back to the provided default.
+func resolveCollectionName(defaultCollection string, collection ...string) string {
+	if len(collection) > 0 && collection[0] != "" {
+		return collection[0]
+	}
+	return defaultCollection
 }
