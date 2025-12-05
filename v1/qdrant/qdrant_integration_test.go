@@ -168,7 +168,6 @@ func TestQdrantWithFXModule(t *testing.T) {
 				return &Config{
 					Endpoint:           containerInstance.Host,
 					Port:               portNum,
-					DefaultCollection:  "test_collection",
 					CheckCompatibility: false,
 					Timeout:            10 * time.Second,
 				}
@@ -211,13 +210,6 @@ func TestQdrantWithFXModule(t *testing.T) {
 		err := qdrantClient.EnsureCollection(ctx, collectionName)
 		require.NoError(t, err)
 
-		// Temporarily change collection for these tests
-		originalCollection := qdrantClient.cfg.DefaultCollection
-		qdrantClient.cfg.DefaultCollection = collectionName
-		defer func() {
-			qdrantClient.cfg.DefaultCollection = originalCollection
-		}()
-
 		// Insert single embedding (use numeric ID or UUID format)
 		embedding := EmbeddingInput{
 			ID:     "00000000-0000-0000-0000-000000000001", // UUID format
@@ -228,7 +220,7 @@ func TestQdrantWithFXModule(t *testing.T) {
 			},
 		}
 
-		err = qdrantClient.Insert(ctx, embedding)
+		err = qdrantClient.Insert(ctx, collectionName, embedding)
 		assert.NoError(t, err)
 
 		// Search for the inserted embedding
@@ -250,7 +242,7 @@ func TestQdrantWithFXModule(t *testing.T) {
 		}
 
 		// Delete the embedding
-		err = qdrantClient.Delete(ctx, []string{embedding.ID})
+		err = qdrantClient.Delete(ctx, collectionName, []string{embedding.ID})
 		assert.NoError(t, err)
 	})
 
@@ -259,13 +251,6 @@ func TestQdrantWithFXModule(t *testing.T) {
 		collectionName := "test_batch"
 		err := qdrantClient.EnsureCollection(ctx, collectionName)
 		require.NoError(t, err)
-
-		// Temporarily change collection
-		originalCollection := qdrantClient.cfg.DefaultCollection
-		qdrantClient.cfg.DefaultCollection = collectionName
-		defer func() {
-			qdrantClient.cfg.DefaultCollection = originalCollection
-		}()
 
 		// Create multiple embeddings (use UUID format)
 		embeddings := make([]EmbeddingInput, 10)
@@ -281,7 +266,7 @@ func TestQdrantWithFXModule(t *testing.T) {
 		}
 
 		// Batch insert
-		err = qdrantClient.BatchInsert(ctx, embeddings)
+		err = qdrantClient.BatchInsert(ctx, collectionName, embeddings)
 		assert.NoError(t, err)
 
 		// Search and verify
@@ -299,18 +284,22 @@ func TestQdrantWithFXModule(t *testing.T) {
 		for i, emb := range embeddings {
 			ids[i] = emb.ID
 		}
-		err = qdrantClient.Delete(ctx, ids)
+		err = qdrantClient.Delete(ctx, collectionName, ids)
 		assert.NoError(t, err)
 	})
 
 	// Test empty operations
 	t.Run("EmptyOperations", func(t *testing.T) {
+		collectionName := "test_empty"
+		err := qdrantClient.EnsureCollection(ctx, collectionName)
+		require.NoError(t, err)
+
 		// Empty batch insert should be no-op
-		err := qdrantClient.BatchInsert(ctx, []EmbeddingInput{})
+		err = qdrantClient.BatchInsert(ctx, collectionName, []EmbeddingInput{})
 		assert.NoError(t, err)
 
 		// Empty delete should be no-op
-		err = qdrantClient.Delete(ctx, []string{})
+		err = qdrantClient.Delete(ctx, collectionName, []string{})
 		assert.NoError(t, err)
 	})
 
@@ -341,7 +330,6 @@ func TestQdrantClientOperations(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		DefaultCollection:  "test_operations",
 		CheckCompatibility: false,
 		Timeout:            10 * time.Second,
 	}
@@ -351,13 +339,14 @@ func TestQdrantClientOperations(t *testing.T) {
 	require.NotNil(t, client)
 	defer client.Close()
 
+	collectionName := "test_operations"
 	// Ensure collection exists
-	err = client.EnsureCollection(ctx, cfg.DefaultCollection)
+	err = client.EnsureCollection(ctx, collectionName)
 	require.NoError(t, err)
 
 	t.Run("GetCollectionByName", func(t *testing.T) {
 		// Fetch collection info using GetCollection
-		col, err := client.GetCollection(ctx, cfg.DefaultCollection)
+		col, err := client.GetCollection(ctx, collectionName)
 		assert.NoError(t, err, "expected GetCollection to succeed")
 		assert.NotNil(t, col, "expected non-nil collection info")
 
@@ -391,14 +380,14 @@ func TestQdrantClientOperations(t *testing.T) {
 			}
 		}
 
-		err := client.BatchInsert(ctx, embeddings)
+		err := client.BatchInsert(ctx, collectionName, embeddings)
 		require.NoError(t, err)
 
 		time.Sleep(1 * time.Second) // Allow time for indexing
 
 		// Search with topK = 5
 		batchResults, err := client.Search(ctx, SearchRequest{
-			CollectionName: cfg.DefaultCollection,
+			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           5,
 		})
@@ -407,7 +396,7 @@ func TestQdrantClientOperations(t *testing.T) {
 
 		// Search with topK = 10
 		batchResults, err = client.Search(ctx, SearchRequest{
-			CollectionName: cfg.DefaultCollection,
+			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
 		})
@@ -419,7 +408,7 @@ func TestQdrantClientOperations(t *testing.T) {
 		for i, emb := range embeddings {
 			ids[i] = emb.ID
 		}
-		err = client.Delete(ctx, ids)
+		err = client.Delete(ctx, collectionName, ids)
 		assert.NoError(t, err)
 	})
 
@@ -436,14 +425,14 @@ func TestQdrantClientOperations(t *testing.T) {
 			},
 		}
 
-		err := client.Insert(ctx, embedding)
+		err := client.Insert(ctx, collectionName, embedding)
 		require.NoError(t, err)
 
 		time.Sleep(1 * time.Second)
 
 		// Search and verify metadata
 		batchResults, err := client.Search(ctx, SearchRequest{
-			CollectionName: cfg.DefaultCollection,
+			CollectionName: collectionName,
 			Vector:         embedding.Vector,
 			TopK:           1,
 		})
@@ -456,7 +445,7 @@ func TestQdrantClientOperations(t *testing.T) {
 		}
 
 		// Clean up
-		err = client.Delete(ctx, []string{embedding.ID})
+		err = client.Delete(ctx, collectionName, []string{embedding.ID})
 		assert.NoError(t, err)
 	})
 
@@ -464,13 +453,6 @@ func TestQdrantClientOperations(t *testing.T) {
 		collectionName := "test_large_batch"
 		err := client.EnsureCollection(ctx, collectionName)
 		require.NoError(t, err)
-
-		// Temporarily change collection
-		originalCollection := client.cfg.DefaultCollection
-		client.cfg.DefaultCollection = collectionName
-		defer func() {
-			client.cfg.DefaultCollection = originalCollection
-		}()
 
 		// Create a large batch (more than defaultBatchSize, use UUID format)
 		largeCount := 500
@@ -484,7 +466,7 @@ func TestQdrantClientOperations(t *testing.T) {
 		}
 
 		// Should handle batching automatically
-		err = client.BatchInsert(ctx, embeddings)
+		err = client.BatchInsert(ctx, collectionName, embeddings)
 		assert.NoError(t, err)
 
 		time.Sleep(2 * time.Second)
@@ -503,7 +485,7 @@ func TestQdrantClientOperations(t *testing.T) {
 		for i, emb := range embeddings {
 			ids[i] = emb.ID
 		}
-		err = client.Delete(ctx, ids)
+		err = client.Delete(ctx, collectionName, ids)
 		assert.NoError(t, err)
 	})
 }
@@ -531,7 +513,6 @@ func TestQdrantErrorHandling(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		DefaultCollection:  "test_errors",
 		CheckCompatibility: false,
 		Timeout:            10 * time.Second,
 	}
@@ -544,7 +525,6 @@ func TestQdrantErrorHandling(t *testing.T) {
 	t.Run("InvalidEndpoint", func(t *testing.T) {
 		invalidCfg := &Config{
 			Endpoint:           "invalid-host:9999",
-			DefaultCollection:  "test",
 			CheckCompatibility: false,
 			Timeout:            2 * time.Second,
 		}
@@ -593,7 +573,6 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	cfg := &Config{
 		Endpoint:           containerInstance.Host,
 		Port:               portNum,
-		DefaultCollection:  "test_collection",
 		CheckCompatibility: false,
 		Timeout:            5 * time.Second,
 	}
@@ -608,7 +587,8 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	require.NoError(t, err, "Qdrant health check failed")
 
 	// Ensure collection exists
-	err = client.EnsureCollection(context.Background(), cfg.DefaultCollection)
+	collectionName := "test_collection"
+	err = client.EnsureCollection(context.Background(), collectionName)
 	require.NoError(t, err, "failed to ensure collection")
 
 	// Close client

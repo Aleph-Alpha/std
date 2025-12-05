@@ -192,11 +192,3 @@ func derefUint64(v *uint64) uint64 {
 	return 0
 }
 
-// resolveCollectionName returns the first non-empty collection name from the variadic parameter,
-// or falls back to the provided default.
-func resolveCollectionName(defaultCollection string, collection ...string) string {
-	if len(collection) > 0 && collection[0] != "" {
-		return collection[0]
-	}
-	return defaultCollection
-}
