@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Aleph-Alpha/std/compare/v0.2.1...v0.3.0) (2025-12-05)
+
+
+### Features
+
+* refactor Search API with concurrent batch support and multi-collection capability ([#16](https://github.com/Aleph-Alpha/std/issues/16)) ([ad7a1b6](https://github.com/Aleph-Alpha/std/commit/ad7a1b6336d65d5e24fd9d7a5b43350c9fbb286a))
+
 ## [0.2.1](https://github.com/Aleph-Alpha/std/compare/v0.2.0...v0.2.1) (2025-12-03)
 
 
