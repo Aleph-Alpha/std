@@ -812,7 +812,7 @@ type DownloadConfig struct {
 ```
 
 <a name="ErrorCategory"></a>
-## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L549>)
+## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L550>)
 
 ErrorCategory represents different categories of MinIO errors
 
@@ -1147,7 +1147,7 @@ if err == nil {
 ```
 
 <a name="Minio.GenerateMultipartPresignedGetURLs"></a>
-### func \(\*Minio\) [GenerateMultipartPresignedGetURLs](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L99-L104>)
+### func \(\*Minio\) [GenerateMultipartPresignedGetURLs](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L100-L105>)
 
 ```go
 func (m *Minio) GenerateMultipartPresignedGetURLs(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration) (MultipartPresignedGet, error)
@@ -1265,7 +1265,7 @@ fmt.Printf("Buffers in pool: %d\n", stats.CurrentPoolSize)
 ```
 
 <a name="Minio.GetErrorCategory"></a>
-### func \(\*Minio\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L570>)
+### func \(\*Minio\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L571>)
 
 ```go
 func (m *Minio) GetErrorCategory(err error) ErrorCategory
@@ -1325,7 +1325,7 @@ func processFiles() {
 ```
 
 <a name="Minio.IsPermanentError"></a>
-### func \(\*Minio\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L628>)
+### func \(\*Minio\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L629>)
 
 ```go
 func (m *Minio) IsPermanentError(err error) bool
@@ -1334,7 +1334,7 @@ func (m *Minio) IsPermanentError(err error) bool
 IsPermanentError returns true if the error is permanent and should not be retried
 
 <a name="Minio.IsRetryableError"></a>
-### func \(\*Minio\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L606>)
+### func \(\*Minio\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L607>)
 
 ```go
 func (m *Minio) IsRetryableError(err error) bool
@@ -1343,7 +1343,7 @@ func (m *Minio) IsRetryableError(err error) bool
 IsRetryableError returns true if the error is retryable
 
 <a name="Minio.IsTemporaryError"></a>
-### func \(\*Minio\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L623>)
+### func \(\*Minio\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L624>)
 
 ```go
 func (m *Minio) IsTemporaryError(err error) bool
@@ -1382,7 +1382,7 @@ if err == nil {
 ```
 
 <a name="Minio.PreSignedGet"></a>
-### func \(\*Minio\) [PreSignedGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L259>)
+### func \(\*Minio\) [PreSignedGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L260>)
 
 ```go
 func (m *Minio) PreSignedGet(ctx context.Context, objectKey string) (string, error)
@@ -1527,7 +1527,7 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 StreamGet downloads a file from MinIO and sends chunks through a channel
 
 <a name="Minio.TranslateError"></a>
-### func \(\*Minio\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L174>)
+### func \(\*Minio\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L175>)
 
 ```go
 func (m *Minio) TranslateError(err error) error
@@ -1732,7 +1732,7 @@ func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
 Warn indicates an expected call of Warn.
 
 <a name="MultipartPresignedGet"></a>
-## type [MultipartPresignedGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L37-L61>)
+## type [MultipartPresignedGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L38-L62>)
 
 MultipartPresignedGet is an interface for accessing multipart download info
 
@@ -1765,7 +1765,7 @@ type MultipartPresignedGet interface {
 ```
 
 <a name="MultipartPresignedGetInfo"></a>
-## type [MultipartPresignedGetInfo](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L13-L34>)
+## type [MultipartPresignedGetInfo](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L14-L35>)
 
 MultipartPresignedGetInfo contains information for downloading an object in parts
 
