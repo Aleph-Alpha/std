@@ -169,7 +169,7 @@ var FXModule = fx.Module("logger",
 ```
 
 <a name="RegisterLoggerLifecycle"></a>
-## func [RegisterLoggerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/fx_module.go#L50>)
+## func [RegisterLoggerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/fx_module.go#L51>)
 
 ```go
 func RegisterLoggerLifecycle(lc fx.Lifecycle, client *Logger)

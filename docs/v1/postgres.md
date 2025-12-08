@@ -458,7 +458,7 @@ type ConnectionDetails struct {
 ```
 
 <a name="ErrorCategory"></a>
-## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L889>)
+## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L890>)
 
 ErrorCategory represents different categories of database errors
 
@@ -859,7 +859,7 @@ err := db.First(ctx, &user, "email = ?", "user@example.com")
 ```
 
 <a name="Postgres.GetErrorCategory"></a>
-### func \(\*Postgres\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L906>)
+### func \(\*Postgres\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L907>)
 
 ```go
 func (p *Postgres) GetErrorCategory(err error) ErrorCategory
@@ -904,7 +904,7 @@ func (p *Postgres) GracefulShutdown() error
 
 
 <a name="Postgres.IsCritical"></a>
-### func \(\*Postgres\) [IsCritical](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L979>)
+### func \(\*Postgres\) [IsCritical](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L980>)
 
 ```go
 func (p *Postgres) IsCritical(err error) bool
@@ -913,7 +913,7 @@ func (p *Postgres) IsCritical(err error) bool
 IsCritical returns true if the error indicates a serious system problem
 
 <a name="Postgres.IsRetryable"></a>
-### func \(\*Postgres\) [IsRetryable](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L934>)
+### func \(\*Postgres\) [IsRetryable](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L935>)
 
 ```go
 func (p *Postgres) IsRetryable(err error) bool
@@ -922,7 +922,7 @@ func (p *Postgres) IsRetryable(err error) bool
 IsRetryable returns true if the error might be resolved by retrying the operation
 
 <a name="Postgres.IsTemporary"></a>
-### func \(\*Postgres\) [IsTemporary](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L958>)
+### func \(\*Postgres\) [IsTemporary](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L959>)
 
 ```go
 func (p *Postgres) IsTemporary(err error) bool
@@ -1068,7 +1068,7 @@ err := pg.Transaction(ctx, func(txPg *Postgres) error {
 ```
 
 <a name="Postgres.TranslateError"></a>
-### func \(\*Postgres\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L168>)
+### func \(\*Postgres\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/errors.go#L169>)
 
 ```go
 func (p *Postgres) TranslateError(err error) error

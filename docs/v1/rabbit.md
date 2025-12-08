@@ -703,7 +703,7 @@ type DeadLetter struct {
 ```
 
 <a name="ErrorCategory"></a>
-## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L687>)
+## type [ErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L684>)
 
 ErrorCategory represents different categories of RabbitMQ errors
 
@@ -913,7 +913,7 @@ for msg := range dlqChan {
 ```
 
 <a name="Rabbit.GetErrorCategory"></a>
-### func \(\*Rabbit\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L708>)
+### func \(\*Rabbit\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L705>)
 
 ```go
 func (r *Rabbit) GetErrorCategory(err error) ErrorCategory
@@ -935,7 +935,7 @@ The shutdown process: 1. Signals all goroutines to stop by closing the shutdownS
 Any errors during shutdown are logged but not propagated, as they typically cannot be handled at this stage of application shutdown.
 
 <a name="Rabbit.IsAlarmError"></a>
-### func \(\*Rabbit\) [IsAlarmError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L860>)
+### func \(\*Rabbit\) [IsAlarmError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L857>)
 
 ```go
 func (r *Rabbit) IsAlarmError(err error) bool
@@ -944,7 +944,7 @@ func (r *Rabbit) IsAlarmError(err error) bool
 IsAlarmError returns true if the error is alarm\-related
 
 <a name="Rabbit.IsAuthenticationError"></a>
-### func \(\*Rabbit\) [IsAuthenticationError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L831>)
+### func \(\*Rabbit\) [IsAuthenticationError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L828>)
 
 ```go
 func (r *Rabbit) IsAuthenticationError(err error) bool
@@ -953,7 +953,7 @@ func (r *Rabbit) IsAuthenticationError(err error) bool
 IsAuthenticationError returns true if the error is authentication\-related
 
 <a name="Rabbit.IsChannelError"></a>
-### func \(\*Rabbit\) [IsChannelError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L819>)
+### func \(\*Rabbit\) [IsChannelError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L816>)
 
 ```go
 func (r *Rabbit) IsChannelError(err error) bool
@@ -962,7 +962,7 @@ func (r *Rabbit) IsChannelError(err error) bool
 IsChannelError returns true if the error is channel\-related
 
 <a name="Rabbit.IsConnectionError"></a>
-### func \(\*Rabbit\) [IsConnectionError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L807>)
+### func \(\*Rabbit\) [IsConnectionError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L804>)
 
 ```go
 func (r *Rabbit) IsConnectionError(err error) bool
@@ -971,7 +971,7 @@ func (r *Rabbit) IsConnectionError(err error) bool
 IsConnectionError returns true if the error is connection\-related
 
 <a name="Rabbit.IsPermanentError"></a>
-### func \(\*Rabbit\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L780>)
+### func \(\*Rabbit\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L777>)
 
 ```go
 func (r *Rabbit) IsPermanentError(err error) bool
@@ -980,7 +980,7 @@ func (r *Rabbit) IsPermanentError(err error) bool
 IsPermanentError returns true if the error is permanent and should not be retried
 
 <a name="Rabbit.IsResourceError"></a>
-### func \(\*Rabbit\) [IsResourceError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L844>)
+### func \(\*Rabbit\) [IsResourceError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L841>)
 
 ```go
 func (r *Rabbit) IsResourceError(err error) bool
@@ -989,7 +989,7 @@ func (r *Rabbit) IsResourceError(err error) bool
 IsResourceError returns true if the error is resource\-related
 
 <a name="Rabbit.IsRetryableError"></a>
-### func \(\*Rabbit\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L744>)
+### func \(\*Rabbit\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L741>)
 
 ```go
 func (r *Rabbit) IsRetryableError(err error) bool
@@ -998,7 +998,7 @@ func (r *Rabbit) IsRetryableError(err error) bool
 IsRetryableError returns true if the error is retryable
 
 <a name="Rabbit.IsTemporaryError"></a>
-### func \(\*Rabbit\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L771>)
+### func \(\*Rabbit\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L768>)
 
 ```go
 func (r *Rabbit) IsTemporaryError(err error) bool
