@@ -123,4 +123,3 @@
 // The Client struct is safe for concurrent use by multiple goroutines. Each HTTP
 // request is independent and does not modify shared state.
 package sparseembedding
-

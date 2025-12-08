@@ -70,10 +70,10 @@ DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_RYUK_DISABLE
 
 # Go Packages Documentation
 
-> [!NOTE]
+> [!TIP]
 > The documentation is generated using [gomarkdoc](https://github.com/princjef/gomarkdoc). To generate the documentation, run `make docs`.
 
-> [!TODO]
+> [!NOTE]
 > Add gomarkdoc as a go tool in the project and update the Makefile to use the tool instead of installing it manually.
 
 Generated on Mon Dec 8 12:49:20 CET 2025
