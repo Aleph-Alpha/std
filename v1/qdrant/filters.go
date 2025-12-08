@@ -1,6 +1,7 @@
 package qdrant
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -28,16 +29,24 @@ const (
 
 // TimeRange represents a time-based filter condition
 type TimeRange struct {
-	Gt  *time.Time // Greater than this time
-	Gte *time.Time // Greater than or equal to this time
-	Lt  *time.Time // Less than this time
-	Lte *time.Time // Less than or equal to this time
+	Gt  *time.Time `json:"after,omitempty"`      // Greater than this time
+	Gte *time.Time `json:"atOrAfter,omitempty"`  // Greater than or equal to this time
+	Lt  *time.Time `json:"before,omitempty"`     // Less than this time
+	Lte *time.Time `json:"atOrBefore,omitempty"` // Less than or equal to this time
+}
+
+// NumericRange represents a numeric range filter condition
+type NumericRange struct {
+	Gt  *float64 `json:"greaterThan,omitempty"`          // Greater than
+	Gte *float64 `json:"greaterThanOrEqualTo,omitempty"` // Greater than or equal
+	Lt  *float64 `json:"lessThan,omitempty"`             // Less than
+	Lte *float64 `json:"lessThanOrEqualTo,omitempty"`    // Less than or equal
 }
 
 type MatchCondition[T comparable] struct {
-	Key       string
-	Value     T
-	FieldType FieldType // Internal or User field (default: InternalField)
+	Key       string    `json:"field"`
+	Value     T         `json:"equalTo"`
+	FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
 }
 
 func (c MatchCondition[T]) ToQdrantCondition() []*qdrant.Condition {
@@ -59,9 +68,9 @@ func (c MatchCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 // MatchAnyCondition matches if value is one of the given values (IN operator)
 // Applicable to keyword (string) and integer payloads
 type MatchAnyCondition[T string | int64] struct {
-	Key       string
-	Values    []T
-	FieldType FieldType
+	Key       string    `json:"field"`
+	Values    []T       `json:"anyOf"`
+	FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
 }
 
 func (c MatchAnyCondition[T]) ToQdrantCondition() []*qdrant.Condition {
@@ -79,9 +88,9 @@ func (c MatchAnyCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 // MatchExceptCondition matches if value is NOT one of the given values (NOT IN operator)
 // Applicable to keyword (string) and integer payloads
 type MatchExceptCondition[T string | int64] struct {
-	Key       string
-	Values    []T
-	FieldType FieldType
+	Key       string    `json:"field"`
+	Values    []T       `json:"noneOf"`
+	FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
 }
 
 func (c MatchExceptCondition[T]) ToQdrantCondition() []*qdrant.Condition {
@@ -96,23 +105,68 @@ func (c MatchExceptCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 	}
 }
 
-type TextCondition = MatchCondition[string]
-type BoolCondition = MatchCondition[bool]
-type IntCondition = MatchCondition[int64]
-type TextAnyCondition = MatchAnyCondition[string]
-type IntAnyCondition = MatchAnyCondition[int64]
-type TextExceptCondition = MatchExceptCondition[string]
-type IntExceptCondition = MatchExceptCondition[int64]
+type TextCondition = MatchCondition[string]             // Exact string match
+type BoolCondition = MatchCondition[bool]               // Exact boolean match
+type IntCondition = MatchCondition[int64]               // Exact integer match
+type TextAnyCondition = MatchAnyCondition[string]       // String IN operator
+type IntAnyCondition = MatchAnyCondition[int64]         // Integer IN operator
+type TextExceptCondition = MatchExceptCondition[string] // String NOT IN
+type IntExceptCondition = MatchExceptCondition[int64]   // Integer NOT IN
 
 // TimeRangeCondition represents a time range filter condition
 type TimeRangeCondition struct {
-	Key       string
-	Value     TimeRange
-	FieldType FieldType // Internal or User field (default: InternalField)
+	Key       string    `json:"field"`
+	Value     TimeRange `json:"-"`
+	FieldType FieldType `json:"-"`
 }
 
 func (c TimeRangeCondition) ToQdrantCondition() []*qdrant.Condition {
 	return buildDateTimeRangeConditions(resolveFieldKey(c.Key, c.FieldType), c.Value)
+}
+
+func (c TimeRangeCondition) MarshalJSON() ([]byte, error) {
+	type Alias struct {
+		Field      string     `json:"field"`
+		After      *time.Time `json:"after,omitempty"`
+		AtOrAfter  *time.Time `json:"atOrAfter,omitempty"`
+		Before     *time.Time `json:"before,omitempty"`
+		AtOrBefore *time.Time `json:"atOrBefore,omitempty"`
+	}
+	return json.Marshal(Alias{
+		Field:      c.Key,
+		After:      c.Value.Gt,
+		AtOrAfter:  c.Value.Gte,
+		Before:     c.Value.Lt,
+		AtOrBefore: c.Value.Lte,
+	})
+}
+
+// NumericRangeCondition represents a numeric range filter
+type NumericRangeCondition struct {
+	Key       string       `json:"field"`
+	Value     NumericRange `json:"-"`
+	FieldType FieldType    `json:"-"`
+}
+
+func (c NumericRangeCondition) ToQdrantCondition() []*qdrant.Condition {
+	return buildNumericRangeConditions(resolveFieldKey(c.Key, c.FieldType), c.Value)
+}
+
+func (c NumericRangeCondition) MarshalJSON() ([]byte, error) {
+	type Alias struct {
+		Field                string   `json:"field"`
+		GreaterThan          *float64 `json:"greaterThan,omitempty"`
+		GreaterThanOrEqualTo *float64 `json:"greaterThanOrEqualTo,omitempty"`
+		LessThan             *float64 `json:"lessThan,omitempty"`
+		LessThanOrEqualTo    *float64 `json:"lessThanOrEqualTo,omitempty"`
+	}
+	return json.Marshal(Alias{
+		Field:                c.Key,
+		GreaterThan:          c.Value.Gt,
+		GreaterThanOrEqualTo: c.Value.Gte,
+		LessThan:             c.Value.Lt,
+		LessThanOrEqualTo:    c.Value.Lte,
+	})
 }
 
 // resolveFieldKey returns the full field path based on FieldType
@@ -131,7 +185,7 @@ func resolveFieldKey(key string, fieldType FieldType) string {
 
 // ConditionSet holds conditions for a single clause
 type ConditionSet struct {
-	Conditions []FilterCondition
+	Conditions []FilterCondition `json:"conditions,omitempty"`
 }
 
 // FilterSet supports Must (AND), Should (OR), and MustNot (NOT) clauses.
@@ -147,9 +201,9 @@ type ConditionSet struct {
 //	    },
 //	}
 type FilterSet struct {
-	Must    *ConditionSet // AND - all conditions must match
-	Should  *ConditionSet // OR - at least one condition must match
-	MustNot *ConditionSet // NOT - none of the conditions should match
+	Must    *ConditionSet `json:"with,omitempty"`      // AND - all conditions must match
+	Should  *ConditionSet `json:"withOneOf,omitempty"` // OR - at least one condition must match
+	MustNot *ConditionSet `json:"without,omitempty"`   // NOT - none of the conditions should match
 }
 
 // buildFilter constructs a Qdrant filter from FilterSet
@@ -210,12 +264,51 @@ func buildDateTimeRangeConditions(key string, tr TimeRange) []*qdrant.Condition 
 	return []*qdrant.Condition{qdrant.NewDatetimeRange(key, dateRange)}
 }
 
+// buildNumericRangeConditions creates numeric range conditions
+func buildNumericRangeConditions(key string, nr NumericRange) []*qdrant.Condition {
+	rangeFilter := &qdrant.Range{
+		Gt:  nr.Gt,
+		Gte: nr.Gte,
+		Lt:  nr.Lt,
+		Lte: nr.Lte,
+	}
+
+	// Check if any field is set
+	if rangeFilter.Gt == nil && rangeFilter.Gte == nil && rangeFilter.Lt == nil && rangeFilter.Lte == nil {
+		return nil
+	}
+
+	return []*qdrant.Condition{qdrant.NewRange(key, rangeFilter)}
+}
+
 // toTimestamp converts a *time.Time to *timestamppb.Timestamp (nil-safe)
 func toTimestamp(t *time.Time) *timestamppb.Timestamp {
 	if t == nil {
 		return nil
 	}
 	return timestamppb.New(*t)
+}
+
+// IsNullCondition checks if a field is null
+type IsNullCondition struct {
+	Key       string    `json:"field"`
+	FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
+}
+
+func (c IsNullCondition) ToQdrantCondition() []*qdrant.Condition {
+	key := resolveFieldKey(c.Key, c.FieldType)
+	return []*qdrant.Condition{qdrant.NewIsNull(key)}
+}
+
+// IsEmptyCondition checks if a field is empty (does not exist, null, or [])
+type IsEmptyCondition struct {
+	Key       string    `json:"field"`
+	FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
+}
+
+func (c IsEmptyCondition) ToQdrantCondition() []*qdrant.Condition {
+	key := resolveFieldKey(c.Key, c.FieldType)
+	return []*qdrant.Condition{qdrant.NewIsEmpty(key)}
 }
 
 // === Payload Helpers ===

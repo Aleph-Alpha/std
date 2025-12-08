@@ -529,3 +529,396 @@ func TestResolveFieldKey_ActualPath(t *testing.T) {
 		}
 	}
 }
+
+// === MatchAnyCondition Tests ===
+
+func TestTextAnyCondition_ToQdrantCondition(t *testing.T) {
+	c := TextAnyCondition{Key: "city", Values: []string{"London", "Berlin", "Paris"}}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestIntAnyCondition_ToQdrantCondition(t *testing.T) {
+	c := IntAnyCondition{Key: "priority", Values: []int64{1, 2, 3}}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestTextAnyCondition_UserField(t *testing.T) {
+	c := TextAnyCondition{Key: "category", Values: []string{"tech", "science"}, FieldType: UserField}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestBuildFilter_WithTextAnyCondition(t *testing.T) {
+	// city IN ("London", "Berlin")
+	filters := &FilterSet{
+		Must: &ConditionSet{
+			Conditions: []FilterCondition{
+				TextAnyCondition{Key: "city", Values: []string{"London", "Berlin"}},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	if len(result.Must) != 1 {
+		t.Errorf("expected 1 Must condition, got %d", len(result.Must))
+	}
+}
+
+// === MatchExceptCondition Tests ===
+
+func TestTextExceptCondition_ToQdrantCondition(t *testing.T) {
+	c := TextExceptCondition{Key: "city", Values: []string{"Paris", "Madrid"}}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestIntExceptCondition_ToQdrantCondition(t *testing.T) {
+	c := IntExceptCondition{Key: "priority", Values: []int64{0, -1}}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestTextExceptCondition_UserField(t *testing.T) {
+	c := TextExceptCondition{Key: "status", Values: []string{"draft", "deleted"}, FieldType: UserField}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestBuildFilter_WithTextExceptCondition(t *testing.T) {
+	// city NOT IN ("Paris", "Madrid")
+	filters := &FilterSet{
+		MustNot: &ConditionSet{
+			Conditions: []FilterCondition{
+				TextExceptCondition{Key: "city", Values: []string{"Paris", "Madrid"}},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	if len(result.MustNot) != 1 {
+		t.Errorf("expected 1 MustNot condition, got %d", len(result.MustNot))
+	}
+}
+
+// === NumericRangeCondition Tests ===
+
+func TestNumericRangeCondition_ToQdrantCondition(t *testing.T) {
+	minPrice := 100.0
+	maxPrice := 500.0
+	c := NumericRangeCondition{
+		Key: "price",
+		Value: NumericRange{
+			Gte: &minPrice,
+			Lte: &maxPrice,
+		},
+	}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestNumericRangeCondition_AllBounds(t *testing.T) {
+	gt := 10.0
+	gte := 20.0
+	lt := 100.0
+	lte := 90.0
+	c := NumericRangeCondition{
+		Key: "score",
+		Value: NumericRange{
+			Gt:  &gt,
+			Gte: &gte,
+			Lt:  &lt,
+			Lte: &lte,
+		},
+	}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestNumericRangeCondition_EmptyRange(t *testing.T) {
+	c := NumericRangeCondition{
+		Key:   "price",
+		Value: NumericRange{}, // All nil
+	}
+	result := c.ToQdrantCondition()
+
+	if result != nil {
+		t.Errorf("expected nil for empty numeric range, got %v", result)
+	}
+}
+
+func TestNumericRangeCondition_UserField(t *testing.T) {
+	minPrice := 50.0
+	c := NumericRangeCondition{
+		Key:       "price",
+		Value:     NumericRange{Gte: &minPrice},
+		FieldType: UserField,
+	}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestBuildFilter_WithNumericRangeCondition(t *testing.T) {
+	minPrice := 100.0
+	maxPrice := 500.0
+	filters := &FilterSet{
+		Must: &ConditionSet{
+			Conditions: []FilterCondition{
+				NumericRangeCondition{
+					Key: "price",
+					Value: NumericRange{
+						Gte: &minPrice,
+						Lte: &maxPrice,
+					},
+				},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	if len(result.Must) != 1 {
+		t.Errorf("expected 1 Must condition, got %d", len(result.Must))
+	}
+}
+
+// === IsNullCondition Tests ===
+
+func TestIsNullCondition_ToQdrantCondition(t *testing.T) {
+	c := IsNullCondition{Key: "deleted_at"}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestIsNullCondition_UserField(t *testing.T) {
+	c := IsNullCondition{Key: "review_date", FieldType: UserField}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestBuildFilter_WithIsNullCondition(t *testing.T) {
+	filters := &FilterSet{
+		Must: &ConditionSet{
+			Conditions: []FilterCondition{
+				IsNullCondition{Key: "deleted_at"},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	if len(result.Must) != 1 {
+		t.Errorf("expected 1 Must condition, got %d", len(result.Must))
+	}
+}
+
+// === IsEmptyCondition Tests ===
+
+func TestIsEmptyCondition_ToQdrantCondition(t *testing.T) {
+	c := IsEmptyCondition{Key: "tags"}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestIsEmptyCondition_UserField(t *testing.T) {
+	c := IsEmptyCondition{Key: "categories", FieldType: UserField}
+	result := c.ToQdrantCondition()
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(result))
+	}
+}
+
+func TestBuildFilter_WithIsEmptyCondition(t *testing.T) {
+	// Find documents where tags is NOT empty (using MustNot)
+	filters := &FilterSet{
+		MustNot: &ConditionSet{
+			Conditions: []FilterCondition{
+				IsEmptyCondition{Key: "tags"},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	if len(result.MustNot) != 1 {
+		t.Errorf("expected 1 MustNot condition, got %d", len(result.MustNot))
+	}
+}
+
+// === MarshalJSON Tests ===
+
+func TestTimeRangeCondition_MarshalJSON(t *testing.T) {
+	startTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+
+	c := TimeRangeCondition{
+		Key: "created_at",
+		Value: TimeRange{
+			Gte: &startTime,
+			Lt:  &endTime,
+		},
+	}
+
+	data, err := c.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	jsonStr := string(data)
+	// Check that it contains expected fields
+	if !contains(jsonStr, `"field":"created_at"`) {
+		t.Errorf("expected field in JSON, got %s", jsonStr)
+	}
+	if !contains(jsonStr, `"atOrAfter"`) {
+		t.Errorf("expected atOrAfter in JSON, got %s", jsonStr)
+	}
+	if !contains(jsonStr, `"before"`) {
+		t.Errorf("expected before in JSON, got %s", jsonStr)
+	}
+}
+
+func TestNumericRangeCondition_MarshalJSON(t *testing.T) {
+	minPrice := 100.0
+	maxPrice := 500.0
+
+	c := NumericRangeCondition{
+		Key: "price",
+		Value: NumericRange{
+			Gte: &minPrice,
+			Lte: &maxPrice,
+		},
+	}
+
+	data, err := c.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	jsonStr := string(data)
+	if !contains(jsonStr, `"field":"price"`) {
+		t.Errorf("expected field in JSON, got %s", jsonStr)
+	}
+	if !contains(jsonStr, `"greaterThanOrEqualTo"`) {
+		t.Errorf("expected greaterThanOrEqualTo in JSON, got %s", jsonStr)
+	}
+	if !contains(jsonStr, `"lessThanOrEqualTo"`) {
+		t.Errorf("expected lessThanOrEqualTo in JSON, got %s", jsonStr)
+	}
+}
+
+// === Complex Filter Tests ===
+
+func TestBuildFilter_ComplexCombination(t *testing.T) {
+	startTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	minPrice := 100.0
+
+	// Complex filter:
+	// (search_store_id = "store-123" AND created_at >= 2024-01-01 AND price >= 100)
+	// AND (city IN ("London", "Berlin"))
+	// AND NOT (deleted = true OR status IN ("draft", "archived"))
+	filters := &FilterSet{
+		Must: &ConditionSet{
+			Conditions: []FilterCondition{
+				TextCondition{Key: "search_store_id", Value: "store-123"},
+				TimeRangeCondition{
+					Key:   "created_at",
+					Value: TimeRange{Gte: &startTime},
+				},
+				NumericRangeCondition{
+					Key:       "price",
+					Value:     NumericRange{Gte: &minPrice},
+					FieldType: UserField,
+				},
+			},
+		},
+		Should: &ConditionSet{
+			Conditions: []FilterCondition{
+				TextAnyCondition{Key: "city", Values: []string{"London", "Berlin"}},
+			},
+		},
+		MustNot: &ConditionSet{
+			Conditions: []FilterCondition{
+				BoolCondition{Key: "deleted", Value: true},
+				TextAnyCondition{Key: "status", Values: []string{"draft", "archived"}},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	if len(result.Must) != 3 {
+		t.Errorf("expected 3 Must conditions, got %d", len(result.Must))
+	}
+	if len(result.Should) != 1 {
+		t.Errorf("expected 1 Should condition, got %d", len(result.Should))
+	}
+	if len(result.MustNot) != 2 {
+		t.Errorf("expected 2 MustNot conditions, got %d", len(result.MustNot))
+	}
+}
+
+// Helper function for string contains check
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
