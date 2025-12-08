@@ -1,6 +1,7 @@
 package qdrant
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -260,6 +261,25 @@ func TestBuildConditions_NilConditionSet(t *testing.T) {
 	result := buildConditions(nil)
 	if result != nil {
 		t.Errorf("expected nil, got %v", result)
+	}
+}
+
+func TestBuildConditions_FiltersNilConditions(t *testing.T) {
+	// Test that buildConditions filters out nil conditions
+	cs := &ConditionSet{
+		Conditions: []FilterCondition{
+			TextCondition{Key: "city", Value: "London"},
+			TimeRangeCondition{Key: "created_at", Value: TimeRange{}}, // Empty range returns nil
+			TextAnyCondition{Key: "status", Values: []string{}},       // Empty slice returns nil
+			BoolCondition{Key: "active", Value: true},
+		},
+	}
+	result := buildConditions(cs)
+
+	// Should only have 2 conditions (TextCondition and BoolCondition)
+	// Empty TimeRange and empty TextAnyCondition should be filtered out
+	if len(result) != 2 {
+		t.Errorf("expected 2 conditions (nil ones filtered out), got %d", len(result))
 	}
 }
 
@@ -578,6 +598,47 @@ func TestBuildFilter_WithTextAnyCondition(t *testing.T) {
 	}
 }
 
+func TestTextAnyCondition_EmptySlice(t *testing.T) {
+	// Empty slice should return nil
+	c := TextAnyCondition{Key: "city", Values: []string{}}
+	result := c.ToQdrantCondition()
+
+	if result != nil {
+		t.Errorf("expected nil for empty slice, got %v", result)
+	}
+}
+
+func TestIntAnyCondition_EmptySlice(t *testing.T) {
+	// Empty slice should return nil
+	c := IntAnyCondition{Key: "priority", Values: []int64{}}
+	result := c.ToQdrantCondition()
+
+	if result != nil {
+		t.Errorf("expected nil for empty slice, got %v", result)
+	}
+}
+
+func TestBuildFilter_WithEmptyTextAnyCondition(t *testing.T) {
+	// Empty TextAnyCondition should be filtered out
+	filters := &FilterSet{
+		Must: &ConditionSet{
+			Conditions: []FilterCondition{
+				TextAnyCondition{Key: "city", Values: []string{}},
+				TextCondition{Key: "status", Value: "active"},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	// Should only have the TextCondition, empty TextAnyCondition should be filtered out
+	if len(result.Must) != 1 {
+		t.Errorf("expected 1 Must condition (empty one filtered out), got %d", len(result.Must))
+	}
+}
+
 // === MatchExceptCondition Tests ===
 
 func TestTextExceptCondition_ToQdrantCondition(t *testing.T) {
@@ -623,6 +684,47 @@ func TestBuildFilter_WithTextExceptCondition(t *testing.T) {
 	}
 	if len(result.MustNot) != 1 {
 		t.Errorf("expected 1 MustNot condition, got %d", len(result.MustNot))
+	}
+}
+
+func TestTextExceptCondition_EmptySlice(t *testing.T) {
+	// Empty slice should return nil
+	c := TextExceptCondition{Key: "city", Values: []string{}}
+	result := c.ToQdrantCondition()
+
+	if result != nil {
+		t.Errorf("expected nil for empty slice, got %v", result)
+	}
+}
+
+func TestIntExceptCondition_EmptySlice(t *testing.T) {
+	// Empty slice should return nil
+	c := IntExceptCondition{Key: "priority", Values: []int64{}}
+	result := c.ToQdrantCondition()
+
+	if result != nil {
+		t.Errorf("expected nil for empty slice, got %v", result)
+	}
+}
+
+func TestBuildFilter_WithEmptyTextExceptCondition(t *testing.T) {
+	// Empty TextExceptCondition should be filtered out
+	filters := &FilterSet{
+		MustNot: &ConditionSet{
+			Conditions: []FilterCondition{
+				TextExceptCondition{Key: "city", Values: []string{}},
+				BoolCondition{Key: "deleted", Value: true},
+			},
+		},
+	}
+	result := buildFilter(filters)
+
+	if result == nil {
+		t.Fatal("expected filter, got nil")
+	}
+	// Should only have the BoolCondition, empty TextExceptCondition should be filtered out
+	if len(result.MustNot) != 1 {
+		t.Errorf("expected 1 MustNot condition (empty one filtered out), got %d", len(result.MustNot))
 	}
 }
 
@@ -853,6 +955,128 @@ func TestNumericRangeCondition_MarshalJSON(t *testing.T) {
 	}
 	if !contains(jsonStr, `"lessThanOrEqualTo"`) {
 		t.Errorf("expected lessThanOrEqualTo in JSON, got %s", jsonStr)
+	}
+}
+
+func TestTimeRangeCondition_UnmarshalJSON(t *testing.T) {
+	jsonData := `{
+		"field": "created_at",
+		"atOrAfter": "2024-01-01T00:00:00Z",
+		"before": "2024-12-31T00:00:00Z"
+	}`
+
+	var c TimeRangeCondition
+	err := json.Unmarshal([]byte(jsonData), &c)
+	if err != nil {
+		t.Fatalf("UnmarshalJSON failed: %v", err)
+	}
+
+	if c.Key != "created_at" {
+		t.Errorf("expected field 'created_at', got %q", c.Key)
+	}
+	if c.Value.Gte == nil {
+		t.Error("expected Gte to be set")
+	}
+	if c.Value.Lt == nil {
+		t.Error("expected Lt to be set")
+	}
+	if c.Value.Gte != nil {
+		expected := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+		if !c.Value.Gte.Equal(expected) {
+			t.Errorf("expected Gte %v, got %v", expected, c.Value.Gte)
+		}
+	}
+}
+
+func TestTimeRangeCondition_RoundTripJSON(t *testing.T) {
+	startTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+
+	original := TimeRangeCondition{
+		Key: "created_at",
+		Value: TimeRange{
+			Gte: &startTime,
+			Lt:  &endTime,
+		},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var unmarshaled TimeRangeCondition
+	err = json.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if unmarshaled.Key != original.Key {
+		t.Errorf("field mismatch: expected %q, got %q", original.Key, unmarshaled.Key)
+	}
+	if unmarshaled.Value.Gte == nil || !unmarshaled.Value.Gte.Equal(*original.Value.Gte) {
+		t.Errorf("Gte mismatch: expected %v, got %v", original.Value.Gte, unmarshaled.Value.Gte)
+	}
+	if unmarshaled.Value.Lt == nil || !unmarshaled.Value.Lt.Equal(*original.Value.Lt) {
+		t.Errorf("Lt mismatch: expected %v, got %v", original.Value.Lt, unmarshaled.Value.Lt)
+	}
+}
+
+func TestNumericRangeCondition_UnmarshalJSON(t *testing.T) {
+	jsonData := `{
+		"field": "price",
+		"greaterThanOrEqualTo": 100.0,
+		"lessThanOrEqualTo": 500.0
+	}`
+
+	var c NumericRangeCondition
+	err := json.Unmarshal([]byte(jsonData), &c)
+	if err != nil {
+		t.Fatalf("UnmarshalJSON failed: %v", err)
+	}
+
+	if c.Key != "price" {
+		t.Errorf("expected field 'price', got %q", c.Key)
+	}
+	if c.Value.Gte == nil || *c.Value.Gte != 100.0 {
+		t.Errorf("expected Gte to be 100.0, got %v", c.Value.Gte)
+	}
+	if c.Value.Lte == nil || *c.Value.Lte != 500.0 {
+		t.Errorf("expected Lte to be 500.0, got %v", c.Value.Lte)
+	}
+}
+
+func TestNumericRangeCondition_RoundTripJSON(t *testing.T) {
+	minPrice := 100.0
+	maxPrice := 500.0
+
+	original := NumericRangeCondition{
+		Key: "price",
+		Value: NumericRange{
+			Gte: &minPrice,
+			Lte: &maxPrice,
+		},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var unmarshaled NumericRangeCondition
+	err = json.Unmarshal(data, &unmarshaled)
+	if err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if unmarshaled.Key != original.Key {
+		t.Errorf("field mismatch: expected %q, got %q", original.Key, unmarshaled.Key)
+	}
+	if unmarshaled.Value.Gte == nil || *unmarshaled.Value.Gte != *original.Value.Gte {
+		t.Errorf("Gte mismatch: expected %v, got %v", original.Value.Gte, unmarshaled.Value.Gte)
+	}
+	if unmarshaled.Value.Lte == nil || *unmarshaled.Value.Lte != *original.Value.Lte {
+		t.Errorf("Lte mismatch: expected %v, got %v", original.Value.Lte, unmarshaled.Value.Lte)
 	}
 }
 

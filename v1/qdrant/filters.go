@@ -43,12 +43,18 @@ type NumericRange struct {
 	Lte *float64 `json:"lessThanOrEqualTo,omitempty"`    // Less than or equal
 }
 
+// MatchCondition represents an exact match condition for a field value.
+// Supports string, bool, and int64 types. The FieldType defaults to InternalField
+// if not specified, meaning the field is stored at the top level of the payload.
+// Use UserField to indicate the field is stored under the "custom." prefix.
 type MatchCondition[T comparable] struct {
 	Key       string    `json:"field"`
 	Value     T         `json:"equalTo"`
 	FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
 }
 
+// ToQdrantCondition converts the MatchCondition to Qdrant conditions.
+// Supports string, bool, and int64 types. Returns nil for unsupported types.
 func (c MatchCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 	key := resolveFieldKey(c.Key, c.FieldType)
 	switch v := any(c.Value).(type) {
@@ -59,14 +65,14 @@ func (c MatchCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 	case int64:
 		return []*qdrant.Condition{qdrant.NewMatchInt(key, v)}
 	default:
-		//Unsupported type
+		// Unsupported type - returns nil
 		return nil
 	}
-
 }
 
-// MatchAnyCondition matches if value is one of the given values (IN operator)
-// Applicable to keyword (string) and integer payloads
+// MatchAnyCondition matches if value is one of the given values (IN operator).
+// Applicable to keyword (string) and integer payloads.
+// Returns nil if Values is empty. The FieldType defaults to InternalField if not specified.
 type MatchAnyCondition[T string | int64] struct {
 	Key       string    `json:"field"`
 	Values    []T       `json:"anyOf"`
@@ -74,6 +80,9 @@ type MatchAnyCondition[T string | int64] struct {
 }
 
 func (c MatchAnyCondition[T]) ToQdrantCondition() []*qdrant.Condition {
+	if len(c.Values) == 0 {
+		return nil
+	}
 	key := resolveFieldKey(c.Key, c.FieldType)
 	switch v := any(c.Values).(type) {
 	case []string:
@@ -85,8 +94,9 @@ func (c MatchAnyCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 	}
 }
 
-// MatchExceptCondition matches if value is NOT one of the given values (NOT IN operator)
-// Applicable to keyword (string) and integer payloads
+// MatchExceptCondition matches if value is NOT one of the given values (NOT IN operator).
+// Applicable to keyword (string) and integer payloads.
+// Returns nil if Values is empty. The FieldType defaults to InternalField if not specified.
 type MatchExceptCondition[T string | int64] struct {
 	Key       string    `json:"field"`
 	Values    []T       `json:"noneOf"`
@@ -94,6 +104,9 @@ type MatchExceptCondition[T string | int64] struct {
 }
 
 func (c MatchExceptCondition[T]) ToQdrantCondition() []*qdrant.Condition {
+	if len(c.Values) == 0 {
+		return nil
+	}
 	key := resolveFieldKey(c.Key, c.FieldType)
 	switch v := any(c.Values).(type) {
 	case []string:
@@ -141,6 +154,28 @@ func (c TimeRangeCondition) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (c *TimeRangeCondition) UnmarshalJSON(data []byte) error {
+	type Alias struct {
+		Field      string     `json:"field"`
+		After      *time.Time `json:"after,omitempty"`
+		AtOrAfter  *time.Time `json:"atOrAfter,omitempty"`
+		Before     *time.Time `json:"before,omitempty"`
+		AtOrBefore *time.Time `json:"atOrBefore,omitempty"`
+	}
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	c.Key = alias.Field
+	c.Value = TimeRange{
+		Gt:  alias.After,
+		Gte: alias.AtOrAfter,
+		Lt:  alias.Before,
+		Lte: alias.AtOrBefore,
+	}
+	return nil
+}
+
 // NumericRangeCondition represents a numeric range filter
 type NumericRangeCondition struct {
 	Key       string       `json:"field"`
@@ -167,6 +202,28 @@ func (c NumericRangeCondition) MarshalJSON() ([]byte, error) {
 		LessThan:             c.Value.Lt,
 		LessThanOrEqualTo:    c.Value.Lte,
 	})
+}
+
+func (c *NumericRangeCondition) UnmarshalJSON(data []byte) error {
+	type Alias struct {
+		Field                string   `json:"field"`
+		GreaterThan          *float64 `json:"greaterThan,omitempty"`
+		GreaterThanOrEqualTo *float64 `json:"greaterThanOrEqualTo,omitempty"`
+		LessThan             *float64 `json:"lessThan,omitempty"`
+		LessThanOrEqualTo    *float64 `json:"lessThanOrEqualTo,omitempty"`
+	}
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	c.Key = alias.Field
+	c.Value = NumericRange{
+		Gt:  alias.GreaterThan,
+		Gte: alias.GreaterThanOrEqualTo,
+		Lt:  alias.LessThan,
+		Lte: alias.LessThanOrEqualTo,
+	}
+	return nil
 }
 
 // resolveFieldKey returns the full field path based on FieldType
@@ -235,6 +292,7 @@ func buildFilter(filters *FilterSet) *qdrant.Filter {
 }
 
 // buildConditions converts a ConditionSet to Qdrant conditions
+// Filters out nil conditions that may be returned by invalid conditions (e.g., empty ranges)
 func buildConditions(cs *ConditionSet) []*qdrant.Condition {
 	if cs == nil {
 		return nil
@@ -242,7 +300,12 @@ func buildConditions(cs *ConditionSet) []*qdrant.Condition {
 
 	var conditions []*qdrant.Condition
 	for _, c := range cs.Conditions {
-		conditions = append(conditions, c.ToQdrantCondition()...)
+		conds := c.ToQdrantCondition()
+		for _, cond := range conds {
+			if cond != nil {
+				conditions = append(conditions, cond)
+			}
+		}
 	}
 	return conditions
 }
@@ -313,7 +376,10 @@ func (c IsEmptyCondition) ToQdrantCondition() []*qdrant.Condition {
 
 // === Payload Helpers ===
 
-// BuildPayload creates a Qdrant payload with separated internal and user fields
+// BuildPayload creates a Qdrant payload with separated internal and user fields.
+// Internal fields are stored at the top level, while user fields are stored under
+// the "custom" prefix. If internal contains a "custom" key, it will be overwritten
+// by the user fields map.
 func BuildPayload(internal map[string]any, user map[string]any) map[string]any {
 	payload := make(map[string]any)
 
@@ -323,6 +389,7 @@ func BuildPayload(internal map[string]any, user map[string]any) map[string]any {
 	}
 
 	// Add user fields under "custom" prefix
+	// Note: This will overwrite any "custom" key that was in the internal map
 	if len(user) > 0 {
 		payload[UserPayloadPrefix] = user
 	}
