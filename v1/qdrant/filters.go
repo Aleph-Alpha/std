@@ -13,7 +13,7 @@ const UserPayloadPrefix = "custom"
 
 // FilterCondition is the interface for all filter conditions
 type FilterCondition interface {
-	toQdrantCondition() []*qdrant.Condition
+	ToQdrantCondition() []*qdrant.Condition
 }
 
 // FieldType indicates whether a field is internal or user-defined
@@ -40,7 +40,7 @@ type MatchCondition[T comparable] struct {
 	FieldType FieldType // Internal or User field (default: InternalField)
 }
 
-func (c MatchCondition[T]) toQdrantCondition() []*qdrant.Condition {
+func (c MatchCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 	key := resolveFieldKey(c.Key, c.FieldType)
 	switch v := any(c.Value).(type) {
 	case string:
@@ -64,7 +64,7 @@ type MatchAnyCondition[T string | int64] struct {
 	FieldType FieldType
 }
 
-func (c MatchAnyCondition[T]) toQdrantCondition() []*qdrant.Condition {
+func (c MatchAnyCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 	key := resolveFieldKey(c.Key, c.FieldType)
 	switch v := any(c.Values).(type) {
 	case []string:
@@ -84,7 +84,7 @@ type MatchExceptCondition[T string | int64] struct {
 	FieldType FieldType
 }
 
-func (c MatchExceptCondition[T]) toQdrantCondition() []*qdrant.Condition {
+func (c MatchExceptCondition[T]) ToQdrantCondition() []*qdrant.Condition {
 	key := resolveFieldKey(c.Key, c.FieldType)
 	switch v := any(c.Values).(type) {
 	case []string:
@@ -111,7 +111,7 @@ type TimeRangeCondition struct {
 	FieldType FieldType // Internal or User field (default: InternalField)
 }
 
-func (c TimeRangeCondition) toQdrantCondition() []*qdrant.Condition {
+func (c TimeRangeCondition) ToQdrantCondition() []*qdrant.Condition {
 	return buildDateTimeRangeConditions(resolveFieldKey(c.Key, c.FieldType), c.Value)
 }
 
@@ -188,7 +188,7 @@ func buildConditions(cs *ConditionSet) []*qdrant.Condition {
 
 	var conditions []*qdrant.Condition
 	for _, c := range cs.Conditions {
-		conditions = append(conditions, c.toQdrantCondition()...)
+		conditions = append(conditions, c.ToQdrantCondition()...)
 	}
 	return conditions
 }

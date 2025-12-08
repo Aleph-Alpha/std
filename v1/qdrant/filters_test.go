@@ -265,7 +265,7 @@ func TestBuildConditions_NilConditionSet(t *testing.T) {
 
 func TestTextCondition_ToQdrantCondition(t *testing.T) {
 	c := TextCondition{Key: "city", Value: "London"}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -274,7 +274,7 @@ func TestTextCondition_ToQdrantCondition(t *testing.T) {
 
 func TestBoolCondition_ToQdrantCondition(t *testing.T) {
 	c := BoolCondition{Key: "active", Value: true}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -283,7 +283,7 @@ func TestBoolCondition_ToQdrantCondition(t *testing.T) {
 
 func TestIntCondition_ToQdrantCondition(t *testing.T) {
 	c := IntCondition{Key: "priority", Value: 42}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -296,7 +296,7 @@ func TestTimeRangeCondition_ToQdrantCondition(t *testing.T) {
 		Key:   "created_at",
 		Value: TimeRange{Gte: &now},
 	}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -308,7 +308,7 @@ func TestTimeRangeCondition_EmptyRange(t *testing.T) {
 		Key:   "created_at",
 		Value: TimeRange{}, // All nil
 	}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if result != nil {
 		t.Errorf("expected nil for empty time range, got %v", result)
@@ -363,7 +363,7 @@ func TestResolveFieldKey_UserField_PreventDoublePrefix(t *testing.T) {
 
 func TestTextCondition_InternalField(t *testing.T) {
 	c := TextCondition{Key: "search_store_id", Value: "store-123", FieldType: InternalField}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -373,7 +373,7 @@ func TestTextCondition_InternalField(t *testing.T) {
 
 func TestTextCondition_UserField(t *testing.T) {
 	c := TextCondition{Key: "document_id", Value: "doc-456", FieldType: UserField}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -383,7 +383,7 @@ func TestTextCondition_UserField(t *testing.T) {
 
 func TestBoolCondition_UserField(t *testing.T) {
 	c := BoolCondition{Key: "is_reviewed", Value: true, FieldType: UserField}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -392,7 +392,7 @@ func TestBoolCondition_UserField(t *testing.T) {
 
 func TestIntCondition_UserField(t *testing.T) {
 	c := IntCondition{Key: "version", Value: 2, FieldType: UserField}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
@@ -406,7 +406,7 @@ func TestTimeRangeCondition_UserField(t *testing.T) {
 		Value:     TimeRange{Gte: &now},
 		FieldType: UserField,
 	}
-	result := c.toQdrantCondition()
+	result := c.ToQdrantCondition()
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(result))
