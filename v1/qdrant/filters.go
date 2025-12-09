@@ -258,9 +258,9 @@ type ConditionSet struct {
 //	    },
 //	}
 type FilterSet struct {
-	Must    *ConditionSet `json:"with,omitempty"`      // AND - all conditions must match
-	Should  *ConditionSet `json:"withOneOf,omitempty"` // OR - at least one condition must match
-	MustNot *ConditionSet `json:"without,omitempty"`   // NOT - none of the conditions should match
+	Must    *ConditionSet `json:"must,omitempty"`    // AND - all conditions must match
+	Should  *ConditionSet `json:"should,omitempty"`  // OR - at least one condition must match
+	MustNot *ConditionSet `json:"mustNot,omitempty"` // NOT - none of the conditions should match
 }
 
 // buildFilter constructs a Qdrant filter from FilterSet
