@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/Aleph-Alpha/std/compare/v0.6.0...v0.7.0) (2025-12-10)
+
+
+### Features
+
+* Update qdrant documentation to account for filtering ([#25](https://github.com/Aleph-Alpha/std/issues/25)) ([ed42b36](https://github.com/Aleph-Alpha/std/commit/ed42b36f856fef686e3584c7cda3412fb817a4a8))
+
 ## [0.6.0](https://github.com/Aleph-Alpha/std/compare/v0.5.0...v0.6.0) (2025-12-10)
 
 
