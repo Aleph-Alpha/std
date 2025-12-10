@@ -98,6 +98,182 @@ type SearchResult struct { /* implements SearchResultInterface */ }
 func (c *QdrantClient) Search(ctx context.Context, vector []float32, topK int) ([]SearchResultInterface, error)
 ```
 
+### Filtering
+
+The package provides a comprehensive, type\-safe filtering system for vector searches. Filters support boolean logic \(AND, OR, NOT\) and various condition types.
+
+Filter Structure:
+
+```
+type FilterSet struct {
+    Must    *ConditionSet  // AND - all conditions must match
+    Should  *ConditionSet  // OR - at least one condition must match
+    MustNot *ConditionSet  // NOT - none of the conditions should match
+}
+```
+
+Condition Types:
+
+- TextCondition: Exact string match
+- BoolCondition: Exact boolean match
+- IntCondition: Exact integer match
+- TextAnyCondition: String IN operator \(match any of values\)
+- IntAnyCondition: Integer IN operator
+- TextExceptCondition: String NOT IN operator
+- IntExceptCondition: Integer NOT IN operator
+- TimeRangeCondition: DateTime range filter \(gte, lte, gt, lt\)
+- NumericRangeCondition: Numeric range filter
+- IsNullCondition: Check if field is null
+- IsEmptyCondition: Check if field is empty, null, or missing
+
+Field Types \(Internal vs User\):
+
+The package distinguishes between system\-managed and user\-defined metadata:
+
+```
+const (
+    InternalField FieldType = iota  // Top-level: "search_store_id"
+    UserField                        // Nested: "custom.document_id"
+)
+```
+
+User fields are automatically prefixed with "custom." when querying Qdrant.
+
+Basic Filter Example:
+
+```
+// Filter: city = "London" AND active = true
+filters := &qdrant.FilterSet{
+    Must: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.TextCondition{Key: "city", Value: "London"},
+            qdrant.BoolCondition{Key: "active", Value: true},
+        },
+    },
+}
+
+results, err := client.Search(ctx, qdrant.SearchRequest{
+    CollectionName: "documents",
+    Vector:         queryVector,
+    TopK:           10,
+    Filters:        filters,
+})
+```
+
+OR Conditions \(Should\):
+
+```
+// Filter: city = "London" OR city = "Berlin"
+filters := &qdrant.FilterSet{
+    Should: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.TextCondition{Key: "city", Value: "London"},
+            qdrant.TextCondition{Key: "city", Value: "Berlin"},
+        },
+    },
+}
+```
+
+IN Operator \(MatchAny\):
+
+```
+// Filter: city IN ["London", "Berlin", "Paris"]
+filters := &qdrant.FilterSet{
+    Must: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.TextAnyCondition{
+                Key:    "city",
+                Values: []string{"London", "Berlin", "Paris"},
+            },
+        },
+    },
+}
+```
+
+Time Range Filter:
+
+```
+now := time.Now()
+yesterday := now.Add(-24 * time.Hour)
+
+filters := &qdrant.FilterSet{
+    Must: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.TimeRangeCondition{
+                Key: "created_at",
+                Value: qdrant.TimeRange{
+                    Gte: &yesterday,
+                    Lt:  &now,
+                },
+            },
+        },
+    },
+}
+```
+
+Complex Filter \(Combined Clauses\):
+
+```
+// Filter: (status = "published") AND (category = "tech" OR "science") AND NOT (deleted = true)
+filters := &qdrant.FilterSet{
+    Must: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.TextCondition{Key: "status", Value: "published"},
+        },
+    },
+    Should: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.TextCondition{Key: "category", Value: "tech", FieldType: qdrant.UserField},
+            qdrant.TextCondition{Key: "category", Value: "science", FieldType: qdrant.UserField},
+        },
+    },
+    MustNot: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.BoolCondition{Key: "deleted", Value: true},
+        },
+    },
+}
+```
+
+UUID Filtering:
+
+UUIDs are filtered as strings using TextCondition:
+
+```
+filters := &qdrant.FilterSet{
+    Must: &qdrant.ConditionSet{
+        Conditions: []qdrant.FilterCondition{
+            qdrant.TextCondition{
+                Key:       "document_id",
+                Value:     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+                FieldType: qdrant.UserField,
+            },
+        },
+    },
+}
+```
+
+Payload Structure Helper:
+
+The BuildPayload function creates properly structured payloads that separate internal and user fields:
+
+```
+payload := qdrant.BuildPayload(
+    map[string]any{"search_store_id": "store-123"},  // Internal (top-level)
+    map[string]any{"document_id": "doc-456"},        // User (under "custom.")
+)
+
+// Result:
+// {
+//     "search_store_id": "store-123",
+//     "custom": {
+//         "document_id": "doc-456"
+//     }
+// }
+```
+
+This structure ensures user\-defined filter indexes are created at the correct path \(custom.field\_name\).
+
 Configuration:
 
 Qdrant can be configured via environment variables or YAML:
@@ -136,16 +312,23 @@ Package Layout:
 
 ```
 qdrant/
-├── setup.go         // Qdrant client implementation
+├── client.go        // Qdrant client implementation
+├── operations.go    // CRUD operations (Insert, Search, Delete, etc.)
+├── filters.go       // Type-safe filtering system
 ├── utils.go         // Shared types and interfaces
-└── config.go        // Configuration and Fx module definitions
+├── configs.go       // Configuration struct and builder methods
+└── fx_module.go     // Fx dependency injection module
 ```
 
 ## Index
 
+- [Constants](<#constants>)
 - [Variables](<#variables>)
+- [func BuildPayload\(internal map\[string\]any, user map\[string\]any\) map\[string\]any](<#BuildPayload>)
 - [func RegisterQdrantLifecycle\(lc fx.Lifecycle, client \*QdrantClient\)](<#RegisterQdrantLifecycle>)
+- [type BoolCondition](<#BoolCondition>)
 - [type Collection](<#Collection>)
+- [type ConditionSet](<#ConditionSet>)
 - [type Config](<#Config>)
   - [func DefaultConfig\(\) \*Config](<#DefaultConfig>)
   - [func FromEndpoint\(url string\) \*Config](<#FromEndpoint>)
@@ -158,6 +341,27 @@ qdrant/
 - [type Embedding](<#Embedding>)
   - [func NewEmbedding\(input EmbeddingInput\) Embedding](<#NewEmbedding>)
 - [type EmbeddingInput](<#EmbeddingInput>)
+- [type FieldType](<#FieldType>)
+- [type FilterCondition](<#FilterCondition>)
+- [type FilterSet](<#FilterSet>)
+- [type IntAnyCondition](<#IntAnyCondition>)
+- [type IntCondition](<#IntCondition>)
+- [type IntExceptCondition](<#IntExceptCondition>)
+- [type IsEmptyCondition](<#IsEmptyCondition>)
+  - [func \(c IsEmptyCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#IsEmptyCondition.ToQdrantCondition>)
+- [type IsNullCondition](<#IsNullCondition>)
+  - [func \(c IsNullCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#IsNullCondition.ToQdrantCondition>)
+- [type MatchAnyCondition](<#MatchAnyCondition>)
+  - [func \(c MatchAnyCondition\[T\]\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#MatchAnyCondition[T].ToQdrantCondition>)
+- [type MatchCondition](<#MatchCondition>)
+  - [func \(c MatchCondition\[T\]\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#MatchCondition[T].ToQdrantCondition>)
+- [type MatchExceptCondition](<#MatchExceptCondition>)
+  - [func \(c MatchExceptCondition\[T\]\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#MatchExceptCondition[T].ToQdrantCondition>)
+- [type NumericRange](<#NumericRange>)
+- [type NumericRangeCondition](<#NumericRangeCondition>)
+  - [func \(c NumericRangeCondition\) MarshalJSON\(\) \(\[\]byte, error\)](<#NumericRangeCondition.MarshalJSON>)
+  - [func \(c NumericRangeCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#NumericRangeCondition.ToQdrantCondition>)
+  - [func \(c \*NumericRangeCondition\) UnmarshalJSON\(data \[\]byte\) error](<#NumericRangeCondition.UnmarshalJSON>)
 - [type QdrantClient](<#QdrantClient>)
   - [func NewQdrantClient\(p QdrantParams\) \(\*QdrantClient, error\)](<#NewQdrantClient>)
   - [func \(c \*QdrantClient\) BatchInsert\(ctx context.Context, collectionName string, inputs \[\]EmbeddingInput\) error](<#QdrantClient.BatchInsert>)
@@ -178,7 +382,23 @@ qdrant/
   - [func \(r SearchResult\) GetVector\(\) \[\]float32](<#SearchResult.GetVector>)
   - [func \(r SearchResult\) HasVector\(\) bool](<#SearchResult.HasVector>)
 - [type SearchResultInterface](<#SearchResultInterface>)
+- [type TextAnyCondition](<#TextAnyCondition>)
+- [type TextCondition](<#TextCondition>)
+- [type TextExceptCondition](<#TextExceptCondition>)
+- [type TimeRange](<#TimeRange>)
+- [type TimeRangeCondition](<#TimeRangeCondition>)
+  - [func \(c TimeRangeCondition\) MarshalJSON\(\) \(\[\]byte, error\)](<#TimeRangeCondition.MarshalJSON>)
+  - [func \(c TimeRangeCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#TimeRangeCondition.ToQdrantCondition>)
+  - [func \(c \*TimeRangeCondition\) UnmarshalJSON\(data \[\]byte\) error](<#TimeRangeCondition.UnmarshalJSON>)
 
+
+## Constants
+
+<a name="UserPayloadPrefix"></a>UserPayloadPrefix is the prefix for user\-defined metadata fields
+
+```go
+const UserPayloadPrefix = "custom"
+```
 
 ## Variables
 
@@ -212,6 +432,15 @@ var FXModule = fx.Module("qdrant",
 )
 ```
 
+<a name="BuildPayload"></a>
+## func [BuildPayload](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L383>)
+
+```go
+func BuildPayload(internal map[string]any, user map[string]any) map[string]any
+```
+
+BuildPayload creates a Qdrant payload with separated internal and user fields. Internal fields are stored at the top level, while user fields are stored under the "custom" prefix. If internal contains a "custom" key, it will be overwritten by the user fields map.
+
 <a name="RegisterQdrantLifecycle"></a>
 ## func [RegisterQdrantLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/fx_module.go#L54>)
 
@@ -231,10 +460,34 @@ OnStop:
 - Ensures the Qdrant client is closed exactly once.
 - Logs a shutdown message.
 
+<a name="BoolCondition"></a>
+## type [BoolCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L122>)
+
+
+
+```go
+type BoolCondition = MatchCondition[bool] // Exact boolean match
+```
+
 <a name="Collection"></a>
-## type [Collection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L90-L97>)
+## type [Collection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L89-L96>)
 
+Collection ────────────────────────────────────────────────────────────── Collection ──────────────────────────────────────────────────────────────
 
+Collection represents a high\-level, decoupled view of a Qdrant collection.
+
+It provides essential metadata about a vector collection without exposing Qdrant SDK types, allowing the application layer to remain independent of the underlying database implementation.
+
+Fields:
+
+- Name — The unique name of the collection.
+- Status — Current operational state \(e.g., "Green", "Yellow"\).
+- VectorSize — The dimension of stored vectors \(e.g., 1536\).
+- Distance — The similarity metric used \("Cosine", "Dot", "Euclid"\).
+- Vectors — Total number of stored vectors in the collection.
+- Points — Total number of indexed points/documents in the collection.
+
+This struct serves as an abstraction layer between Qdrant's low\-level protobuf models and the higher\-level application logic.
 
 ```go
 type Collection struct {
@@ -244,6 +497,17 @@ type Collection struct {
     Distance   string
     Vectors    uint64
     Points     uint64
+}
+```
+
+<a name="ConditionSet"></a>
+## type [ConditionSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L244-L246>)
+
+ConditionSet holds conditions for a single clause
+
+```go
+type ConditionSet struct {
+    Conditions []FilterCondition `json:"conditions,omitempty"`
 }
 ```
 
@@ -405,6 +669,251 @@ type EmbeddingInput struct {
     Meta   map[string]any // Optional metadata associated with the embedding
 }
 ```
+
+<a name="FieldType"></a>
+## type [FieldType](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L21>)
+
+FieldType indicates whether a field is internal or user\-defined
+
+```go
+type FieldType int
+```
+
+<a name="InternalField"></a>
+
+```go
+const (
+    // InternalField - system-managed fields stored at top-level
+    InternalField FieldType = iota
+    // UserField - user-defined fields stored under "custom." prefix
+    UserField
+)
+```
+
+<a name="FilterCondition"></a>
+## type [FilterCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L16-L18>)
+
+FilterCondition is the interface for all filter conditions
+
+```go
+type FilterCondition interface {
+    ToQdrantCondition() []*qdrant.Condition
+}
+```
+
+<a name="FilterSet"></a>
+## type [FilterSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L260-L264>)
+
+FilterSet supports Must \(AND\), Should \(OR\), and MustNot \(NOT\) clauses. Use with SearchRequest.Filters to filter search results.
+
+Example:
+
+```
+filters := &FilterSet{
+    Must: &ConditionSet{
+        Conditions: []FilterCondition{
+            TextCondition{Key: "city", Value: "London"},
+        },
+    },
+}
+```
+
+```go
+type FilterSet struct {
+    Must    *ConditionSet `json:"must,omitempty"`    // AND - all conditions must match
+    Should  *ConditionSet `json:"should,omitempty"`  // OR - at least one condition must match
+    MustNot *ConditionSet `json:"mustNot,omitempty"` // NOT - none of the conditions should match
+}
+```
+
+<a name="IntAnyCondition"></a>
+## type [IntAnyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L125>)
+
+
+
+```go
+type IntAnyCondition = MatchAnyCondition[int64] // Integer IN operator
+```
+
+<a name="IntCondition"></a>
+## type [IntCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L123>)
+
+
+
+```go
+type IntCondition = MatchCondition[int64] // Exact integer match
+```
+
+<a name="IntExceptCondition"></a>
+## type [IntExceptCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L127>)
+
+
+
+```go
+type IntExceptCondition = MatchExceptCondition[int64] // Integer NOT IN
+```
+
+<a name="IsEmptyCondition"></a>
+## type [IsEmptyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L367-L370>)
+
+IsEmptyCondition checks if a field is empty \(does not exist, null, or \[\]\)
+
+```go
+type IsEmptyCondition struct {
+    Key       string    `json:"field"`
+    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
+}
+```
+
+<a name="IsEmptyCondition.ToQdrantCondition"></a>
+### func \(IsEmptyCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L372>)
+
+```go
+func (c IsEmptyCondition) ToQdrantCondition() []*qdrant.Condition
+```
+
+
+
+<a name="IsNullCondition"></a>
+## type [IsNullCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L356-L359>)
+
+IsNullCondition checks if a field is null
+
+```go
+type IsNullCondition struct {
+    Key       string    `json:"field"`
+    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
+}
+```
+
+<a name="IsNullCondition.ToQdrantCondition"></a>
+### func \(IsNullCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L361>)
+
+```go
+func (c IsNullCondition) ToQdrantCondition() []*qdrant.Condition
+```
+
+
+
+<a name="MatchAnyCondition"></a>
+## type [MatchAnyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L76-L80>)
+
+MatchAnyCondition matches if value is one of the given values \(IN operator\). Applicable to keyword \(string\) and integer payloads. Returns nil if Values is empty. The FieldType defaults to InternalField if not specified.
+
+```go
+type MatchAnyCondition[T string | int64] struct {
+    Key       string    `json:"field"`
+    Values    []T       `json:"anyOf"`
+    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
+}
+```
+
+<a name="MatchAnyCondition[T].ToQdrantCondition"></a>
+### func \(MatchAnyCondition\[T\]\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L82>)
+
+```go
+func (c MatchAnyCondition[T]) ToQdrantCondition() []*qdrant.Condition
+```
+
+
+
+<a name="MatchCondition"></a>
+## type [MatchCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L50-L54>)
+
+MatchCondition represents an exact match condition for a field value. Supports string, bool, and int64 types. The FieldType defaults to InternalField if not specified, meaning the field is stored at the top level of the payload. Use UserField to indicate the field is stored under the "custom." prefix.
+
+```go
+type MatchCondition[T comparable] struct {
+    Key       string    `json:"field"`
+    Value     T         `json:"equalTo"`
+    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
+}
+```
+
+<a name="MatchCondition[T].ToQdrantCondition"></a>
+### func \(MatchCondition\[T\]\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L58>)
+
+```go
+func (c MatchCondition[T]) ToQdrantCondition() []*qdrant.Condition
+```
+
+ToQdrantCondition converts the MatchCondition to Qdrant conditions. Supports string, bool, and int64 types. Returns nil for unsupported types.
+
+<a name="MatchExceptCondition"></a>
+## type [MatchExceptCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L100-L104>)
+
+MatchExceptCondition matches if value is NOT one of the given values \(NOT IN operator\). Applicable to keyword \(string\) and integer payloads. Returns nil if Values is empty. The FieldType defaults to InternalField if not specified.
+
+```go
+type MatchExceptCondition[T string | int64] struct {
+    Key       string    `json:"field"`
+    Values    []T       `json:"noneOf"`
+    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
+}
+```
+
+<a name="MatchExceptCondition[T].ToQdrantCondition"></a>
+### func \(MatchExceptCondition\[T\]\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L106>)
+
+```go
+func (c MatchExceptCondition[T]) ToQdrantCondition() []*qdrant.Condition
+```
+
+
+
+<a name="NumericRange"></a>
+## type [NumericRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L39-L44>)
+
+NumericRange represents a numeric range filter condition
+
+```go
+type NumericRange struct {
+    Gt  *float64 `json:"greaterThan,omitempty"`          // Greater than
+    Gte *float64 `json:"greaterThanOrEqualTo,omitempty"` // Greater than or equal
+    Lt  *float64 `json:"lessThan,omitempty"`             // Less than
+    Lte *float64 `json:"lessThanOrEqualTo,omitempty"`    // Less than or equal
+}
+```
+
+<a name="NumericRangeCondition"></a>
+## type [NumericRangeCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L180-L184>)
+
+NumericRangeCondition represents a numeric range filter
+
+```go
+type NumericRangeCondition struct {
+    Key       string       `json:"field"`
+    Value     NumericRange `json:"-"`
+    FieldType FieldType    `json:"-"`
+}
+```
+
+<a name="NumericRangeCondition.MarshalJSON"></a>
+### func \(NumericRangeCondition\) [MarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L190>)
+
+```go
+func (c NumericRangeCondition) MarshalJSON() ([]byte, error)
+```
+
+
+
+<a name="NumericRangeCondition.ToQdrantCondition"></a>
+### func \(NumericRangeCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L186>)
+
+```go
+func (c NumericRangeCondition) ToQdrantCondition() []*qdrant.Condition
+```
+
+
+
+<a name="NumericRangeCondition.UnmarshalJSON"></a>
+### func \(\*NumericRangeCondition\) [UnmarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L207>)
+
+```go
+func (c *NumericRangeCondition) UnmarshalJSON(data []byte) error
+```
+
+
 
 <a name="QdrantClient"></a>
 ## type [QdrantClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/client.go#L34-L38>)
@@ -582,7 +1091,7 @@ type QdrantParams struct {
 ```
 
 <a name="SearchRequest"></a>
-## type [SearchRequest](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L100-L105>)
+## type [SearchRequest](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L99-L104>)
 
 SearchRequest represents a single search request for batch operations
 
@@ -591,7 +1100,7 @@ type SearchRequest struct {
     CollectionName string
     Vector         []float32
     TopK           int
-    Filters        map[string]string //Optional: key-value filters
+    Filters        *FilterSet // Optional: key-value filters
 }
 ```
 
@@ -679,5 +1188,86 @@ type SearchResultInterface interface {
     GetCollectionName() string         // Name of the Qdrant collection
 }
 ```
+
+<a name="TextAnyCondition"></a>
+## type [TextAnyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L124>)
+
+
+
+```go
+type TextAnyCondition = MatchAnyCondition[string] // String IN operator
+```
+
+<a name="TextCondition"></a>
+## type [TextCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L121>)
+
+
+
+```go
+type TextCondition = MatchCondition[string] // Exact string match
+```
+
+<a name="TextExceptCondition"></a>
+## type [TextExceptCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L126>)
+
+
+
+```go
+type TextExceptCondition = MatchExceptCondition[string] // String NOT IN
+```
+
+<a name="TimeRange"></a>
+## type [TimeRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L31-L36>)
+
+TimeRange represents a time\-based filter condition
+
+```go
+type TimeRange struct {
+    Gt  *time.Time `json:"after,omitempty"`      // Greater than this time
+    Gte *time.Time `json:"atOrAfter,omitempty"`  // Greater than or equal to this time
+    Lt  *time.Time `json:"before,omitempty"`     // Less than this time
+    Lte *time.Time `json:"atOrBefore,omitempty"` // Less than or equal to this time
+}
+```
+
+<a name="TimeRangeCondition"></a>
+## type [TimeRangeCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L130-L134>)
+
+TimeRangeCondition represents a time range filter condition
+
+```go
+type TimeRangeCondition struct {
+    Key       string    `json:"field"`
+    Value     TimeRange `json:"-"`
+    FieldType FieldType `json:"-"`
+}
+```
+
+<a name="TimeRangeCondition.MarshalJSON"></a>
+### func \(TimeRangeCondition\) [MarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L140>)
+
+```go
+func (c TimeRangeCondition) MarshalJSON() ([]byte, error)
+```
+
+
+
+<a name="TimeRangeCondition.ToQdrantCondition"></a>
+### func \(TimeRangeCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L136>)
+
+```go
+func (c TimeRangeCondition) ToQdrantCondition() []*qdrant.Condition
+```
+
+
+
+<a name="TimeRangeCondition.UnmarshalJSON"></a>
+### func \(\*TimeRangeCondition\) [UnmarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L157>)
+
+```go
+func (c *TimeRangeCondition) UnmarshalJSON(data []byte) error
+```
+
+
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)
