@@ -90,6 +90,167 @@
 //	// Function signature:
 //	func (c *QdrantClient) Search(ctx context.Context, vector []float32, topK int) ([]SearchResultInterface, error)
 //
+// # Filtering
+//
+// The package provides a comprehensive, type-safe filtering system for vector searches.
+// Filters support boolean logic (AND, OR, NOT) and various condition types.
+//
+// Filter Structure:
+//
+//	type FilterSet struct {
+//	    Must    *ConditionSet  // AND - all conditions must match
+//	    Should  *ConditionSet  // OR - at least one condition must match
+//	    MustNot *ConditionSet  // NOT - none of the conditions should match
+//	}
+//
+// Condition Types:
+//
+//   - TextCondition: Exact string match
+//   - BoolCondition: Exact boolean match
+//   - IntCondition: Exact integer match
+//   - TextAnyCondition: String IN operator (match any of values)
+//   - IntAnyCondition: Integer IN operator
+//   - TextExceptCondition: String NOT IN operator
+//   - IntExceptCondition: Integer NOT IN operator
+//   - TimeRangeCondition: DateTime range filter (gte, lte, gt, lt)
+//   - NumericRangeCondition: Numeric range filter
+//   - IsNullCondition: Check if field is null
+//   - IsEmptyCondition: Check if field is empty, null, or missing
+//
+// Field Types (Internal vs User):
+//
+// The package distinguishes between system-managed and user-defined metadata:
+//
+//	const (
+//	    InternalField FieldType = iota  // Top-level: "search_store_id"
+//	    UserField                        // Nested: "custom.document_id"
+//	)
+//
+// User fields are automatically prefixed with "custom." when querying Qdrant.
+//
+// Basic Filter Example:
+//
+//	// Filter: city = "London" AND active = true
+//	filters := &qdrant.FilterSet{
+//	    Must: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.TextCondition{Key: "city", Value: "London"},
+//	            qdrant.BoolCondition{Key: "active", Value: true},
+//	        },
+//	    },
+//	}
+//
+//	results, err := client.Search(ctx, qdrant.SearchRequest{
+//	    CollectionName: "documents",
+//	    Vector:         queryVector,
+//	    TopK:           10,
+//	    Filters:        filters,
+//	})
+//
+// OR Conditions (Should):
+//
+//	// Filter: city = "London" OR city = "Berlin"
+//	filters := &qdrant.FilterSet{
+//	    Should: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.TextCondition{Key: "city", Value: "London"},
+//	            qdrant.TextCondition{Key: "city", Value: "Berlin"},
+//	        },
+//	    },
+//	}
+//
+// IN Operator (MatchAny):
+//
+//	// Filter: city IN ["London", "Berlin", "Paris"]
+//	filters := &qdrant.FilterSet{
+//	    Must: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.TextAnyCondition{
+//	                Key:    "city",
+//	                Values: []string{"London", "Berlin", "Paris"},
+//	            },
+//	        },
+//	    },
+//	}
+//
+// Time Range Filter:
+//
+//	now := time.Now()
+//	yesterday := now.Add(-24 * time.Hour)
+//
+//	filters := &qdrant.FilterSet{
+//	    Must: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.TimeRangeCondition{
+//	                Key: "created_at",
+//	                Value: qdrant.TimeRange{
+//	                    Gte: &yesterday,
+//	                    Lt:  &now,
+//	                },
+//	            },
+//	        },
+//	    },
+//	}
+//
+// Complex Filter (Combined Clauses):
+//
+//	// Filter: (status = "published") AND (category = "tech" OR "science") AND NOT (deleted = true)
+//	filters := &qdrant.FilterSet{
+//	    Must: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.TextCondition{Key: "status", Value: "published"},
+//	        },
+//	    },
+//	    Should: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.TextCondition{Key: "category", Value: "tech", FieldType: qdrant.UserField},
+//	            qdrant.TextCondition{Key: "category", Value: "science", FieldType: qdrant.UserField},
+//	        },
+//	    },
+//	    MustNot: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.BoolCondition{Key: "deleted", Value: true},
+//	        },
+//	    },
+//	}
+//
+// UUID Filtering:
+//
+// UUIDs are filtered as strings using TextCondition:
+//
+//	filters := &qdrant.FilterSet{
+//	    Must: &qdrant.ConditionSet{
+//	        Conditions: []qdrant.FilterCondition{
+//	            qdrant.TextCondition{
+//	                Key:       "document_id",
+//	                Value:     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+//	                FieldType: qdrant.UserField,
+//	            },
+//	        },
+//	    },
+//	}
+//
+// Payload Structure Helper:
+//
+// The BuildPayload function creates properly structured payloads that separate
+// internal and user fields:
+//
+//	payload := qdrant.BuildPayload(
+//	    map[string]any{"search_store_id": "store-123"},  // Internal (top-level)
+//	    map[string]any{"document_id": "doc-456"},        // User (under "custom.")
+//	)
+//
+//	// Result:
+//	// {
+//	//     "search_store_id": "store-123",
+//	//     "custom": {
+//	//         "document_id": "doc-456"
+//	//     }
+//	// }
+//
+// This structure ensures user-defined filter indexes are created at the correct
+// path (custom.field_name).
+//
 // Configuration:
 //
 // Qdrant can be configured via environment variables or YAML:
@@ -127,7 +288,10 @@
 // Package Layout:
 //
 //	qdrant/
-//	├── setup.go         // Qdrant client implementation
+//	├── client.go        // Qdrant client implementation
+//	├── operations.go    // CRUD operations (Insert, Search, Delete, etc.)
+//	├── filters.go       // Type-safe filtering system
 //	├── utils.go         // Shared types and interfaces
-//	└── config.go        // Configuration and Fx module definitions
+//	├── configs.go       // Configuration struct and builder methods
+//	└── fx_module.go     // Fx dependency injection module
 package qdrant
