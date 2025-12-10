@@ -77,16 +77,15 @@ type SearchResultInterface interface {
 // of the underlying database implementation.
 //
 // Fields:
-//   • Name        — The unique name of the collection.
-//   • Status      — Current operational state (e.g., "Green", "Yellow").
-//   • VectorSize  — The dimension of stored vectors (e.g., 1536).
-//   • Distance    — The similarity metric used ("Cosine", "Dot", "Euclid").
-//   • Vectors     — Total number of stored vectors in the collection.
-//   • Points      — Total number of indexed points/documents in the collection.
+//   - Name        — The unique name of the collection.
+//   - Status      — Current operational state (e.g., "Green", "Yellow").
+//   - VectorSize  — The dimension of stored vectors (e.g., 1536).
+//   - Distance    — The similarity metric used ("Cosine", "Dot", "Euclid").
+//   - Vectors     — Total number of stored vectors in the collection.
+//   - Points      — Total number of indexed points/documents in the collection.
 //
-// This struct serves as an abstraction layer between Qdrant’s low-level
+// This struct serves as an abstraction layer between Qdrant's low-level
 // protobuf models and the higher-level application logic.
-
 type Collection struct {
 	Name       string
 	Status     string
@@ -101,7 +100,7 @@ type SearchRequest struct {
 	CollectionName string
 	Vector         []float32
 	TopK           int
-	Filters        map[string]string //Optional: key-value filters
+	Filters        *FilterSet // Optional: key-value filters
 }
 
 // validateSearchInput validates common search parameters
@@ -118,31 +117,6 @@ func validateSearchInput(collectionName string, vector []float32, topK int) erro
 	return nil
 }
 
-// buildFilter constructs a Qdrant filter from key-value pairs (AND logic)
-func buildFilter(filters map[string]string) *qdrant.Filter {
-	if len(filters) == 0 {
-		return nil
-	}
-
-	conditions := make([]*qdrant.Condition, 0, len(filters))
-	for key, value := range filters {
-		conditions = append(conditions, &qdrant.Condition{
-			ConditionOneOf: &qdrant.Condition_Field{
-				Field: &qdrant.FieldCondition{
-					Key: key,
-					Match: &qdrant.Match{
-						MatchValue: &qdrant.Match_Keyword{
-							Keyword: value,
-						},
-					},
-				},
-			},
-		})
-	}
-
-	return &qdrant.Filter{Must: conditions}
-}
-
 // extractVectorDetails ──────────────────────────────────────────────────────────────
 // extractVectorDetails
 // ──────────────────────────────────────────────────────────────
@@ -152,12 +126,12 @@ func buildFilter(filters map[string]string) *qdrant.Filter {
 // `CollectionInfo` object.
 //
 // Qdrant represents vector configuration data using a deeply nested protobuf
-// structure with “oneof” wrappers. This helper navigates that hierarchy,
+// structure with "oneof" wrappers. This helper navigates that hierarchy,
 // performs type assertions, and guards against nil pointer dereferences.
 //
 // It returns:
-//   • int    — vector dimension (size of embedding vectors)
-//   • string — distance metric used for similarity search
+//   - int    — vector dimension (size of embedding vectors)
+//   - string — distance metric used for similarity search
 //
 // If any nested field is missing or of an unexpected type, the function
 // gracefully returns default values (0, "").
@@ -166,7 +140,6 @@ func buildFilter(filters map[string]string) *qdrant.Filter {
 //
 //	size, distance := extractVectorDetails(info)
 //	log.Printf("Vector size=%d, distance=%s", size, distance)
-
 func extractVectorDetails(info *qdrant.CollectionInfo) (int, string) {
 	if info == nil ||
 		info.Config == nil ||
@@ -191,4 +164,3 @@ func derefUint64(v *uint64) uint64 {
 	}
 	return 0
 }
-
