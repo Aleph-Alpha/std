@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/Aleph-Alpha/std/compare/v0.5.0...v0.6.0) (2025-12-10)
+
+
+### Features
+
+* **qdrant:** Add filtering system for Qdrant vector searches ([#22](https://github.com/Aleph-Alpha/std/issues/22)) ([1ef9423](https://github.com/Aleph-Alpha/std/commit/1ef94237e77f06272e747f45438e56016a0ffd84))
+
 ## [0.5.0](https://github.com/Aleph-Alpha/std/compare/v0.4.0...v0.5.0) (2025-12-05)
 
 
