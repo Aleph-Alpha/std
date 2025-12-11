@@ -3,6 +3,7 @@ package qdrant
 import (
 	"fmt"
 
+	"github.com/Aleph-Alpha/std/v1/vectordb"
 	qdrant "github.com/qdrant/go-client/qdrant"
 )
 
@@ -100,7 +101,7 @@ type SearchRequest struct {
 	CollectionName string
 	Vector         []float32
 	TopK           int
-	Filters        *FilterSet // Optional: key-value filters
+	Filters        *vectordb.FilterSet // Optional: key-value filters
 }
 
 // validateSearchInput validates common search parameters

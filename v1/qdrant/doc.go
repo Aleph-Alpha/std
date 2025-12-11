@@ -15,8 +15,29 @@
 //   - Type-safe collection creation and existence checks
 //   - Support for payload metadata and optional vector retrieval
 //   - Extensible abstraction layer for alternate vector stores (e.g., Pinecone, Postgres)
+//   - VectorDBAdapter implementing vectordb.VectorDBService for DB-agnostic usage
 //
-// Basic Usage:
+// # VectorDB Interface
+//
+// This package includes [VectorDBAdapter] which implements the database-agnostic
+// [vectordb.VectorDBService] interface. Use this for new projects to enable
+// easy switching between vector databases:
+//
+//	import (
+//	    "github.com/Aleph-Alpha/std/v1/vectordb"
+//	    "github.com/Aleph-Alpha/std/v1/qdrant"
+//	)
+//
+//	// Create your existing QdrantClient
+//	qc, _ := qdrant.NewQdrantClient(params)
+//
+//	// Create adapter for DB-agnostic usage
+//	var db vectordb.VectorDBService = qdrant.NewVectorDBAdapter(qc.API())
+//
+// This allows switching between vector databases (Qdrant, Weaviate, Pinecone) without
+// changing application code.
+//
+// # Basic Usage
 //
 //	import "github.com/Aleph-Alpha/std/v1/qdrant"
 //
