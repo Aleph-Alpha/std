@@ -120,7 +120,7 @@ func (c *QdrantClient) healthCheck() error {
 //
 // Close gracefully shuts down the Qdrant client.
 //
-// Since the official Qdrant Go SDK doesn’t maintain persistent connections,
+// Since the official Qdrant Go SDK doesn't maintain persistent connections,
 // this is currently a no-op. It exists for lifecycle symmetry and future safety.
 func (c *QdrantClient) Close() error {
 	log.Println("[Qdrant] closing client (no-op)")
