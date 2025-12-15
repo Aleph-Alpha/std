@@ -13,7 +13,7 @@ type SearchRequest struct {
 	TopK int `json:"maxResults"`
 
 	// Filters is optional metadata filtering (AND/OR/NOT logic)
-	Filters *FilterSet `json:"filters,omitempty"`
+	Filters []*FilterSet `json:"filters,omitempty"`
 }
 
 // SearchResult represents a single search result with its similarity score.

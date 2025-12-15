@@ -9,14 +9,14 @@ import "context"
 //
 // Example usage:
 //
-//	func NewSearchService(db vectordb.VectorDBService) *SearchService {
+//	func NewSearchService(db vectordb.Service) *SearchService {
 //	    return &SearchService{db: db}
 //	}
 //
 //	// Works with any implementation:
 //	// - vectordb.NewQdrantAdapter(qdrantClient)
 //	// - vectordb.NewWeaviateAdapter(weaviateClient)
-type VectorDBService interface {
+type Service interface {
 	// Search performs similarity search across one or more requests.
 	// Each request can target a different collection with different filters.
 	// Returns a slice of result slices—one []SearchResult per request.
@@ -32,7 +32,7 @@ type VectorDBService interface {
 
 	// Insert adds embeddings to a collection.
 	// Uses batch processing internally for efficiency.
-	Insert(ctx context.Context, collection string, inputs []EmbeddingInput) error
+	Insert(ctx context.Context, collectionName string, inputs []EmbeddingInput) error
 
 	// Delete removes points by their IDs from a collection.
 	Delete(ctx context.Context, collection string, ids []string) error

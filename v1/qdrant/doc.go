@@ -5,22 +5,21 @@
 // collection management, embedding insertion, similarity search, and deletion. It integrates
 // seamlessly with the fx dependency injection framework and supports builder-style configuration.
 //
-// Core Features:
+// # Core Features
 //
 //   - Managed Qdrant client lifecycle with Fx integration
 //   - Config struct supporting environment and YAML loading
 //   - Automatic health checks on client initialization
 //   - Safe, batched insertion of embeddings with configurable batch size
-//   - Vector similarity search with abstracted SearchResult interface
+//   - Database-agnostic interface via vectordb.Service
 //   - Type-safe collection creation and existence checks
 //   - Support for payload metadata and optional vector retrieval
-//   - Extensible abstraction layer for alternate vector stores (e.g., Pinecone, Postgres)
-//   - VectorDBAdapter implementing vectordb.VectorDBService for DB-agnostic usage
+//   - Extensible abstraction layer for alternate vector stores (e.g., Pinecone, Weaviate)
 //
 // # VectorDB Interface
 //
-// This package includes [VectorDBAdapter] which implements the database-agnostic
-// [vectordb.VectorDBService] interface. Use this for new projects to enable
+// This package includes [Adapter] which implements the database-agnostic
+// [vectordb.Service] interface. Use this for new projects to enable
 // easy switching between vector databases:
 //
 //	import (
@@ -29,92 +28,101 @@
 //	)
 //
 //	// Create your existing QdrantClient
-//	qc, _ := qdrant.NewQdrantClient(params)
+//	qc, _ := qdrant.NewQdrantClient(qdrant.QdrantParams{
+//	    Config: &qdrant.Config{
+//	        Endpoint: "localhost",
+//	        Port:     6334,
+//	    },
+//	})
 //
 //	// Create adapter for DB-agnostic usage
-//	var db vectordb.VectorDBService = qdrant.NewVectorDBAdapter(qc.API())
+//	var db vectordb.Service = qdrant.NewAdapter(qc.Client())
 //
 // This allows switching between vector databases (Qdrant, Weaviate, Pinecone) without
 // changing application code.
 //
 // # Basic Usage
 //
-//	import "github.com/Aleph-Alpha/std/v1/qdrant"
+//	import (
+//	    "github.com/Aleph-Alpha/std/v1/qdrant"
+//	    "github.com/Aleph-Alpha/std/v1/vectordb"
+//	)
 //
 //	// Create a new client
 //	client, err := qdrant.NewQdrantClient(qdrant.QdrantParams{
-//		Config: &qdrant.Config{
-//			Endpoint: "localhost:6334",
-//			ApiKey:   "",
-//		},
+//	    Config: &qdrant.Config{
+//	        Endpoint: "localhost",
+//	        Port:     6334,
+//	    },
 //	})
 //	if err != nil {
-//		log.Fatal(err)
+//	    log.Fatal(err)
 //	}
+//
+//	// Create adapter
+//	adapter := qdrant.NewAdapter(client.API())
 //
 //	collectionName := "documents"
 //
-//	// Insert single embedding
-//	input := qdrant.EmbeddingInput{
-//		ID:     "doc_1",
-//		Vector: []float32{0.12, 0.43, 0.85},
-//		Meta:   map[string]any{"title": "My Document"},
-//	}
-//	if err := client.Insert(ctx, collectionName, input); err != nil {
-//		log.Fatal(err)
+//	// Ensure collection exists
+//	if err := adapter.EnsureCollection(ctx, collectionName, 1536); err != nil {
+//	    log.Fatal(err)
 //	}
 //
-//	// Batch insert embeddings
-//	batch := []qdrant.EmbeddingInput{input1, input2, input3}
-//	if err := client.BatchInsert(ctx, collectionName, batch); err != nil {
-//		log.Fatal(err)
+//	// Insert embeddings
+//	inputs := []vectordb.EmbeddingInput{
+//	    {
+//	        ID:      "doc_1",
+//	        Vector:  []float32{0.12, 0.43, 0.85, ...},
+//	        Payload: map[string]any{"title": "My Document"},
+//	    },
+//	}
+//	if err := adapter.Insert(ctx, collectionName, inputs); err != nil {
+//	    log.Fatal(err)
 //	}
 //
 //	// Perform similarity search
-//	results, err := client.Search(ctx, qdrant.SearchRequest{
-//		CollectionName: collectionName,
-//		Vector:         queryVector,
-//		TopK:           5,
+//	results, err := adapter.Search(ctx, vectordb.SearchRequest{
+//	    CollectionName: collectionName,
+//	    Vector:         queryVector,
+//	    TopK:           5,
 //	})
 //	for _, res := range results[0] {
-//		fmt.Printf("ID=%s Score=%.4f\n", res.GetID(), res.GetScore())
+//	    fmt.Printf("ID=%s Score=%.4f\n", res.ID, res.Score)
 //	}
 //
-// FX Module Integration:
+// # FX Module Integration
 //
 // The package exposes an Fx module for automatic dependency injection:
 //
 //	app := fx.New(
-//		qdrant.FXModule,
-//		// other modules...
+//	    qdrant.FXModule,
+//	    // other modules...
 //	)
 //	app.Run()
 //
-// Abstractions:
+// # Search Results
 //
-// The package defines a lightweight SearchResultInterface that encapsulates
-// search results via methods such as GetID(), GetScore(), GetMeta(), and GetCollectionName().
-// The underlying concrete type remains SearchResult, allowing both strong typing internally
-// and loose coupling externally.
+// Search results are returned as [vectordb.SearchResult] structs with public fields:
 //
-// Example:
-//
-//	type SearchResultInterface interface {
-//		GetID() string
-//		GetScore() float32
-//		GetMeta() map[string]*qdrant.Value
-//		GetCollectionName() string
+//	type SearchResult struct {
+//	    ID             string         // Unique identifier of the matched point
+//	    Score          float32        // Similarity score
+//	    Payload        map[string]any // Metadata stored with the vector
+//	    Vector         []float32      // Stored embedding (if requested)
+//	    CollectionName string         // Source collection name
 //	}
 //
-//	type SearchResult struct { /* implements SearchResultInterface */ }
+// Access fields directly (no getter methods needed):
 //
-//	// Function signature:
-//	func (c *QdrantClient) Search(ctx context.Context, vector []float32, topK int) ([]SearchResultInterface, error)
+//	for _, result := range results[0] {
+//	    fmt.Println(result.ID, result.Score, result.Payload["title"])
+//	}
 //
 // # Filtering
 //
-// The package provides a comprehensive, type-safe filtering system for vector searches.
-// Filters support boolean logic (AND, OR, NOT) and various condition types.
+// Filters are defined in the [vectordb] package and support boolean logic (AND, OR, NOT).
+// The qdrant adapter converts these to native Qdrant filters automatically.
 //
 // Filter Structure:
 //
@@ -124,17 +132,13 @@
 //	    MustNot *ConditionSet  // NOT - none of the conditions should match
 //	}
 //
-// Condition Types:
+// Condition Types (all in vectordb package):
 //
-//   - TextCondition: Exact string match
-//   - BoolCondition: Exact boolean match
-//   - IntCondition: Exact integer match
-//   - TextAnyCondition: String IN operator (match any of values)
-//   - IntAnyCondition: Integer IN operator
-//   - TextExceptCondition: String NOT IN operator
-//   - IntExceptCondition: Integer NOT IN operator
-//   - TimeRangeCondition: DateTime range filter (gte, lte, gt, lt)
-//   - NumericRangeCondition: Numeric range filter
+//   - MatchCondition: Exact match (string, bool, int64)
+//   - MatchAnyCondition: IN operator (match any of values)
+//   - MatchExceptCondition: NOT IN operator
+//   - NumericRangeCondition: Numeric range filter (gt, gte, lt, lte)
+//   - TimeRangeCondition: DateTime range filter
 //   - IsNullCondition: Check if field is null
 //   - IsEmptyCondition: Check if field is empty, null, or missing
 //
@@ -143,176 +147,172 @@
 // The package distinguishes between system-managed and user-defined metadata:
 //
 //	const (
-//	    InternalField FieldType = iota  // Top-level: "search_store_id"
-//	    UserField                        // Nested: "custom.document_id"
+//	    InternalField FieldType = iota  // Top-level: "status"
+//	    UserField                        // Prefixed: "custom.document_id"
 //	)
 //
 // User fields are automatically prefixed with "custom." when querying Qdrant.
 //
-// Basic Filter Example:
+// # Filter Examples Using Convenience Constructors
+//
+// The vectordb package provides convenience constructors for clean filter creation:
+//
+// Basic Filter (Must - AND logic):
 //
 //	// Filter: city = "London" AND active = true
-//	filters := &qdrant.FilterSet{
-//	    Must: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.TextCondition{Key: "city", Value: "London"},
-//	            qdrant.BoolCondition{Key: "active", Value: true},
-//	        },
-//	    },
-//	}
-//
-//	results, err := client.Search(ctx, qdrant.SearchRequest{
+//	results, err := adapter.Search(ctx, vectordb.SearchRequest{
 //	    CollectionName: "documents",
 //	    Vector:         queryVector,
 //	    TopK:           10,
-//	    Filters:        filters,
+//	    Filters: []*vectordb.FilterSet{
+//	        vectordb.NewFilterSet(
+//	            vectordb.Must(
+//	                vectordb.NewMatch("city", "London"),
+//	                vectordb.NewMatch("active", true),
+//	            ),
+//	        ),
+//	    },
 //	})
 //
 // OR Conditions (Should):
 //
 //	// Filter: city = "London" OR city = "Berlin"
-//	filters := &qdrant.FilterSet{
-//	    Should: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.TextCondition{Key: "city", Value: "London"},
-//	            qdrant.TextCondition{Key: "city", Value: "Berlin"},
-//	        },
-//	    },
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(
+//	        vectordb.Should(
+//	            vectordb.NewMatch("city", "London"),
+//	            vectordb.NewMatch("city", "Berlin"),
+//	        ),
+//	    ),
 //	}
 //
 // IN Operator (MatchAny):
 //
 //	// Filter: city IN ["London", "Berlin", "Paris"]
-//	filters := &qdrant.FilterSet{
-//	    Must: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.TextAnyCondition{
-//	                Key:    "city",
-//	                Values: []string{"London", "Berlin", "Paris"},
-//	            },
-//	        },
-//	    },
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(
+//	        vectordb.Must(
+//	            vectordb.NewMatchAny("city", "London", "Berlin", "Paris"),
+//	        ),
+//	    ),
+//	}
+//
+// Numeric Range Filter:
+//
+//	// Filter: price >= 100 AND price < 500
+//	min, max := float64(100), float64(500)
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(
+//	        vectordb.Must(
+//	            vectordb.NewNumericRange("price", vectordb.NumericRange{
+//	                Gte: &min,
+//	                Lt:  &max,
+//	            }),
+//	        ),
+//	    ),
 //	}
 //
 // Time Range Filter:
 //
+//	// Filter: created_at >= yesterday AND created_at < now
 //	now := time.Now()
 //	yesterday := now.Add(-24 * time.Hour)
-//
-//	filters := &qdrant.FilterSet{
-//	    Must: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.TimeRangeCondition{
-//	                Key: "created_at",
-//	                Value: qdrant.TimeRange{
-//	                    Gte: &yesterday,
-//	                    Lt:  &now,
-//	                },
-//	            },
-//	        },
-//	    },
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(
+//	        vectordb.Must(
+//	            vectordb.NewTimeRange("created_at", vectordb.TimeRange{
+//	                Gte: &yesterday,
+//	                Lt:  &now,
+//	            }),
+//	        ),
+//	    ),
 //	}
 //
 // Complex Filter (Combined Clauses):
 //
-//	// Filter: (status = "published") AND (category = "tech" OR "science") AND NOT (deleted = true)
-//	filters := &qdrant.FilterSet{
-//	    Must: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.TextCondition{Key: "status", Value: "published"},
-//	        },
-//	    },
-//	    Should: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.TextCondition{Key: "category", Value: "tech", FieldType: qdrant.UserField},
-//	            qdrant.TextCondition{Key: "category", Value: "science", FieldType: qdrant.UserField},
-//	        },
-//	    },
-//	    MustNot: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.BoolCondition{Key: "deleted", Value: true},
-//	        },
-//	    },
+//	// Filter: status = "published" AND (tag = "ml" OR tag = "ai") AND NOT deleted = true
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(
+//	        vectordb.Must(vectordb.NewMatch("status", "published")),
+//	        vectordb.Should(
+//	            vectordb.NewMatch("tag", "ml"),
+//	            vectordb.NewMatch("tag", "ai"),
+//	        ),
+//	        vectordb.MustNot(vectordb.NewMatch("deleted", true)),
+//	    ),
 //	}
 //
-// UUID Filtering:
+// User-Defined Fields:
 //
-// UUIDs are filtered as strings using TextCondition:
+// For fields stored under a custom prefix, use the User* constructors:
 //
-//	filters := &qdrant.FilterSet{
-//	    Must: &qdrant.ConditionSet{
-//	        Conditions: []qdrant.FilterCondition{
-//	            qdrant.TextCondition{
-//	                Key:       "document_id",
-//	                Value:     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-//	                FieldType: qdrant.UserField,
-//	            },
-//	        },
-//	    },
+//	// Filter on user-defined field: custom.document_id = "doc-123"
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(
+//	        vectordb.Must(
+//	            vectordb.NewUserMatch("document_id", "doc-123"),
+//	        ),
+//	    ),
 //	}
 //
-// Payload Structure Helper:
+// Multiple FilterSets (AND between sets):
 //
-// The BuildPayload function creates properly structured payloads that separate
-// internal and user fields:
+// When you provide multiple FilterSets, they are combined with AND logic:
 //
-//	payload := qdrant.BuildPayload(
-//	    map[string]any{"search_store_id": "store-123"},  // Internal (top-level)
-//	    map[string]any{"document_id": "doc-456"},        // User (under "custom.")
-//	)
+//	// Filter: (color = "red") AND (size < 20)
+//	lt := float64(20)
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(vectordb.Must(vectordb.NewMatch("color", "red"))),
+//	    vectordb.NewFilterSet(vectordb.Must(vectordb.NewNumericRange("size", vectordb.NumericRange{Lt: &lt}))),
+//	}
 //
-//	// Result:
-//	// {
-//	//     "search_store_id": "store-123",
-//	//     "custom": {
-//	//         "document_id": "doc-456"
-//	//     }
-//	// }
-//
-// This structure ensures user-defined filter indexes are created at the correct
-// path (custom.field_name).
-//
-// Configuration:
+// # Configuration
 //
 // Qdrant can be configured via environment variables or YAML:
 //
-//	QDRANT_ENDPOINT=http://localhost:6334
+//	QDRANT_ENDPOINT=localhost
+//	QDRANT_PORT=6334
 //	QDRANT_API_KEY=your-api-key
 //
-// Performance Considerations:
+// # Performance Considerations
 //
-// The BatchInsert method automatically splits large embedding inserts into smaller
-// upserts (default batch size = 500). This minimizes memory usage and avoids timeouts
+// The Insert method automatically splits large embedding batches into smaller
+// upserts (default batch size = 100). This minimizes memory usage and avoids timeouts
 // when ingesting large datasets.
 //
-// Thread Safety:
+// # Thread Safety
 //
-// All exported methods on QdrantClient are safe for concurrent use by multiple goroutines.
+// All exported methods on the Adapter are safe for concurrent use by multiple goroutines.
 //
-// Testing:
+// # Testing
 //
-// For testing and mocking, application code should depend on the public interface types
-// (e.g., SearchResultInterface, EmbeddingInput) instead of concrete Qdrant structs.
-// This allows replacing the QdrantClient with in-memory or mock implementations in tests.
+// For testing and mocking, depend on the [vectordb.Service] interface:
 //
-// Example Mock:
+//	type MockVectorDB struct{}
 //
-//	type MockResult struct {
-//		id    string
-//		score float32
-//		meta  map[string]any
+//	func (m *MockVectorDB) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, error) {
+//	    return [][]vectordb.SearchResult{
+//	        {{ID: "doc-1", Score: 0.95, Payload: map[string]any{"title": "Test"}}},
+//	    }, nil
 //	}
-//	func (m MockResult) GetID() string           { return m.id }
-//	func (m MockResult) GetScore() float32       { return m.score }
-//	func (m MockResult) GetMeta() map[string]any { return m.meta }
 //
-// Package Layout:
+//	// Use in tests:
+//	var db vectordb.Service = &MockVectorDB{}
+//
+// # Package Layout
 //
 //	qdrant/
-//	├── client.go        // Qdrant client implementation
-//	├── operations.go    // CRUD operations (Insert, Search, Delete, etc.)
-//	├── filters.go       // Type-safe filtering system
-//	├── utils.go         // Shared types and interfaces
-//	├── configs.go       // Configuration struct and builder methods
+//	├── client.go        // Qdrant client wrapper and lifecycle
+//	├── operations.go    // Service implementation (Adapter)
+//	├── converter.go     // vectordb ↔ Qdrant type conversion
+//	├── utils.go         // Qdrant-specific helper functions
+//	├── configs.go       // Configuration struct
 //	└── fx_module.go     // Fx dependency injection module
+//
+// # Related Packages
+//
+//   - [vectordb]: Database-agnostic types and interfaces
+//   - [vectordb.FilterSet]: Filter structures for search queries
+//   - [vectordb.SearchResult]: Search result type
+//   - [vectordb.EmbeddingInput]: Input type for inserting vectors
 package qdrant

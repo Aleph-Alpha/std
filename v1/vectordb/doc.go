@@ -2,7 +2,7 @@
 //
 // # Overview
 //
-// This package defines a common interface [VectorDBService] that can be implemented
+// This package defines a common interface [Service] that can be implemented
 // by different vector database adapters (Qdrant, Weaviate, Pinecone, etc.), allowing
 // applications to switch between databases without changing application code.
 //
@@ -10,12 +10,12 @@
 //
 //	┌─────────────────────────────────────────────────────────────┐
 //	│                    Application Layer                        │
-//	│  (uses vectordb.VectorDBService - no DB-specific imports)  │
+//	│  (uses vectordb.Service - no DB-specific imports)  │
 //	└──────────────────────────┬──────────────────────────────────┘
 //	                           │
 //	                           ▼
 //	┌─────────────────────────────────────────────────────────────┐
-//	│                  vectordb.VectorDBService                   │
+//	│                  vectordb.Service                   │
 //	│          (common interface + DB-agnostic types)             │
 //	└──────────────────────────┬──────────────────────────────────┘
 //	                           │
@@ -40,10 +40,10 @@
 //	import "github.com/Aleph-Alpha/std/v1/vectordb"
 //
 //	type SearchService struct {
-//	    db vectordb.VectorDBService
+//	    db vectordb.Service
 //	}
 //
-//	func NewSearchService(db vectordb.VectorDBService) *SearchService {
+//	func NewSearchService(db vectordb.Service) *SearchService {
 //	    return &SearchService{db: db}
 //	}
 //
@@ -52,10 +52,12 @@
 //	        CollectionName: "documents",
 //	        Vector:         vector,
 //	        TopK:           10,
-//	        Filters: &vectordb.FilterSet{
-//	            Must: &vectordb.ConditionSet{
-//	                Conditions: []vectordb.FilterCondition{
-//	                    vectordb.NewMatch("status", "published"),
+//	        Filters: []*vectordb.FilterSet{
+//	            {
+//	                Must: &vectordb.ConditionSet{
+//	                    Conditions: []vectordb.FilterCondition{
+//	                        vectordb.NewMatch("status", "published"),
+//	                    },
 //	                },
 //	            },
 //	        },
@@ -68,7 +70,7 @@
 //
 // # Wire Up with Qdrant
 //
-// In your main or DI setup:
+// In your main setup:
 //
 //	import (
 //	    "github.com/Aleph-Alpha/std/v1/vectordb"
@@ -82,7 +84,7 @@
 //	    })
 //
 //	    // Create adapter for DB-agnostic usage
-//	    db := qdrant.NewVectorDBAdapter(qc.API())
+//	    db := qdrant.NewAdapter(qc.Client())
 //
 //	    // Use in application
 //	    svc := NewSearchService(db)
@@ -92,17 +94,16 @@
 // # Package Layout
 //
 //	vectordb/
-//	├── interface.go      # VectorDBService interface
+//	├── interface.go      # Service interface
 //	├── types.go          # SearchRequest, SearchResult, EmbeddingInput, Collection
-//	├── filters.go        # FilterSet, FilterCondition, convenience constructors
+//	├── filters.go        # FilterSet, FilterCondition, and condition types
+//	├── utils.go          # Convenience constructors (New*) and JSON helpers
 //	└── doc.go            # This file
 //
 //	qdrant/                      # Qdrant package (includes adapter)
 //	├── client.go                # QdrantClient wrapper
-//	├── adapter.go               # VectorDBAdapter - implements VectorDBService
-//	├── vectordb_converter.go    # vectordb types → qdrant types
-//	├── operations.go            # Direct Qdrant operations
-//	├── filters.go               # Qdrant-specific filters
+//	├── operations.go            # Adapter - implements Service
+//	├── converter.go             # vectordb types → qdrant types
 //	└── ...
 //
 // Future adapters would live in their own packages:
@@ -132,7 +133,7 @@
 //	// User-defined field (stored under "custom." prefix)
 //	vectordb.NewUserMatch("category", "research")
 //
-//	// Range conditions
-//	vectordb.NewNumericRange("price", &min, &max)
-//	vectordb.NewTimeRange("created_at", &startTime, &endTime)
+//	// Range conditions with NumericRange/TimeRange structs
+//	vectordb.NewNumericRange("price", vectordb.NumericRange{Gte: &min, Lt: &max})
+//	vectordb.NewTimeRange("created_at", vectordb.TimeRange{AtOrAfter: &start, Before: &end})
 package vectordb

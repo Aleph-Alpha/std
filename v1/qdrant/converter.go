@@ -135,30 +135,28 @@ func convertVectorDBMatchAnyCondition(c *vectordb.MatchAnyCondition) []*qdrant.C
 	key := resolveVectorDBFieldKey(c.Field, c.FieldType)
 
 	// Detect type from first value
-	if len(c.Values) > 0 {
-		switch c.Values[0].(type) {
-		case string:
-			strs := make([]string, len(c.Values))
-			for i, v := range c.Values {
-				if s, ok := v.(string); ok {
-					strs[i] = s
-				}
+	switch c.Values[0].(type) {
+	case string:
+		strs := make([]string, len(c.Values))
+		for i, v := range c.Values {
+			if s, ok := v.(string); ok {
+				strs[i] = s
 			}
-			return []*qdrant.Condition{qdrant.NewMatchKeywords(key, strs...)}
-		case int, int64, float64:
-			ints := make([]int64, len(c.Values))
-			for i, v := range c.Values {
-				switch n := v.(type) {
-				case int:
-					ints[i] = int64(n)
-				case int64:
-					ints[i] = n
-				case float64:
-					ints[i] = int64(n)
-				}
-			}
-			return []*qdrant.Condition{qdrant.NewMatchInts(key, ints...)}
 		}
+		return []*qdrant.Condition{qdrant.NewMatchKeywords(key, strs...)}
+	case int, int64, float64:
+		ints := make([]int64, len(c.Values))
+		for i, v := range c.Values {
+			switch n := v.(type) {
+			case int:
+				ints[i] = int64(n)
+			case int64:
+				ints[i] = n
+			case float64:
+				ints[i] = int64(n)
+			}
+		}
+		return []*qdrant.Condition{qdrant.NewMatchInts(key, ints...)}
 	}
 	return nil
 }
@@ -170,30 +168,28 @@ func convertVectorDBMatchExceptCondition(c *vectordb.MatchExceptCondition) []*qd
 	key := resolveVectorDBFieldKey(c.Field, c.FieldType)
 
 	// Detect type from first value
-	if len(c.Values) > 0 {
-		switch c.Values[0].(type) {
-		case string:
-			strs := make([]string, len(c.Values))
-			for i, v := range c.Values {
-				if s, ok := v.(string); ok {
-					strs[i] = s
-				}
+	switch c.Values[0].(type) {
+	case string:
+		strs := make([]string, len(c.Values))
+		for i, v := range c.Values {
+			if s, ok := v.(string); ok {
+				strs[i] = s
 			}
-			return []*qdrant.Condition{qdrant.NewMatchExceptKeywords(key, strs...)}
-		case int, int64, float64:
-			ints := make([]int64, len(c.Values))
-			for i, v := range c.Values {
-				switch n := v.(type) {
-				case int:
-					ints[i] = int64(n)
-				case int64:
-					ints[i] = n
-				case float64:
-					ints[i] = int64(n)
-				}
-			}
-			return []*qdrant.Condition{qdrant.NewMatchExceptInts(key, ints...)}
 		}
+		return []*qdrant.Condition{qdrant.NewMatchExceptKeywords(key, strs...)}
+	case int, int64, float64:
+		ints := make([]int64, len(c.Values))
+		for i, v := range c.Values {
+			switch n := v.(type) {
+			case int:
+				ints[i] = int64(n)
+			case int64:
+				ints[i] = n
+			case float64:
+				ints[i] = int64(n)
+			}
+		}
+		return []*qdrant.Condition{qdrant.NewMatchExceptInts(key, ints...)}
 	}
 	return nil
 }
@@ -201,10 +197,10 @@ func convertVectorDBMatchExceptCondition(c *vectordb.MatchExceptCondition) []*qd
 func convertVectorDBNumericRangeCondition(c *vectordb.NumericRangeCondition) []*qdrant.Condition {
 	key := resolveVectorDBFieldKey(c.Field, c.FieldType)
 	rangeFilter := &qdrant.Range{
-		Gt:  c.GreaterThan,
-		Gte: c.GreaterThanOrEqualTo,
-		Lt:  c.LessThan,
-		Lte: c.LessThanOrEqualTo,
+		Gt:  c.Range.Gt,
+		Gte: c.Range.Gte,
+		Lt:  c.Range.Lt,
+		Lte: c.Range.Lte,
 	}
 
 	if rangeFilter.Gt == nil && rangeFilter.Gte == nil &&
@@ -218,10 +214,10 @@ func convertVectorDBNumericRangeCondition(c *vectordb.NumericRangeCondition) []*
 func convertVectorDBTimeRangeCondition(c *vectordb.TimeRangeCondition) []*qdrant.Condition {
 	key := resolveVectorDBFieldKey(c.Field, c.FieldType)
 	dateRange := &qdrant.DatetimeRange{
-		Gt:  toVectorDBTimestamp(c.After),
-		Gte: toVectorDBTimestamp(c.AtOrAfter),
-		Lt:  toVectorDBTimestamp(c.Before),
-		Lte: toVectorDBTimestamp(c.AtOrBefore),
+		Gt:  toVectorDBTimestamp(c.Range.Gt),
+		Gte: toVectorDBTimestamp(c.Range.Gte),
+		Lt:  toVectorDBTimestamp(c.Range.Lt),
+		Lte: toVectorDBTimestamp(c.Range.Lte),
 	}
 
 	if dateRange.Gt == nil && dateRange.Gte == nil &&
@@ -265,7 +261,7 @@ func toVectorDBTimestamp(t *time.Time) *timestamppb.Timestamp {
 // ── Result Conversion ────────────────────────────────────────────────────────
 
 // parseVectorDBSearchResults converts Qdrant response to vectordb.SearchResult slice.
-func parseVectorDBSearchResults(resp []*qdrant.ScoredPoint, collectionName string) ([]vectordb.SearchResult, error) {
+func parseVectorDBSearchResults(resp []*qdrant.ScoredPoint) ([]vectordb.SearchResult, error) {
 	results := make([]vectordb.SearchResult, 0, len(resp))
 	for _, r := range resp {
 		id, err := extractVectorDBPointID(r.Id)
@@ -274,10 +270,9 @@ func parseVectorDBSearchResults(resp []*qdrant.ScoredPoint, collectionName strin
 		}
 
 		results = append(results, vectordb.SearchResult{
-			ID:             id,
-			Score:          r.Score,
-			Payload:        convertVectorDBPayload(r.Payload),
-			CollectionName: collectionName,
+			ID:      id,
+			Score:   r.Score,
+			Payload: convertVectorDBPayload(r.Payload),
 		})
 	}
 	return results, nil
@@ -343,4 +338,34 @@ func extractVectorDBValue(v *qdrant.Value) any {
 	default:
 		return nil
 	}
+}
+
+// convertVectorDBFilterSets converts an array of FilterSets to a single Qdrant filter.
+// Multiple filter sets are combined with AND logic (all must match).
+func convertVectorDBFilterSets(filters []*vectordb.FilterSet) *qdrant.Filter {
+	if len(filters) == 0 {
+		return nil
+	}
+
+	// Single filter set - convert directly
+	if len(filters) == 1 {
+		return convertVectorDBFilterSet(filters[0])
+	}
+
+	// Multiple filter sets - combine with AND
+	var allConditions []*qdrant.Condition
+	for _, fs := range filters {
+		converted := convertVectorDBFilterSet(fs)
+		if converted != nil {
+			allConditions = append(allConditions, &qdrant.Condition{
+				ConditionOneOf: &qdrant.Condition_Filter{Filter: converted},
+			})
+		}
+	}
+
+	if len(allConditions) == 0 {
+		return nil
+	}
+
+	return &qdrant.Filter{Must: allConditions}
 }

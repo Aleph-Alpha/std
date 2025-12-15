@@ -81,33 +81,125 @@ type MatchExceptCondition struct {
 
 func (c *MatchExceptCondition) isFilterCondition() {}
 
+// ── Range Types ──────────────────────────────────────────────────────────────
+
+// NumericRange defines bounds for numeric filtering.
+// Used with NewNumericRange for cleaner constructor calls.
+type NumericRange struct {
+	Gt  *float64 `json:"greaterThan,omitempty"`          // GreaterThan (exclusive)
+	Gte *float64 `json:"greaterThanOrEqualTo,omitempty"` // GreaterThanOrEqualTo (inclusive)
+	Lt  *float64 `json:"lessThan,omitempty"`             // LessThan (exclusive)
+	Lte *float64 `json:"lessThanOrEqualTo,omitempty"`    // LessThanOrEqualTo (inclusive)
+}
+
+// TimeRange defines bounds for time filtering.
+// Used with NewTimeRange for cleaner constructor calls.
+type TimeRange struct {
+	Gt  *time.Time `json:"after,omitempty"`      // After (exclusive)
+	Gte *time.Time `json:"atOrAfter,omitempty"`  // AtOrAfter (inclusive)
+	Lt  *time.Time `json:"before,omitempty"`     // Before (exclusive)
+	Lte *time.Time `json:"atOrBefore,omitempty"` // AtOrBefore (inclusive)
+}
+
 // ── Range Conditions ─────────────────────────────────────────────────────────
 
 // NumericRangeCondition filters by numeric range.
 // SQL equivalent: WHERE field >= min AND field <= max
 type NumericRangeCondition struct {
-	Field                string    `json:"field"`
-	GreaterThan          *float64  `json:"greaterThan,omitempty"`
-	GreaterThanOrEqualTo *float64  `json:"greaterThanOrEqualTo,omitempty"`
-	LessThan             *float64  `json:"lessThan,omitempty"`
-	LessThanOrEqualTo    *float64  `json:"lessThanOrEqualTo,omitempty"`
-	FieldType            FieldType `json:"-"`
+	Field     string       `json:"field"`
+	Range     NumericRange `json:"-"`
+	FieldType FieldType    `json:"-"`
 }
 
 func (c *NumericRangeCondition) isFilterCondition() {}
 
+func (c *NumericRangeCondition) MarshalJSON() ([]byte, error) {
+	type Alias struct {
+		Field                string   `json:"field"`
+		GreaterThan          *float64 `json:"greaterThan,omitempty"`
+		GreaterThanOrEqualTo *float64 `json:"greaterThanOrEqualTo,omitempty"`
+		LessThan             *float64 `json:"lessThan,omitempty"`
+		LessThanOrEqualTo    *float64 `json:"lessThanOrEqualTo,omitempty"`
+	}
+	return json.Marshal(Alias{
+		Field:                c.Field,
+		GreaterThan:          c.Range.Gt,
+		GreaterThanOrEqualTo: c.Range.Gte,
+		LessThan:             c.Range.Lt,
+		LessThanOrEqualTo:    c.Range.Lte,
+	})
+}
+
+func (c *NumericRangeCondition) UnmarshalJSON(data []byte) error {
+	type Alias struct {
+		Field                string   `json:"field"`
+		GreaterThan          *float64 `json:"greaterThan,omitempty"`
+		GreaterThanOrEqualTo *float64 `json:"greaterThanOrEqualTo,omitempty"`
+		LessThan             *float64 `json:"lessThan,omitempty"`
+		LessThanOrEqualTo    *float64 `json:"lessThanOrEqualTo,omitempty"`
+	}
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	c.Field = alias.Field
+	c.Range = NumericRange{
+		Gt:  alias.GreaterThan,
+		Gte: alias.GreaterThanOrEqualTo,
+		Lt:  alias.LessThan,
+		Lte: alias.LessThanOrEqualTo,
+	}
+	return nil
+}
+
 // TimeRangeCondition filters by datetime range.
 // SQL equivalent: WHERE created_at >= '2024-01-01' AND created_at < '2025-01-01'
 type TimeRangeCondition struct {
-	Field      string     `json:"field"`
-	After      *time.Time `json:"after,omitempty"`
-	AtOrAfter  *time.Time `json:"atOrAfter,omitempty"`
-	Before     *time.Time `json:"before,omitempty"`
-	AtOrBefore *time.Time `json:"atOrBefore,omitempty"`
-	FieldType  FieldType  `json:"-"`
+	Field     string    `json:"field"`
+	Range     TimeRange `json:"-"`
+	FieldType FieldType `json:"-"`
 }
 
 func (c *TimeRangeCondition) isFilterCondition() {}
+
+func (c TimeRangeCondition) MarshalJSON() ([]byte, error) {
+	type Alias struct {
+		Field      string     `json:"field"`
+		After      *time.Time `json:"after,omitempty"`
+		AtOrAfter  *time.Time `json:"atOrAfter,omitempty"`
+		Before     *time.Time `json:"before,omitempty"`
+		AtOrBefore *time.Time `json:"atOrBefore,omitempty"`
+	}
+	return json.Marshal(Alias{
+		Field:      c.Field,
+		After:      c.Range.Gt,
+		AtOrAfter:  c.Range.Gte,
+		Before:     c.Range.Lt,
+		AtOrBefore: c.Range.Lte,
+	})
+}
+
+func (c *TimeRangeCondition) UnmarshalJSON(data []byte) error {
+	type Alias struct {
+		Field      string     `json:"field"`
+		After      *time.Time `json:"after,omitempty"`
+		AtOrAfter  *time.Time `json:"atOrAfter,omitempty"`
+		Before     *time.Time `json:"before,omitempty"`
+		AtOrBefore *time.Time `json:"atOrBefore,omitempty"`
+	}
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	c.Field = alias.Field
+	c.Range = TimeRange{
+		Gt:  alias.After,
+		Gte: alias.AtOrAfter,
+		Lt:  alias.Before,
+		Lte: alias.AtOrBefore,
+	}
+	return nil
+}
 
 // ── Null/Empty Conditions ────────────────────────────────────────────────────
 
@@ -128,113 +220,3 @@ type IsEmptyCondition struct {
 }
 
 func (c *IsEmptyCondition) isFilterCondition() {}
-
-// ── Convenience Constructors ─────────────────────────────────────────────────
-
-// NewMatch creates a match condition for internal fields.
-func NewMatch(field string, value any) *MatchCondition {
-	return &MatchCondition{Field: field, Value: value, FieldType: InternalField}
-}
-
-// NewUserMatch creates a match condition for user-defined fields.
-func NewUserMatch(field string, value any) *MatchCondition {
-	return &MatchCondition{Field: field, Value: value, FieldType: UserField}
-}
-
-// NewMatchAny creates an IN condition for internal fields.
-func NewMatchAny(field string, values ...any) *MatchAnyCondition {
-	return &MatchAnyCondition{Field: field, Values: values, FieldType: InternalField}
-}
-
-// NewUserMatchAny creates an IN condition for user-defined fields.
-func NewUserMatchAny(field string, values ...any) *MatchAnyCondition {
-	return &MatchAnyCondition{Field: field, Values: values, FieldType: UserField}
-}
-
-// NewMatchExcept creates a NOT IN condition for internal fields.
-func NewMatchExcept(field string, values ...any) *MatchExceptCondition {
-	return &MatchExceptCondition{Field: field, Values: values, FieldType: InternalField}
-}
-
-// NewUserMatchExcept creates a NOT IN condition for user-defined fields.
-func NewUserMatchExcept(field string, values ...any) *MatchExceptCondition {
-	return &MatchExceptCondition{Field: field, Values: values, FieldType: UserField}
-}
-
-// NewNumericRange creates a numeric range condition for internal fields.
-func NewNumericRange(field string, gte, lte *float64) *NumericRangeCondition {
-	return &NumericRangeCondition{
-		Field:                field,
-		GreaterThanOrEqualTo: gte,
-		LessThanOrEqualTo:    lte,
-		FieldType:            InternalField,
-	}
-}
-
-// NewUserNumericRange creates a numeric range condition for user-defined fields.
-func NewUserNumericRange(field string, gte, lte *float64) *NumericRangeCondition {
-	return &NumericRangeCondition{
-		Field:                field,
-		GreaterThanOrEqualTo: gte,
-		LessThanOrEqualTo:    lte,
-		FieldType:            UserField,
-	}
-}
-
-// NewTimeRange creates a time range condition for internal fields.
-func NewTimeRange(field string, atOrAfter, before *time.Time) *TimeRangeCondition {
-	return &TimeRangeCondition{
-		Field:     field,
-		AtOrAfter: atOrAfter,
-		Before:    before,
-		FieldType: InternalField,
-	}
-}
-
-// NewUserTimeRange creates a time range condition for user-defined fields.
-func NewUserTimeRange(field string, atOrAfter, before *time.Time) *TimeRangeCondition {
-	return &TimeRangeCondition{
-		Field:     field,
-		AtOrAfter: atOrAfter,
-		Before:    before,
-		FieldType: UserField,
-	}
-}
-
-// NewIsNull creates an IS NULL condition for internal fields.
-func NewIsNull(field string) *IsNullCondition {
-	return &IsNullCondition{Field: field, FieldType: InternalField}
-}
-
-// NewUserIsNull creates an IS NULL condition for user-defined fields.
-func NewUserIsNull(field string) *IsNullCondition {
-	return &IsNullCondition{Field: field, FieldType: UserField}
-}
-
-// NewIsEmpty creates an IS EMPTY condition for internal fields.
-func NewIsEmpty(field string) *IsEmptyCondition {
-	return &IsEmptyCondition{Field: field, FieldType: InternalField}
-}
-
-// NewUserIsEmpty creates an IS EMPTY condition for user-defined fields.
-func NewUserIsEmpty(field string) *IsEmptyCondition {
-	return &IsEmptyCondition{Field: field, FieldType: UserField}
-}
-
-// ── JSON Serialization ───────────────────────────────────────────────────────
-
-// MarshalJSON implements custom JSON marshaling for ConditionSet.
-// This is needed because FilterCondition is an interface.
-func (cs *ConditionSet) MarshalJSON() ([]byte, error) {
-	return json.Marshal(cs.Conditions)
-}
-
-// UnmarshalJSON implements custom JSON unmarshaling for ConditionSet.
-func (cs *ConditionSet) UnmarshalJSON(data []byte) error {
-	var raw []json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	cs.Conditions = make([]FilterCondition, 0, len(raw))
-	return nil
-}

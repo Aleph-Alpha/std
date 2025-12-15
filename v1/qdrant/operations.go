@@ -13,13 +13,13 @@ import (
 )
 
 // Ensure VectorDBAdapter implements VectorDBService at compile time
-var _ vectordb.VectorDBService = (*Adapter)(nil)
+var _ vectordb.Service = (*Adapter)(nil)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Adapter - implements vectordb.VectorDBService interface
+// Adapter - implements vectordb.Service interface
 // ══════════════════════════════════════════════════════════════════════════════
 
-// VectorDBAdapter implements vectordb.VectorDBService for Qdrant.
+// Adapter implements vectordb.Service for Qdrant.
 // It wraps a Qdrant client and converts between generic vectordb types
 // and Qdrant-specific protobuf types.
 //
@@ -29,14 +29,14 @@ type Adapter struct {
 	client *qdrant.Client
 }
 
-// NewVectorDBAdapter creates a new Qdrant adapter for the vectordb interface.
+// NewAdapter creates a new Qdrant adapter for the vectordb interface.
 // Pass the underlying SDK client via QdrantClient.API().
 //
 // Example:
 //
 //	qc, _ := qdrant.NewQdrantClient(params)
-//	adapter := qdrant.NewVectorDBAdapter(qc.API())
-//	var db vectordb.VectorDBService = adapter
+//	adapter := qdrant.NewAdapter(qc.Client())
+//	var db vectordb.Service = adapter
 func NewAdapter(client *qdrant.Client) *Adapter {
 	return &Adapter{client: client}
 }
@@ -49,32 +49,31 @@ func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest
 
 	log.Printf("[Qdrant] Starting search batch with %d requests", len(requests))
 
-	// Validate
-	for i, req := range requests {
-		if req.CollectionName == "" {
-			return nil, fmt.Errorf("request [%d]: collection name cannot be empty", i)
-		}
-		if len(req.Vector) == 0 {
-			return nil, fmt.Errorf("request [%d]: vector cannot be empty", i)
-		}
-		if req.TopK <= 0 {
-			return nil, fmt.Errorf("request [%d]: topK must be greater than 0", i)
+	// Validate all requests first
+	for i, searchReq := range requests {
+		if err := validateSearchInput(searchReq.CollectionName, searchReq.Vector, searchReq.TopK); err != nil {
+			return nil, fmt.Errorf("request [%d]: %w", i, err)
 		}
 	}
 
 	results := make([][]vectordb.SearchResult, len(requests))
+
+	// Create errgroup with context
 	g, ctx := errgroup.WithContext(ctx)
+
+	// Create semaphore to limit concurrent searches
 	sem := semaphore.NewWeighted(maxConcurrentSearches)
 
-	for i, req := range requests {
-		i, req := i, req
+	for i, searchReq := range requests {
+		i, searchReq := i, searchReq // Capture loop variables
 		g.Go(func() error {
+			// Acquire semaphore (blocks if at max concurrency)
 			if err := sem.Acquire(ctx, 1); err != nil {
 				return fmt.Errorf("request [%d]: failed to acquire semaphore: %w", i, err)
 			}
 			defer sem.Release(1)
 
-			res, err := searchInternal(ctx, a.client, req)
+			res, err := searchInternal(ctx, a.client, searchReq)
 			if err != nil {
 				return fmt.Errorf("request [%d]: search failed: %w", i, err)
 			}
@@ -91,19 +90,19 @@ func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest
 }
 
 // Insert adds embeddings to a collection using batch processing.
-func (a *Adapter) Insert(ctx context.Context, collection string, inputs []vectordb.EmbeddingInput) error {
+func (a *Adapter) Insert(ctx context.Context, collectionName string, inputs []vectordb.EmbeddingInput) error {
 	if len(inputs) == 0 {
 		return nil
 	}
-	if collection == "" {
+	if collectionName == "" {
 		return fmt.Errorf("collection name cannot be empty")
 	}
-	return insertInternal(ctx, a.client, collection, inputs)
+	return insertInternal(ctx, a.client, collectionName, inputs)
 }
 
 // Delete removes points by their IDs from a collection.
-func (a *Adapter) Delete(ctx context.Context, collection string, ids []string) error {
-	return deleteInternal(ctx, a.client, collection, ids)
+func (a *Adapter) Delete(ctx context.Context, collectionName string, ids []string) error {
+	return deleteInternal(ctx, a.client, collectionName, ids)
 }
 
 // EnsureCollection creates a collection if it doesn't exist.
@@ -124,14 +123,16 @@ func (a *Adapter) GetCollection(ctx context.Context, name string) (*vectordb.Col
 
 	size, distance := extractVectorDetails(info)
 
-	return &vectordb.Collection{
+	collection := &vectordb.Collection{
 		Name:        name,
 		Status:      info.Status.String(),
 		VectorSize:  size,
 		Distance:    distance,
 		VectorCount: derefUint64(info.IndexedVectorsCount),
 		PointCount:  derefUint64(info.PointsCount),
-	}, nil
+	}
+
+	return collection, nil
 }
 
 // ListCollections returns names of all collections.
@@ -143,24 +144,24 @@ func (a *Adapter) ListCollections(ctx context.Context) ([]string, error) {
 // Internal Functions
 // ══════════════════════════════════════════════════════════════════════════════
 
-func searchInternal(ctx context.Context, client *qdrant.Client, req vectordb.SearchRequest) ([]vectordb.SearchResult, error) {
-	limit := uint64(req.TopK)
+func searchInternal(ctx context.Context, client *qdrant.Client, searchReq vectordb.SearchRequest) ([]vectordb.SearchResult, error) {
+	limit := uint64(searchReq.TopK)
 	queryReq := &qdrant.QueryPoints{
-		CollectionName: req.CollectionName,
-		Query:          qdrant.NewQuery(req.Vector...),
+		CollectionName: searchReq.CollectionName,
+		Query:          qdrant.NewQuery(searchReq.Vector...),
 		Limit:          &limit,
 		WithPayload:    qdrant.NewWithPayload(true),
-		Filter:         convertVectorDBFilterSet(req.Filters),
+		Filter:         convertVectorDBFilterSets(searchReq.Filters),
 	}
 
 	resp, err := client.Query(ctx, queryReq)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
-	return parseVectorDBSearchResults(resp, req.CollectionName)
+	return parseVectorDBSearchResults(resp)
 }
 
-func insertInternal(ctx context.Context, client *qdrant.Client, collection string, inputs []vectordb.EmbeddingInput) error {
+func insertInternal(ctx context.Context, client *qdrant.Client, collectionName string, inputs []vectordb.EmbeddingInput) error {
 	for start := 0; start < len(inputs); start += defaultBatchSize {
 		end := start + defaultBatchSize
 		if end > len(inputs) {
@@ -179,7 +180,7 @@ func insertInternal(ctx context.Context, client *qdrant.Client, collection strin
 
 		wait := true
 		req := &qdrant.UpsertPoints{
-			CollectionName: collection,
+			CollectionName: collectionName,
 			Points:         points,
 			Wait:           &wait,
 		}
@@ -187,16 +188,16 @@ func insertInternal(ctx context.Context, client *qdrant.Client, collection strin
 		if _, err := client.Upsert(ctx, req); err != nil {
 			return fmt.Errorf("[Qdrant] batch upsert failed at [%d:%d]: %w", start, end, err)
 		}
-		log.Printf("[Qdrant] Inserted batch [%d:%d] (collection=%s)", start, end, collection)
+		log.Printf("[Qdrant] Inserted batch [%d:%d] (collection=%s)", start, end, collectionName)
 	}
 	return nil
 }
 
-func deleteInternal(ctx context.Context, client *qdrant.Client, collection string, ids []string) error {
+func deleteInternal(ctx context.Context, client *qdrant.Client, collectionName string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if collection == "" {
+	if collectionName == "" {
 		return fmt.Errorf("collection name cannot be empty")
 	}
 
@@ -207,7 +208,7 @@ func deleteInternal(ctx context.Context, client *qdrant.Client, collection strin
 
 	wait := true
 	req := &qdrant.DeletePoints{
-		CollectionName: collection,
+		CollectionName: collectionName,
 		Points: &qdrant.PointsSelector{
 			PointsSelectorOneOf: &qdrant.PointsSelector_Points{
 				Points: &qdrant.PointsIdsList{Ids: qdrantIDs},
@@ -221,7 +222,7 @@ func deleteInternal(ctx context.Context, client *qdrant.Client, collection strin
 		return fmt.Errorf("[Qdrant] delete failed: %w", err)
 	}
 
-	log.Printf("[Qdrant] Delete completed (status=%s, collection=%s)", resp.Status.String(), collection)
+	log.Printf("[Qdrant] Delete completed (status=%s, collection=%s)", resp.Status.String(), collectionName)
 	return nil
 }
 
