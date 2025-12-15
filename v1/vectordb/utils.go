@@ -62,21 +62,25 @@ func NewUserMatch(field string, value any) *MatchCondition {
 
 // NewMatchAny creates an IN condition for internal fields.
 func NewMatchAny(field string, values ...any) *MatchAnyCondition {
+	validateHomogeneousTypes(values)
 	return &MatchAnyCondition{Field: field, Values: values, FieldType: InternalField}
 }
 
 // NewUserMatchAny creates an IN condition for user-defined fields.
 func NewUserMatchAny(field string, values ...any) *MatchAnyCondition {
+	validateHomogeneousTypes(values)
 	return &MatchAnyCondition{Field: field, Values: values, FieldType: UserField}
 }
 
 // NewMatchExcept creates a NOT IN condition for internal fields.
 func NewMatchExcept(field string, values ...any) *MatchExceptCondition {
+	validateHomogeneousTypes(values)
 	return &MatchExceptCondition{Field: field, Values: values, FieldType: InternalField}
 }
 
 // NewUserMatchExcept creates a NOT IN condition for user-defined fields.
 func NewUserMatchExcept(field string, values ...any) *MatchExceptCondition {
+	validateHomogeneousTypes(values)
 	return &MatchExceptCondition{Field: field, Values: values, FieldType: UserField}
 }
 
@@ -173,8 +177,6 @@ func (cs *ConditionSet) UnmarshalJSON(data []byte) error {
 //   - "noneOf" → MatchExceptCondition
 //   - "greaterThan", "lessThan", etc. → NumericRangeCondition
 //   - "after", "before", etc. → TimeRangeCondition
-//   - "isNotNull" → IsNullCondition
-//   - "isEmpty" → IsEmptyCondition
 func parseCondition(data []byte) (FilterCondition, error) {
 	// Extract field names to determine condition type
 	var fields map[string]json.RawMessage
@@ -230,4 +232,45 @@ func parseCondition(data []byte) (FilterCondition, error) {
 func hasKey(m map[string]json.RawMessage, key string) bool {
 	_, ok := m[key]
 	return ok
+}
+
+// validateHomogeneousTypes ensures all values are of the same type category.
+// Panics if mixed types are detected - this catches programming errors early.
+//
+// TODO: Consider whether panic is appropriate here, or if we should:
+//   - Return an error instead (for runtime data validation)
+//   - Add a separate NewMatchAnyChecked() that returns error
+//   - Keep panic for constructor calls, error for JSON unmarshaling
+func validateHomogeneousTypes(values []any) {
+	if len(values) <= 1 {
+		return
+	}
+
+	expectedType := getType(values[0])
+	if expectedType == "" {
+		panic(fmt.Sprintf("vectordb: unsupported value type: %T", values[0]))
+	}
+
+	// Validate all values match expected type
+	for i, v := range values[1:] {
+		actualType := getType(v)
+		if actualType == "" {
+			panic(fmt.Sprintf("vectordb: unsupported value type at index %d: %T", i+1, v))
+		}
+		if actualType != expectedType {
+			panic(fmt.Sprintf("vectordb: mixed types not allowed in MatchAny/MatchExcept: expected %s but got %s at index %d", expectedType, actualType, i+1))
+		}
+	}
+}
+
+func getType(value any) string {
+	switch value.(type) {
+	case string:
+		return "string"
+	case int, int64, float64:
+		return "numeric"
+	case bool:
+		return "boolean"
+	}
+	return ""
 }

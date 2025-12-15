@@ -60,7 +60,7 @@
 //	}
 //
 //	// Create adapter
-//	adapter := qdrant.NewAdapter(client.API())
+//	adapter := qdrant.NewAdapter(client.Client())
 //
 //	collectionName := "documents"
 //

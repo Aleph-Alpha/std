@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-// Ensure VectorDBAdapter implements VectorDBService at compile time
+// Ensure Adapter implements Service at compile time
 var _ vectordb.Service = (*Adapter)(nil)
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -30,7 +30,7 @@ type Adapter struct {
 }
 
 // NewAdapter creates a new Qdrant adapter for the vectordb interface.
-// Pass the underlying SDK client via QdrantClient.API().
+// Pass the underlying SDK client via QdrantClient.Client().
 //
 // Example:
 //

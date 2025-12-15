@@ -1,7 +1,7 @@
 package vectordb
 
 // SearchRequest represents a single similarity search query.
-// Use with VectorDBService.Search() for single or batch queries.
+// Use with Service.Search() for single or batch queries.
 type SearchRequest struct {
 	// CollectionName is the target collection to search in
 	CollectionName string `json:"collectionName"`

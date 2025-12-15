@@ -2,7 +2,7 @@ package vectordb
 
 import "context"
 
-// VectorDBService is the common interface for all vector databases.
+// Service is the common interface for all vector databases.
 // It provides a database-agnostic abstraction for vector similarity search,
 // allowing applications to switch between different vector databases
 // (Qdrant, Weaviate, Pinecone, etc.) without changing application code.
