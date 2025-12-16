@@ -74,25 +74,7 @@ The logger can be configured via environment variables:
 ```
 ZAP_LOGGER_LEVEL=debug          # Log level (debug, info, warning, error)
 LOGGER_ENABLE_TRACING=true      # Enable distributed tracing integration
-LOGGER_CALLER_SKIP=2            # Number of stack frames to skip for caller reporting
 ```
-
-Caller Skip Configuration:
-
-The `CallerSkip` setting is crucial for accurate caller reporting when using logger wrappers:
-
-- **Direct usage** (no wrapper): Set `CallerSkip=1` (default)
-- **One wrapper layer**: Set `CallerSkip=2` (e.g., service-specific logger wrapper)
-- **Multiple wrappers**: Set `CallerSkip=3+` based on wrapper depth
-
-Example: If you have a service wrapper that calls std logger, which calls zap:
-```
-Your code (reported as caller) ✓
-  └─> Service wrapper (skipped)
-      └─> std logger (skipped)
-          └─> zap (skipped)
-```
-Use `CallerSkip=2` to skip the service wrapper and std logger layers.
 
 Tracing Integration:
 
@@ -209,7 +191,7 @@ This ensures that no log entries are lost if the application shuts down while lo
 Note: This function is automatically invoked by the FXModule and does not need to be called directly in application code.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/configs.go#L25-L60>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/configs.go#L25-L77>)
 
 Config defines the configuration structure for the logger. It contains settings that control the behavior of the logging system.
 
@@ -249,6 +231,23 @@ type Config struct {
     // ServiceName is the name of the service that is logging messages.
     // This value is used to populate the "service" field in log entries.
     ServiceName string
+
+    // CallerSkip controls the number of stack frames to skip when reporting the caller.
+    // This is useful when you have wrapper layers around the logger.
+    //
+    // Guidelines for setting CallerSkip:
+    //   - 1 (default): Use when calling std logger directly from your code
+    //   - 2: Use when you have one additional wrapper layer (e.g., service-specific logger wrapper)
+    //   - 3+: Use when you have multiple wrapper layers
+    //
+    // Example call stack with CallerSkip=2:
+    //   Your business logic (this will be reported as caller) ✓
+    //   └─> Your service wrapper calls std logger
+    //       └─> std logger calls zap (skipped)
+    //           └─> zap logs (skipped)
+    //
+    // If not set or set to 0, defaults to 1.
+    CallerSkip int `yaml:"caller_skip" envconfig:"LOGGER_CALLER_SKIP"`
 }
 ```
 
@@ -268,7 +267,7 @@ type Logger struct {
 ```
 
 <a name="NewLoggerClient"></a>
-### func [NewLoggerClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L53>)
+### func [NewLoggerClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L65>)
 
 ```go
 func NewLoggerClient(cfg Config) *Logger
@@ -278,7 +277,7 @@ NewLoggerClient initializes and returns a new instance of the logger based on co
 
 Parameters:
 
-- cfg: Configuration for the logger, including log level
+- cfg: Configuration for the logger, including log level, caller skip, and tracing options
 
 Returns:
 
@@ -288,21 +287,35 @@ The logger is configured with:
 
 - JSON encoding for structured logging
 - ISO8601 timestamp format
-- Capital letter level encoding \(e.g., "INFO", "ERROR"\)
+- Capital letter level encoding \(e.g., "INFO", "ERROR"\) without color codes
 - Process ID and service name as default fields
 - Caller information \(file and line\) included in log entries
+- Configurable caller skip depth for wrapper scenarios
 - Output directed to stderr
 
 If initialization fails, the function will call log.Fatal to terminate the application.
 
-Example:
+Example \(direct usage\):
 
 ```
 loggerConfig := logger.Config{
-    Level: logger.Info,
+    Level:       logger.Info,
+    ServiceName: "my-service",
+    CallerSkip:  1, // default, can be omitted
 }
 log := logger.NewLoggerClient(loggerConfig)
 log.Info("Application started", nil, nil)
+```
+
+Example \(with service wrapper\):
+
+```
+loggerConfig := logger.Config{
+    Level:       logger.Info,
+    ServiceName: "my-service",
+    CallerSkip:  2, // skip service wrapper + std wrapper
+}
+log := logger.NewLoggerClient(loggerConfig)
 ```
 
 <a name="Logger.Debug"></a>

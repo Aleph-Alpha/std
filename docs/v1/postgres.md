@@ -165,6 +165,7 @@ All methods on the DB interface are safe for concurrent use by multiple goroutin
 - [type QueryBuilder](<#QueryBuilder>)
   - [func \(qb \*QueryBuilder\) Clauses\(conds ...clause.Expression\) \*QueryBuilder](<#QueryBuilder.Clauses>)
   - [func \(qb \*QueryBuilder\) Count\(count \*int64\) error](<#QueryBuilder.Count>)
+  - [func \(qb \*QueryBuilder\) Create\(value interface\{\}\) \(int64, error\)](<#QueryBuilder.Create>)
   - [func \(qb \*QueryBuilder\) CreateInBatches\(value interface\{\}, batchSize int\) \(int64, error\)](<#QueryBuilder.CreateInBatches>)
   - [func \(qb \*QueryBuilder\) Delete\(value interface\{\}\) \(int64, error\)](<#QueryBuilder.Delete>)
   - [func \(qb \*QueryBuilder\) Distinct\(args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Distinct>)
@@ -205,6 +206,7 @@ All methods on the DB interface are safe for concurrent use by multiple goroutin
   - [func \(qb \*QueryBuilder\) Scopes\(funcs ...func\(\*gorm.DB\) \*gorm.DB\) \*QueryBuilder](<#QueryBuilder.Scopes>)
   - [func \(qb \*QueryBuilder\) Select\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Select>)
   - [func \(qb \*QueryBuilder\) Table\(name string\) \*QueryBuilder](<#QueryBuilder.Table>)
+  - [func \(qb \*QueryBuilder\) ToSubquery\(\) \*gorm.DB](<#QueryBuilder.ToSubquery>)
   - [func \(qb \*QueryBuilder\) Unscoped\(\) \*QueryBuilder](<#QueryBuilder.Unscoped>)
   - [func \(qb \*QueryBuilder\) Updates\(values interface\{\}\) \(int64, error\)](<#QueryBuilder.Updates>)
   - [func \(qb \*QueryBuilder\) Where\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Where>)
@@ -1307,8 +1309,46 @@ var count int64
 err := qb.Where("active = ?", true).Count(&count)
 ```
 
+<a name="QueryBuilder.Create"></a>
+### func \(\*QueryBuilder\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L746>)
+
+```go
+func (qb *QueryBuilder) Create(value interface{}) (int64, error)
+```
+
+Create inserts a new record into the database. This is a terminal method that executes the operation and releases the mutex lock. It can be combined with OnConflict\(\) for UPSERT operations, Returning\(\) for PostgreSQL RETURNING clause, and other query builder methods.
+
+Parameters:
+
+- value: Pointer to the struct or slice of structs to create
+
+Returns:
+
+- int64: Number of rows affected \(records created\)
+- error: Error if the operation fails, nil on success
+
+Example:
+
+```
+user := User{Name: "John", Email: "john@example.com"}
+rowsAffected, err := qb.Create(&user)
+if err != nil {
+    return err
+}
+fmt.Printf("Created %d record, ID: %d\n", rowsAffected, user.ID)
+```
+
+With OnConflict for idempotent create:
+
+```
+rowsAffected, err := qb.OnConflict(clause.OnConflict{DoNothing: true}).Create(&stage)
+if rowsAffected == 0 {
+    // Record already exists
+}
+```
+
 <a name="QueryBuilder.CreateInBatches"></a>
-### func \(\*QueryBuilder\) [CreateInBatches](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L738>)
+### func \(\*QueryBuilder\) [CreateInBatches](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L773>)
 
 ```go
 func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error)
@@ -1388,7 +1428,7 @@ qb.Distinct().Where("age > ?", 18).Find(&users) // SELECT DISTINCT * FROM users 
 ```
 
 <a name="QueryBuilder.Done"></a>
-### func \(\*QueryBuilder\) [Done](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L794>)
+### func \(\*QueryBuilder\) [Done](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L829>)
 
 ```go
 func (qb *QueryBuilder) Done()
@@ -1452,7 +1492,7 @@ err := qb.Where("email = ?", "user@example.com").First(&user)
 ```
 
 <a name="QueryBuilder.FirstOrCreate"></a>
-### func \(\*QueryBuilder\) [FirstOrCreate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L777>)
+### func \(\*QueryBuilder\) [FirstOrCreate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L812>)
 
 ```go
 func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error
@@ -1475,7 +1515,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
 ```
 
 <a name="QueryBuilder.FirstOrInit"></a>
-### func \(\*QueryBuilder\) [FirstOrInit](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L759>)
+### func \(\*QueryBuilder\) [FirstOrInit](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L794>)
 
 ```go
 func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error
@@ -2139,6 +2179,52 @@ Example:
 qb.Table("users_archive").Where("deleted_at IS NOT NULL").Find(&users)
 qb.Table("custom_table_name").Count(&count)
 qb.Table("user_stats").Select("department, COUNT(*) as count").Group("department").Scan(&stats)
+```
+
+<a name="QueryBuilder.ToSubquery"></a>
+### func \(\*QueryBuilder\) [ToSubquery](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L869>)
+
+```go
+func (qb *QueryBuilder) ToSubquery() *gorm.DB
+```
+
+ToSubquery returns the underlying GORM DB for use as a subquery and releases the lock. This method is specifically designed for creating subqueries that can be passed to Where\(\), Having\(\), or other clauses that accept subqueries.
+
+Important: This method releases the lock immediately, so the returned \*gorm.DB should be used as a subquery argument right away.
+
+Returns:
+
+- \*gorm.DB: The underlying GORM DB instance configured with the query chain
+
+Example:
+
+```
+// Find users whose email is in a subquery of active accounts
+activeEmails := pg.Query(ctx).
+    Model(&Account{}).
+    Select("email").
+    Where("status = ?", "active").
+    ToSubquery()
+
+var users []User
+err := pg.Query(ctx).
+    Where("email IN (?)", activeEmails).
+    Find(&users)
+```
+
+Complex example with multiple subqueries:
+
+```
+// Find stages with no files
+stageIDsWithFiles := pg.Query(ctx).
+    Model(&File{}).
+    Select("DISTINCT stage_id").
+    ToSubquery()
+
+err := pg.Query(ctx).
+    Model(&Stage{}).
+    Where("stage_id NOT IN (?)", stageIDsWithFiles).
+    Find(&stages)
 ```
 
 <a name="QueryBuilder.Unscoped"></a>

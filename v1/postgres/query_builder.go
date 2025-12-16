@@ -716,6 +716,41 @@ func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder {
 	return qb
 }
 
+// Create inserts a new record into the database.
+// This is a terminal method that executes the operation and releases the mutex lock.
+// It can be combined with OnConflict() for UPSERT operations, Returning() for PostgreSQL
+// RETURNING clause, and other query builder methods.
+//
+// Parameters:
+//   - value: Pointer to the struct or slice of structs to create
+//
+// Returns:
+//   - int64: Number of rows affected (records created)
+//   - error: Error if the operation fails, nil on success
+//
+// Example:
+//
+//	user := User{Name: "John", Email: "john@example.com"}
+//	rowsAffected, err := qb.Create(&user)
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Printf("Created %d record, ID: %d\n", rowsAffected, user.ID)
+//
+// With OnConflict for idempotent create:
+//
+//	rowsAffected, err := qb.OnConflict(clause.OnConflict{DoNothing: true}).Create(&stage)
+//	if rowsAffected == 0 {
+//	    // Record already exists
+//	}
+func (qb *QueryBuilder) Create(value interface{}) (int64, error) {
+	defer qb.release()
+
+	result := qb.db.Create(value)
+
+	return result.RowsAffected, result.Error
+}
+
 // CreateInBatches creates records in batches to avoid memory issues with large datasets.
 // This is a terminal method that executes the operation and releases the mutex lock.
 //
@@ -793,4 +828,45 @@ func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) er
 //	}
 func (qb *QueryBuilder) Done() {
 	qb.release()
+}
+
+// ToSubquery returns the underlying GORM DB for use as a subquery and releases the lock.
+// This method is specifically designed for creating subqueries that can be passed to
+// Where(), Having(), or other clauses that accept subqueries.
+//
+// Important: This method releases the lock immediately, so the returned *gorm.DB should
+// be used as a subquery argument right away.
+//
+// Returns:
+//   - *gorm.DB: The underlying GORM DB instance configured with the query chain
+//
+// Example:
+//
+//	// Find users whose email is in a subquery of active accounts
+//	activeEmails := pg.Query(ctx).
+//	    Model(&Account{}).
+//	    Select("email").
+//	    Where("status = ?", "active").
+//	    ToSubquery()
+//
+//	var users []User
+//	err := pg.Query(ctx).
+//	    Where("email IN (?)", activeEmails).
+//	    Find(&users)
+//
+// Complex example with multiple subqueries:
+//
+//	// Find stages with no files
+//	stageIDsWithFiles := pg.Query(ctx).
+//	    Model(&File{}).
+//	    Select("DISTINCT stage_id").
+//	    ToSubquery()
+//
+//	err := pg.Query(ctx).
+//	    Model(&Stage{}).
+//	    Where("stage_id NOT IN (?)", stageIDsWithFiles).
+//	    Find(&stages)
+func (qb *QueryBuilder) ToSubquery() *gorm.DB {
+	defer qb.release()
+	return qb.db
 }
