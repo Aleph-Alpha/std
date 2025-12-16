@@ -23,6 +23,7 @@ import (
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // TestUser is a sample model for testing GORM operations
@@ -2499,4 +2500,303 @@ func testTransactionRollback(ctx context.Context, postgres *Postgres) func(t *te
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), count)
 	}
+}
+
+// TestQueryBuilder_Create tests the Create() method on QueryBuilder
+func TestQueryBuilder_Create(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Setup PostgresSQL container
+	ctx := context.Background()
+	containerInstance, err := setupPostgresContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate container: %s", err)
+		}
+	}()
+
+	// Get the Postgres instance
+	var postgres *Postgres
+	app := fxtest.New(t,
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+		),
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	err = app.Start(ctx)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, app.Stop(ctx))
+	}()
+
+	// Auto-migrate TestUser table
+	err = postgres.DB().AutoMigrate(&TestUser{})
+	require.NoError(t, err)
+
+	t.Run("Create_Simple", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create a user using Query().Create()
+		user := TestUser{
+			Name:  "Alice",
+			Email: "alice@example.com",
+			Age:   25,
+		}
+
+		rowsAffected, err := postgres.Query(ctx).Create(&user)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), rowsAffected)
+		assert.NotZero(t, user.ID)
+
+		// Verify user was created
+		var fetchedUser TestUser
+		err = postgres.First(ctx, &fetchedUser, user.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Alice", fetchedUser.Name)
+		assert.Equal(t, "alice@example.com", fetchedUser.Email)
+		assert.Equal(t, 25, fetchedUser.Age)
+	})
+
+	t.Run("Create_WithOnConflictDoNothing", func(t *testing.T) {
+		ctx := context.Background()
+
+		// First create a user
+		user1 := TestUser{
+			Name:  "Bob",
+			Email: "bob@unique.com",
+			Age:   30,
+		}
+		err := postgres.Create(ctx, &user1)
+		require.NoError(t, err)
+
+		// Try to create another user with same email (should use OnConflict)
+		user2 := TestUser{
+			Name:  "Bob Duplicate",
+			Email: "bob@unique.com", // Same email
+			Age:   35,
+		}
+
+		// Use OnConflict to ignore duplicate
+		rowsAffected, err := postgres.Query(ctx).
+			OnConflict(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "email"}},
+				DoNothing: true,
+			}).
+			Create(&user2)
+
+		require.NoError(t, err)
+		// Should be 0 if conflict was handled
+		t.Logf("Rows affected with OnConflict: %d", rowsAffected)
+
+		// Verify only one user with that email exists
+		var count int64
+		err = postgres.Count(ctx, &TestUser{}, &count, "email = ?", "bob@unique.com")
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+	})
+
+	t.Run("Create_WithOnConflictUpdate", func(t *testing.T) {
+		ctx := context.Background()
+
+		// First create a user
+		user1 := TestUser{
+			Name:  "Charlie",
+			Email: "charlie@example.com",
+			Age:   25,
+		}
+		err := postgres.Create(ctx, &user1)
+		require.NoError(t, err)
+
+		originalAge := user1.Age
+
+		// Try to create another user with same email but update age on conflict
+		user2 := TestUser{
+			Name:  "Charlie Updated",
+			Email: "charlie@example.com", // Same email
+			Age:   30,
+		}
+
+		rowsAffected, err := postgres.Query(ctx).
+			OnConflict(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "email"}},
+				DoUpdates: clause.AssignmentColumns([]string{"age", "name"}),
+			}).
+			Create(&user2)
+
+		require.NoError(t, err)
+		assert.NotZero(t, rowsAffected)
+
+		// Verify user was updated
+		var fetchedUser TestUser
+		err = postgres.First(ctx, &fetchedUser, "email = ?", "charlie@example.com")
+		require.NoError(t, err)
+		assert.NotEqual(t, originalAge, fetchedUser.Age)
+		assert.Equal(t, 30, fetchedUser.Age)
+		assert.Equal(t, "Charlie Updated", fetchedUser.Name)
+	})
+}
+
+// TestQueryBuilder_ToSubquery tests the ToSubquery() method
+func TestQueryBuilder_ToSubquery(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Setup PostgresSQL container
+	ctx := context.Background()
+	containerInstance, err := setupPostgresContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate container: %s", err)
+		}
+	}()
+
+	// Get the Postgres instance
+	var postgres *Postgres
+	app := fxtest.New(t,
+		fx.Provide(
+			func() Config {
+				return containerInstance.Config
+			},
+		),
+		FXModule,
+		fx.Populate(&postgres),
+	)
+
+	err = app.Start(ctx)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, app.Stop(ctx))
+	}()
+
+	// Auto-migrate TestUser table
+	err = postgres.DB().AutoMigrate(&TestUser{})
+	require.NoError(t, err)
+
+	t.Run("ToSubquery_SimpleIN", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create test users
+		users := []TestUser{
+			{Name: "Alice", Email: "alice@example.com", Age: 25},
+			{Name: "Bob", Email: "bob@example.com", Age: 30},
+			{Name: "Charlie", Email: "charlie@example.com", Age: 35},
+			{Name: "Dave", Email: "dave@example.com", Age: 40},
+		}
+
+		for i := range users {
+			err := postgres.Create(ctx, &users[i])
+			require.NoError(t, err)
+		}
+
+		// Use subquery to find users whose age is in a subquery
+		// First, get ages > 30 as subquery
+		ageSubquery := postgres.Query(ctx).
+			Model(&TestUser{}).
+			Select("age").
+			Where("age > ?", 30).
+			ToSubquery()
+
+		// Find users with those ages
+		var results []TestUser
+		err = postgres.Query(ctx).
+			Where("age IN (?)", ageSubquery).
+			Find(&results)
+
+		require.NoError(t, err)
+		assert.Len(t, results, 2) // Charlie and Dave
+		
+		names := make([]string, len(results))
+		for i, u := range results {
+			names[i] = u.Name
+		}
+		assert.Contains(t, names, "Charlie")
+		assert.Contains(t, names, "Dave")
+	})
+
+	t.Run("ToSubquery_NotIN", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create test users
+		users := []TestUser{
+			{Name: "Eve", Email: "eve@example.com", Age: 20},
+			{Name: "Frank", Email: "frank@example.com", Age: 25},
+			{Name: "Grace", Email: "grace@example.com", Age: 30},
+		}
+
+		for i := range users {
+			err := postgres.Create(ctx, &users[i])
+			require.NoError(t, err)
+		}
+
+		// Use subquery to find users NOT in a specific age range
+		youngAgesSubquery := postgres.Query(ctx).
+			Model(&TestUser{}).
+			Select("age").
+			Where("age < ?", 25).
+			ToSubquery()
+
+		// Find users not in that age range
+		var results []TestUser
+		err = postgres.Query(ctx).
+			Where("age NOT IN (?)", youngAgesSubquery).
+			Find(&results)
+
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(results), 2) // Frank and Grace at minimum
+	})
+
+	t.Run("ToSubquery_MultipleSubqueries", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create test users
+		users := []TestUser{
+			{Name: "Henry", Email: "henry@example.com", Age: 22},
+			{Name: "Ivy", Email: "ivy@example.com", Age: 28},
+			{Name: "Jack", Email: "jack@example.com", Age: 32},
+		}
+
+		for i := range users {
+			err := postgres.Create(ctx, &users[i])
+			require.NoError(t, err)
+		}
+
+		// Use two subqueries
+		minAgeSubquery := postgres.Query(ctx).
+			Model(&TestUser{}).
+			Select("MIN(age)").
+			ToSubquery()
+
+		maxAgeSubquery := postgres.Query(ctx).
+			Model(&TestUser{}).
+			Select("MAX(age)").
+			ToSubquery()
+
+		// Find users who are not at min or max age
+		var results []TestUser
+		err = postgres.Query(ctx).
+			Where("age NOT IN (?, ?)", minAgeSubquery, maxAgeSubquery).
+			Find(&results)
+
+		require.NoError(t, err)
+		// Should find at least Ivy (age 28) who is between min and max
+		hasIvy := false
+		for _, u := range results {
+			if u.Name == "Ivy" {
+				hasIvy = true
+				break
+			}
+		}
+		assert.True(t, hasIvy, "Expected to find Ivy (middle age) in results")
+	})
 }
