@@ -28,7 +28,7 @@ type Logger struct {
 // and output destinations.
 //
 // Parameters:
-//   - cfg: Configuration for the logger, including log level
+//   - cfg: Configuration for the logger, including log level, caller skip, and tracing options
 //
 // Returns:
 //   - *Logger: A configured logger instance ready for use
@@ -36,20 +36,32 @@ type Logger struct {
 // The logger is configured with:
 //   - JSON encoding for structured logging
 //   - ISO8601 timestamp format
-//   - Capital letter level encoding (e.g., "INFO", "ERROR")
+//   - Capital letter level encoding (e.g., "INFO", "ERROR") without color codes
 //   - Process ID and service name as default fields
 //   - Caller information (file and line) included in log entries
+//   - Configurable caller skip depth for wrapper scenarios
 //   - Output directed to stderr
 //
 // If initialization fails, the function will call log.Fatal to terminate the application.
 //
-// Example:
+// Example (direct usage):
 //
 //	loggerConfig := logger.Config{
-//	    Level: logger.Info,
+//	    Level:       logger.Info,
+//	    ServiceName: "my-service",
+//	    CallerSkip:  1, // default, can be omitted
 //	}
 //	log := logger.NewLoggerClient(loggerConfig)
 //	log.Info("Application started", nil, nil)
+//
+// Example (with service wrapper):
+//
+//	loggerConfig := logger.Config{
+//	    Level:       logger.Info,
+//	    ServiceName: "my-service",
+//	    CallerSkip:  2, // skip service wrapper + std wrapper
+//	}
+//	log := logger.NewLoggerClient(loggerConfig)
 func NewLoggerClient(cfg Config) *Logger {
 
 	encoderCfg := zap.NewProductionEncoderConfig()
@@ -92,7 +104,13 @@ func NewLoggerClient(cfg Config) *Logger {
 		},
 	}
 
-	logger, err := config.Build(zap.AddCaller(), zap.AddCallerSkip(1))
+	// Default to 1 if not set, which works for direct usage of std logger
+	callerSkip := cfg.CallerSkip
+	if callerSkip <= 0 {
+		callerSkip = 1
+	}
+
+	logger, err := config.Build(zap.AddCaller(), zap.AddCallerSkip(callerSkip))
 
 	if err != nil {
 		log.Fatal(err)
