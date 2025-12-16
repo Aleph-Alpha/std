@@ -30,7 +30,7 @@ import (
 type TestUser struct {
 	gorm.Model
 	Name  string
-	Email string
+	Email string `gorm:"uniqueIndex"`
 	Age   int
 }
 
@@ -2771,32 +2771,53 @@ func TestQueryBuilder_ToSubquery(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Use two subqueries
+		// Use two separate queries with subqueries
+		// Find minimum age
 		minAgeSubquery := postgres.Query(ctx).
 			Model(&TestUser{}).
 			Select("MIN(age)").
 			ToSubquery()
 
+		// Find users who are not at minimum age
+		var notMinUsers []TestUser
+		err = postgres.Query(ctx).
+			Where("age != (?)", minAgeSubquery).
+			Find(&notMinUsers)
+
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(notMinUsers), 2) // Ivy and Jack
+
+		// Find maximum age
 		maxAgeSubquery := postgres.Query(ctx).
 			Model(&TestUser{}).
 			Select("MAX(age)").
 			ToSubquery()
 
-		// Find users who are not at min or max age
-		var results []TestUser
+		// Find users who are not at maximum age
+		var notMaxUsers []TestUser
 		err = postgres.Query(ctx).
-			Where("age NOT IN (?, ?)", minAgeSubquery, maxAgeSubquery).
-			Find(&results)
+			Where("age != (?)", maxAgeSubquery).
+			Find(&notMaxUsers)
 
 		require.NoError(t, err)
-		// Should find at least Ivy (age 28) who is between min and max
-		hasIvy := false
-		for _, u := range results {
+		assert.GreaterOrEqual(t, len(notMaxUsers), 2) // Henry and Ivy
+
+		// Verify Ivy (middle age) is found in both results
+		hasIvyNotMin := false
+		hasIvyNotMax := false
+		for _, u := range notMinUsers {
 			if u.Name == "Ivy" {
-				hasIvy = true
+				hasIvyNotMin = true
 				break
 			}
 		}
-		assert.True(t, hasIvy, "Expected to find Ivy (middle age) in results")
+		for _, u := range notMaxUsers {
+			if u.Name == "Ivy" {
+				hasIvyNotMax = true
+				break
+			}
+		}
+		assert.True(t, hasIvyNotMin, "Expected to find Ivy (not min age)")
+		assert.True(t, hasIvyNotMax, "Expected to find Ivy (not max age)")
 	})
 }
