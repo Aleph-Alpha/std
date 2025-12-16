@@ -55,7 +55,7 @@ func NewLoggerClient(cfg Config) *Logger {
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "timestamp"
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	encoderCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
 	encoderCfg.EncodeCaller = zapcore.FullCallerEncoder
 	encoderCfg.EncodeDuration = zapcore.MillisDurationEncoder
 
