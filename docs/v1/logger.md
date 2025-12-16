@@ -74,7 +74,25 @@ The logger can be configured via environment variables:
 ```
 ZAP_LOGGER_LEVEL=debug          # Log level (debug, info, warning, error)
 LOGGER_ENABLE_TRACING=true      # Enable distributed tracing integration
+LOGGER_CALLER_SKIP=2            # Number of stack frames to skip for caller reporting
 ```
+
+Caller Skip Configuration:
+
+The `CallerSkip` setting is crucial for accurate caller reporting when using logger wrappers:
+
+- **Direct usage** (no wrapper): Set `CallerSkip=1` (default)
+- **One wrapper layer**: Set `CallerSkip=2` (e.g., service-specific logger wrapper)
+- **Multiple wrappers**: Set `CallerSkip=3+` based on wrapper depth
+
+Example: If you have a service wrapper that calls std logger, which calls zap:
+```
+Your code (reported as caller) ✓
+  └─> Service wrapper (skipped)
+      └─> std logger (skipped)
+          └─> zap (skipped)
+```
+Use `CallerSkip=2` to skip the service wrapper and std logger layers.
 
 Tracing Integration:
 

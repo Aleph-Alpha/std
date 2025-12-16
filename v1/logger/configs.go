@@ -57,4 +57,21 @@ type Config struct {
 	// ServiceName is the name of the service that is logging messages.
 	// This value is used to populate the "service" field in log entries.
 	ServiceName string
+
+	// CallerSkip controls the number of stack frames to skip when reporting the caller.
+	// This is useful when you have wrapper layers around the logger.
+	//
+	// Guidelines for setting CallerSkip:
+	//   - 1 (default): Use when calling std logger directly from your code
+	//   - 2: Use when you have one additional wrapper layer (e.g., service-specific logger wrapper)
+	//   - 3+: Use when you have multiple wrapper layers
+	//
+	// Example call stack with CallerSkip=2:
+	//   Your business logic (this will be reported as caller) ✓
+	//   └─> Your service wrapper calls std logger
+	//       └─> std logger calls zap (skipped)
+	//           └─> zap logs (skipped)
+	//
+	// If not set or set to 0, defaults to 1.
+	CallerSkip int `yaml:"caller_skip" envconfig:"LOGGER_CALLER_SKIP"`
 }
