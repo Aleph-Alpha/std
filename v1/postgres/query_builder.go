@@ -17,6 +17,9 @@ import (
 //
 // Returns a QueryBuilder instance that can be used to construct the query.
 //
+// Note: QueryBuilder methods return GORM errors directly. Use Postgres.TranslateError()
+// to convert them to standardized error types if needed.
+//
 // Example:
 //
 //	users := []User{}
@@ -25,6 +28,9 @@ import (
 //	    Order("created_at DESC").
 //	    Limit(10).
 //	    Find(&users)
+//	if err != nil {
+//	    err = db.TranslateError(err) // Optional: translate to standardized error
+//	}
 func (p *Postgres) Query(ctx context.Context) *QueryBuilder {
 	p.mu.RLock() // Will be released when Done() is called
 	return &QueryBuilder{
@@ -36,6 +42,10 @@ func (p *Postgres) Query(ctx context.Context) *QueryBuilder {
 // QueryBuilder provides a fluent interface for building complex database queries.
 // It wraps GORM's query building capabilities with thread-safety and automatic resource cleanup.
 // The builder maintains a chain of query modifiers that are applied when a terminal method is called.
+//
+// Note: All terminal methods (First, Find, Create, etc.) return GORM errors directly.
+// This preserves the error chain and allows consumers to use errors.Is() with GORM error types.
+// Use Postgres.TranslateError() to convert errors to standardized types if needed.
 type QueryBuilder struct {
 	// db is the underlying GORM DB instance that handles the actual query execution
 	db *gorm.DB
@@ -306,7 +316,8 @@ func (qb *QueryBuilder) Model(value interface{}) *QueryBuilder {
 // Parameters:
 //   - dest: Pointer to the struct or slice where results will be stored
 //
-// Returns an error if the query fails or nil on success.
+// Returns a GORM error if the query fails or nil on success.
+// Use Postgres.TranslateError() to convert to standardized error types.
 //
 // Example:
 //
@@ -323,7 +334,8 @@ func (qb *QueryBuilder) Scan(dest interface{}) error {
 // Parameters:
 //   - dest: Pointer to a slice where results will be stored
 //
-// Returns an error if the query fails or nil on success.
+// Returns a GORM error if the query fails or nil on success.
+// Use Postgres.TranslateError() to convert to standardized error types.
 //
 // Example:
 //
@@ -340,12 +352,16 @@ func (qb *QueryBuilder) Find(dest interface{}) error {
 // Parameters:
 //   - dest: Pointer to a struct where the result will be stored
 //
-// Returns an error if no record is found or the query fails, nil on success.
+// Returns gorm.ErrRecordNotFound if no record is found, or another GORM error if the query fails, nil on success.
+// Use Postgres.TranslateError() to convert to standardized error types if needed.
 //
 // Example:
 //
 //	var user User
 //	err := qb.Where("email = ?", "user@example.com").First(&user)
+//	if err != nil {
+//	    err = db.TranslateError(err) // Optional: convert to standardized error
+//	}
 func (qb *QueryBuilder) First(dest interface{}) error {
 	defer qb.release()
 	return qb.db.First(dest).Error
@@ -357,7 +373,8 @@ func (qb *QueryBuilder) First(dest interface{}) error {
 // Parameters:
 //   - dest: Pointer to a struct where the result will be stored
 //
-// Returns an error if no record is found or the query fails, nil on success.
+// Returns gorm.ErrRecordNotFound if no record is found, or another GORM error if the query fails, nil on success.
+// Use Postgres.TranslateError() to convert to standardized error types if needed.
 //
 // Example:
 //
@@ -374,7 +391,7 @@ func (qb *QueryBuilder) Last(dest interface{}) error {
 // Parameters:
 //   - count: Pointer to an int64 where the count will be stored
 //
-// Returns an error if the query fails or nil on success.
+// Returns a GORM error if the query fails or nil on success.
 //
 // Example:
 //
@@ -393,7 +410,7 @@ func (qb *QueryBuilder) Count(count *int64) error {
 //
 // Returns:
 //   - int64: Number of rows affected by the update operation
-//   - error: Error if the update fails, nil on success
+//   - error: GORM error if the update fails, nil on success
 //
 // Example:
 //
@@ -418,7 +435,7 @@ func (qb *QueryBuilder) Updates(values interface{}) (int64, error) {
 //
 // Returns:
 //   - int64: Number of rows affected by the delete operation
-//   - error: Error if the deletion fails, nil on success
+//   - error: GORM error if the deletion fails, nil on success
 //
 // Example:
 //
@@ -444,7 +461,7 @@ func (qb *QueryBuilder) Delete(value interface{}) (int64, error) {
 //
 // Returns:
 //   - int64: Number of rows found and processed
-//   - error: Error if the query fails, nil on success
+//   - error: GORM error if the query fails, nil on success
 //
 // Example:
 //
@@ -726,7 +743,7 @@ func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder {
 //
 // Returns:
 //   - int64: Number of rows affected (records created)
-//   - error: Error if the operation fails, nil on success
+//   - error: GORM error if the operation fails, nil on success
 //
 // Example:
 //
@@ -760,7 +777,7 @@ func (qb *QueryBuilder) Create(value interface{}) (int64, error) {
 //
 // Returns:
 //   - int64: Number of rows affected (records created)
-//   - error: Error if the operation fails, nil on success
+//   - error: GORM error if the operation fails, nil on success
 //
 // Example:
 //
@@ -785,7 +802,7 @@ func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64
 //   - dest: Pointer to the struct where the result will be stored
 //   - conds: Optional conditions for the query
 //
-// Returns an error if the operation fails or nil on success.
+// Returns a GORM error if the operation fails or nil on success.
 //
 // Example:
 //
@@ -803,7 +820,7 @@ func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) erro
 //   - dest: Pointer to the struct where the result will be stored
 //   - conds: Optional conditions for the query
 //
-// Returns an error if the operation fails or nil on success.
+// Returns a GORM error if the operation fails or nil on success.
 //
 // Example:
 //

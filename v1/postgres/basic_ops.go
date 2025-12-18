@@ -12,7 +12,8 @@ import (
 //   - dest: Pointer to a slice where the results will be stored
 //   - conditions: Optional query conditions (follows GORM conventions)
 //
-// Return an error if the query fails or nil on success.
+// Returns a GORM error if the query fails or nil on success.
+// Use TranslateError() to convert to standardized error types if needed.
 //
 // Example:
 //
@@ -33,12 +34,16 @@ func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...int
 //   - dest: Pointer to a struct where the result will be stored
 //   - conditions: Optional query conditions (follows GORM conventions)
 //
-// Return ErrRecordNotFound if no matching record exists, or another error if the query fails.
+// Returns gorm.ErrRecordNotFound if no matching record exists, or another GORM error if the query fails.
+// Use TranslateError() to convert to standardized error types if needed.
 //
 // Example:
 //
 //	var user User
 //	err := db.First(ctx, &user, "email = ?", "user@example.com")
+//	if errors.Is(err, gorm.ErrRecordNotFound) {
+//	    // Handle not found
+//	}
 func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...interface{}) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -54,7 +59,8 @@ func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...in
 //   - ctx: Context for the database operation
 //   - value: The struct or slice of structs to be created
 //
-// Returns an error if the creation fails or nil on success.
+// Returns a GORM error if the creation fails or nil on success.
+// Use TranslateError() to convert to standardized error types if needed.
 //
 // Example:
 //
@@ -75,7 +81,8 @@ func (p *Postgres) Create(ctx context.Context, value interface{}) error {
 //   - ctx: Context for the database operation
 //   - value: The struct to be saved
 //
-// Returns an error if the operation fails or nil on success.
+// Returns a GORM error if the operation fails or nil on success.
+// Use TranslateError() to convert to standardized error types if needed.
 //
 // Example:
 //
@@ -99,7 +106,7 @@ func (p *Postgres) Save(ctx context.Context, value interface{}) error {
 //
 // Returns:
 //   - int64: Number of rows affected by the update operation
-//   - error: Error if the update fails, nil on success
+//   - error: GORM error if the update fails, nil on success
 //
 // Note: The current implementation has a bug where it executes the query twice.
 // This should be fixed to execute only once and return both values properly.
@@ -136,7 +143,7 @@ func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interfac
 //
 // Returns:
 //   - int64: Number of rows affected by the update operation
-//   - error: Error if the update fails, nil on success
+//   - error: GORM error if the update fails, nil on success
 //
 // Example:
 //
@@ -165,7 +172,7 @@ func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnNa
 //
 // Returns:
 //   - int64: Number of rows affected by the update operation
-//   - error: Error if the update fails, nil on success
+//   - error: GORM error if the update fails, nil on success
 //
 // Example:
 //
@@ -197,7 +204,7 @@ func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnV
 //
 // Returns:
 //   - int64: Number of rows affected by the delete operation
-//   - error: Error if the deletion fails, nil on success
+//   - error: GORM error if the deletion fails, nil on success
 //
 // Example:
 //
@@ -231,7 +238,7 @@ func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...
 //
 // Returns:
 //   - int64: Number of rows affected by the SQL execution
-//   - error: Error if the execution fails, nil on success
+//   - error: GORM error if the execution fails, nil on success
 //
 // Example:
 //
@@ -259,7 +266,8 @@ func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) 
 //   - count: Pointer to an int64 where the count will be stored
 //   - conditions: Query conditions to filter the records to count
 //
-// Returns an error if the query fails or nil on success.
+// Returns a GORM error if the query fails or nil on success.
+// Use TranslateError() to convert to standardized error types if needed.
 //
 // Example:
 //
@@ -284,7 +292,7 @@ func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, c
 //
 // Returns:
 //   - int64: Number of rows affected by the update operation
-//   - error: Error if the update fails, nil on success
+//   - error: GORM error if the update fails, nil on success
 //
 // Example:
 //

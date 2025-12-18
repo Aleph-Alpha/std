@@ -92,7 +92,7 @@ type MigrationHistoryRecord struct {
 // Parameters:
 //   - models: The GORM models to auto-migrate
 //
-// Returns an error if any part of the migration process fails.
+// Returns a GORM error if any part of the migration process fails.
 //
 // This method is useful during development or for simple applications,
 // but for production systems, explicit migrations are recommended.
@@ -143,7 +143,8 @@ func (p *Postgres) ensureMigrationHistoryTable() error {
 //   - ctx: Context for database operations
 //   - migrationsDir: Directory containing the migration SQL files
 //
-// Returns an error if any migration fails or if there are issues accessing the migrations.
+// Returns a wrapped error if any migration fails or if there are issues accessing the migrations.
+// The error wraps the underlying GORM error with additional context.
 //
 // Example:
 //
@@ -241,7 +242,8 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 //   - ctx: Context for database operations
 //   - migrationsDir: Directory containing the migration SQL files
 //
-// Returns an error if the rollback fails or if the down migration can't be found.
+// Returns a wrapped error if the rollback fails or if the down migration can't be found.
+// The error wraps the underlying GORM error with additional context.
 //
 // Example:
 //
@@ -372,7 +374,8 @@ func (p *Postgres) loadMigrations(dir string, direction MigrationDirection) ([]M
 //   - migrationsDir: Directory containing the migration SQL files
 //
 // Returns a slice of maps with status information for each migration,
-// or an error if the status cannot be determined.
+// or a wrapped error if the status cannot be determined.
+// The error wraps the underlying GORM error with additional context.
 //
 // Example:
 //
@@ -440,7 +443,7 @@ func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string)
 //   - name: Descriptive name for the migration
 //   - migrationType: Whether this is a schema or data migration
 //
-// Returns the base filename of the created migration or an error if creation fails.
+// Returns the base filename of the created migration or a wrapped error if creation fails.
 //
 // Example:
 //

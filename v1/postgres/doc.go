@@ -92,6 +92,48 @@
 //	)
 //	app.Run()
 //
+// Error Handling:
+//
+// All methods in this package return GORM errors directly. This design provides:
+//   - Consistency: All methods behave the same way
+//   - Flexibility: Consumers can use errors.Is() with GORM error types
+//   - Performance: No translation overhead unless needed
+//   - Transparency: Preserves the full error chain from GORM
+//
+// Basic error handling with GORM errors:
+//
+//	var user User
+//	err := db.First(ctx, &user, "email = ?", "user@example.com")
+//	if errors.Is(err, gorm.ErrRecordNotFound) {
+//	    // Handle not found
+//	}
+//
+//	err = db.Query(ctx).Where("email = ?", "user@example.com").First(&user)
+//	if errors.Is(err, gorm.ErrRecordNotFound) {
+//	    // Handle not found
+//	}
+//
+// For standardized error types, use TranslateError():
+//
+//	err := db.First(ctx, &user, conditions)
+//	if err != nil {
+//	    err = db.TranslateError(err)
+//	    if errors.Is(err, postgres.ErrRecordNotFound) {
+//	        // Handle not found with standardized error
+//	    }
+//	}
+//
+// Recommended pattern - create a helper function for common error checks:
+//
+//	func isRecordNotFound(err error) bool {
+//	    return errors.Is(err, gorm.ErrRecordNotFound)
+//	}
+//
+//	// Use consistently throughout your codebase
+//	if isRecordNotFound(err) {
+//	    // Handle not found
+//	}
+//
 // Performance Considerations:
 //
 //   - Connection pooling is automatically handled to optimize performance

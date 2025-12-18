@@ -41,6 +41,8 @@ func (qb *QueryBuilder) QueryRow() RowScanner {
 // QueryRows executes a query that returns multiple rows and returns a RowsScanner for them.
 // This method provides an iterator-style interface for processing multiple rows
 // returned by a query, allowing for efficient traversal of large result sets.
+//
+// Returns a RowsScanner and a GORM error if the query fails.
 func (qb *QueryBuilder) QueryRows() (RowsScanner, error) {
 	defer qb.release()
 	return qb.db.Rows()
@@ -50,6 +52,8 @@ func (qb *QueryBuilder) QueryRows() (RowsScanner, error) {
 // This is a higher-level alternative to QueryRow that automatically maps
 // column values to struct fields based on naming conventions or field tags.
 // It's useful when you need to map a row to a predefined data structure.
+//
+// Returns a GORM error if the scan fails or nil on success.
 func (qb *QueryBuilder) ScanRow(dest interface{}) error {
 	defer qb.release()
 	return qb.db.Scan(dest).Error
@@ -63,6 +67,8 @@ func (qb *QueryBuilder) ScanRow(dest interface{}) error {
 // Parameters:
 //   - destSlice: The slice to populate with mapped rows (should be a pointer to a slice)
 //   - mapFn: A function that defines how to map rows from the database to your slice items
+//
+// Returns a GORM error if the mapping fails or nil on success.
 func (qb *QueryBuilder) MapRows(destSlice interface{}, mapFn func(*gorm.DB) error) error {
 	defer qb.release()
 	return mapFn(qb.db)
