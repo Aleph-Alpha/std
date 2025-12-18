@@ -28,6 +28,8 @@ func (p *Postgres) cloneWithTx(tx *gorm.DB) *Postgres {
 // This method provides a clean way to execute multiple database operations as a single
 // atomic unit, with automatic handling of commit/rollback based on the execution result.
 //
+// Returns a GORM error if the transaction fails or the error returned by the callback function.
+//
 // Example usage:
 //
 //	err := pg.Transaction(ctx, func(txPg *Postgres) error {

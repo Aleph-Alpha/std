@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -9,11 +11,8 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/jackc/pgx/v5/pgconn"
-
-	"database/sql"
-
 	"github.com/docker/go-connections/nat"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -393,32 +392,78 @@ func TestPostgresWithFXModule(t *testing.T) {
 		assert.Equal(t, 200, items[1].Value)
 	})
 
-	// Test error translation
-	t.Run("ErrorTranslation", func(t *testing.T) {
+	// Test error handling - GORM errors and translation
+	t.Run("ErrorHandling", func(t *testing.T) {
 		ctx := context.Background()
 
-		// Test record didn't find an error
-		var user TestUser
-		err := postgres.First(ctx, &user, "name = ?", "NonExistentUser")
-		translatedErr := postgres.TranslateError(err)
-		assert.ErrorIs(t, translatedErr, ErrRecordNotFound)
+		// Test 1: Direct GORM error checking (recommended pattern)
+		t.Run("DirectGORMErrorChecking", func(t *testing.T) {
+			var user TestUser
+			err := postgres.First(ctx, &user, "name = ?", "NonExistentUser")
+			assert.Error(t, err)
+			assert.ErrorIs(t, err, gorm.ErrRecordNotFound, "Should return gorm.ErrRecordNotFound directly")
 
-		// Create a table with a unique constraint
-		_, err = postgres.Exec(ctx, `
-			CREATE TABLE IF NOT EXISTS unique_test (
-				id SERIAL PRIMARY KEY,
-				email TEXT UNIQUE NOT NULL
-			)
-		`)
-		assert.NoError(t, err)
+			// Same pattern works with QueryBuilder
+			err = postgres.Query(ctx).Where("name = ?", "NonExistentUser").First(&user)
+			assert.Error(t, err)
+			assert.ErrorIs(t, err, gorm.ErrRecordNotFound, "QueryBuilder should also return gorm.ErrRecordNotFound")
+		})
 
-		// Create a record
-		_, err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
-		assert.NoError(t, err)
+		// Test 2: Helper function pattern (recommended for consistency)
+		t.Run("HelperFunctionPattern", func(t *testing.T) {
+			// Define helper function (would typically be in your repository layer)
+			isRecordNotFound := func(err error) bool {
+				return errors.Is(err, gorm.ErrRecordNotFound)
+			}
 
-		// Try to create a duplicate (will fail due to unique constraint)
-		_, err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
-		assert.Error(t, err)
+			var user TestUser
+			err := postgres.First(ctx, &user, "name = ?", "NonExistentUser")
+			assert.True(t, isRecordNotFound(err), "Helper function should identify record not found")
+
+			// Works consistently with QueryBuilder too
+			err = postgres.Query(ctx).Where("name = ?", "NonExistentUser").First(&user)
+			assert.True(t, isRecordNotFound(err), "Helper function works with QueryBuilder")
+		})
+
+		// Test 3: Error translation (optional, when standardized errors are needed)
+		t.Run("ErrorTranslation", func(t *testing.T) {
+			var user TestUser
+			err := postgres.First(ctx, &user, "name = ?", "NonExistentUser")
+			translatedErr := postgres.TranslateError(err)
+			assert.ErrorIs(t, translatedErr, ErrRecordNotFound, "TranslateError should convert to ErrRecordNotFound")
+
+			// Translation works with any GORM error
+			err = postgres.Query(ctx).Where("name = ?", "NonExistentUser").First(&user)
+			translatedErr = postgres.TranslateError(err)
+			assert.ErrorIs(t, translatedErr, ErrRecordNotFound, "TranslateError works with QueryBuilder errors")
+		})
+
+		// Test 4: Constraint violation errors
+		t.Run("ConstraintViolations", func(t *testing.T) {
+			// Create a table with a unique constraint
+			_, err := postgres.Exec(ctx, `
+				CREATE TABLE IF NOT EXISTS unique_test (
+					id SERIAL PRIMARY KEY,
+					email TEXT UNIQUE NOT NULL
+				)
+			`)
+			assert.NoError(t, err)
+
+			// Create a record
+			_, err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
+			assert.NoError(t, err)
+
+			// Try to create a duplicate (will fail due to unique constraint)
+			_, err = postgres.Exec(ctx, `INSERT INTO unique_test (email) VALUES ('test@example.com')`)
+			assert.Error(t, err)
+
+			// Check with GORM error
+			assert.ErrorIs(t, err, gorm.ErrDuplicatedKey, "Should return gorm.ErrDuplicatedKey for unique violation")
+
+			// Or translate to standardized error
+			translatedErr := postgres.TranslateError(err)
+			assert.ErrorIs(t, translatedErr, ErrDuplicateKey, "Should translate to ErrDuplicateKey")
+		})
 	})
 
 	// Stop the application
@@ -2715,7 +2760,7 @@ func TestQueryBuilder_ToSubquery(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Len(t, results, 2) // Charlie and Dave
-		
+
 		names := make([]string, len(results))
 		for i, u := range results {
 			names[i] = u.Name
