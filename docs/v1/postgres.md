@@ -107,6 +107,55 @@ app := fx.New(
 app.Run()
 ```
 
+Error Handling:
+
+All methods in this package return GORM errors directly. This design provides:
+
+- Consistency: All methods behave the same way
+- Flexibility: Consumers can use errors.Is\(\) with GORM error types
+- Performance: No translation overhead unless needed
+- Transparency: Preserves the full error chain from GORM
+
+Basic error handling with GORM errors:
+
+```
+var user User
+err := db.First(ctx, &user, "email = ?", "user@example.com")
+if errors.Is(err, gorm.ErrRecordNotFound) {
+    // Handle not found
+}
+
+err = db.Query(ctx).Where("email = ?", "user@example.com").First(&user)
+if errors.Is(err, gorm.ErrRecordNotFound) {
+    // Handle not found
+}
+```
+
+For standardized error types, use TranslateError\(\):
+
+```
+err := db.First(ctx, &user, conditions)
+if err != nil {
+    err = db.TranslateError(err)
+    if errors.Is(err, postgres.ErrRecordNotFound) {
+        // Handle not found with standardized error
+    }
+}
+```
+
+Recommended pattern \- create a helper function for common error checks:
+
+```
+func isRecordNotFound(err error) bool {
+    return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+// Use consistently throughout your codebase
+if isRecordNotFound(err) {
+    // Handle not found
+}
+```
+
 Performance Considerations:
 
 - Connection pooling is automatically handled to optimize performance
@@ -657,12 +706,12 @@ Parameters:
 
 - models: The GORM models to auto\-migrate
 
-Returns an error if any part of the migration process fails.
+Returns a GORM error if any part of the migration process fails.
 
 This method is useful during development or for simple applications, but for production systems, explicit migrations are recommended.
 
 <a name="Postgres.Count"></a>
-### func \(\*Postgres\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L268>)
+### func \(\*Postgres\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L276>)
 
 ```go
 func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error
@@ -677,7 +726,7 @@ Parameters:
 - count: Pointer to an int64 where the count will be stored
 - conditions: Query conditions to filter the records to count
 
-Returns an error if the query fails or nil on success.
+Returns a GORM error if the query fails or nil on success. Use TranslateError\(\) to convert to standardized error types if needed.
 
 Example:
 
@@ -687,7 +736,7 @@ err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 ```
 
 <a name="Postgres.Create"></a>
-### func \(\*Postgres\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L63>)
+### func \(\*Postgres\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L69>)
 
 ```go
 func (p *Postgres) Create(ctx context.Context, value interface{}) error
@@ -700,7 +749,7 @@ Parameters:
 - ctx: Context for the database operation
 - value: The struct or slice of structs to be created
 
-Returns an error if the creation fails or nil on success.
+Returns a GORM error if the creation fails or nil on success. Use TranslateError\(\) to convert to standardized error types if needed.
 
 Example:
 
@@ -710,7 +759,7 @@ err := db.Create(ctx, &user)
 ```
 
 <a name="Postgres.CreateMigration"></a>
-### func \(\*Postgres\) [CreateMigration](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L451>)
+### func \(\*Postgres\) [CreateMigration](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L454>)
 
 ```go
 func (p *Postgres) CreateMigration(migrationsDir, name string, migrationType MigrationType) (string, error)
@@ -724,7 +773,7 @@ Parameters:
 - name: Descriptive name for the migration
 - migrationType: Whether this is a schema or data migration
 
-Returns the base filename of the created migration or an error if creation fails.
+Returns the base filename of the created migration or a wrapped error if creation fails.
 
 Example:
 
@@ -747,7 +796,7 @@ DB returns the underlying GORM DB Client instance. This method provides direct a
 Use this method when you need to perform operations not covered by the wrapper methods or when you need to access specific GORM functionality. Note that direct usage bypasses some of the safety mechanisms, so use it with care.
 
 <a name="Postgres.Delete"></a>
-### func \(\*Postgres\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L214>)
+### func \(\*Postgres\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L221>)
 
 ```go
 func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error)
@@ -764,7 +813,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the delete operation
-- error: Error if the deletion fails, nil on success
+- error: GORM error if the deletion fails, nil on success
 
 Example:
 
@@ -782,7 +831,7 @@ rowsAffected, err := db.Delete(ctx, &user)
 ```
 
 <a name="Postgres.Exec"></a>
-### func \(\*Postgres\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L244>)
+### func \(\*Postgres\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L251>)
 
 ```go
 func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error)
@@ -799,7 +848,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the SQL execution
-- error: Error if the execution fails, nil on success
+- error: GORM error if the execution fails, nil on success
 
 Example:
 
@@ -813,7 +862,7 @@ fmt.Printf("Updated %d users\n", rowsAffected)
 ```
 
 <a name="Postgres.Find"></a>
-### func \(\*Postgres\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L21>)
+### func \(\*Postgres\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L22>)
 
 ```go
 func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -827,7 +876,7 @@ Parameters:
 - dest: Pointer to a slice where the results will be stored
 - conditions: Optional query conditions \(follows GORM conventions\)
 
-Return an error if the query fails or nil on success.
+Returns a GORM error if the query fails or nil on success. Use TranslateError\(\) to convert to standardized error types if needed.
 
 Example:
 
@@ -837,7 +886,7 @@ err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 ```
 
 <a name="Postgres.First"></a>
-### func \(\*Postgres\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L42>)
+### func \(\*Postgres\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L47>)
 
 ```go
 func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -851,13 +900,16 @@ Parameters:
 - dest: Pointer to a struct where the result will be stored
 - conditions: Optional query conditions \(follows GORM conventions\)
 
-Return ErrRecordNotFound if no matching record exists, or another error if the query fails.
+Returns gorm.ErrRecordNotFound if no matching record exists, or another GORM error if the query fails. Use TranslateError\(\) to convert to standardized error types if needed.
 
 Example:
 
 ```
 var user User
 err := db.First(ctx, &user, "email = ?", "user@example.com")
+if errors.Is(err, gorm.ErrRecordNotFound) {
+    // Handle not found
+}
 ```
 
 <a name="Postgres.GetErrorCategory"></a>
@@ -870,7 +922,7 @@ func (p *Postgres) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="Postgres.GetMigrationStatus"></a>
-### func \(\*Postgres\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L385>)
+### func \(\*Postgres\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L388>)
 
 ```go
 func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string) ([]map[string]interface{}, error)
@@ -883,7 +935,7 @@ Parameters:
 - ctx: Context for database operations
 - migrationsDir: Directory containing the migration SQL files
 
-Returns a slice of maps with status information for each migration, or an error if the status cannot be determined.
+Returns a slice of maps with status information for each migration, or a wrapped error if the status cannot be determined. The error wraps the underlying GORM error with additional context.
 
 Example:
 
@@ -933,7 +985,7 @@ func (p *Postgres) IsTemporary(err error) bool
 IsTemporary returns true if the error is likely temporary and might resolve itself
 
 <a name="Postgres.MigrateDown"></a>
-### func \(\*Postgres\) [MigrateDown](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L249>)
+### func \(\*Postgres\) [MigrateDown](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L251>)
 
 ```go
 func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error
@@ -946,7 +998,7 @@ Parameters:
 - ctx: Context for database operations
 - migrationsDir: Directory containing the migration SQL files
 
-Returns an error if the rollback fails or if the down migration can't be found.
+Returns a wrapped error if the rollback fails or if the down migration can't be found. The error wraps the underlying GORM error with additional context.
 
 Example:
 
@@ -955,7 +1007,7 @@ err := db.MigrateDown(ctx, "./migrations")
 ```
 
 <a name="Postgres.MigrateUp"></a>
-### func \(\*Postgres\) [MigrateUp](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L151>)
+### func \(\*Postgres\) [MigrateUp](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L152>)
 
 ```go
 func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error
@@ -968,7 +1020,7 @@ Parameters:
 - ctx: Context for database operations
 - migrationsDir: Directory containing the migration SQL files
 
-Returns an error if any migration fails or if there are issues accessing the migrations.
+Returns a wrapped error if any migration fails or if there are issues accessing the migrations. The error wraps the underlying GORM error with additional context.
 
 Example:
 
@@ -988,7 +1040,7 @@ MonitorConnection periodically checks the health of the database connection and 
 The function respects context cancellation and shutdown signals, ensuring proper resource cleanup and graceful termination when requested.
 
 <a name="Postgres.Query"></a>
-### func \(\*Postgres\) [Query](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L28>)
+### func \(\*Postgres\) [Query](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L34>)
 
 ```go
 func (p *Postgres) Query(ctx context.Context) *QueryBuilder
@@ -1002,6 +1054,8 @@ Parameters:
 
 Returns a QueryBuilder instance that can be used to construct the query.
 
+Note: QueryBuilder methods return GORM errors directly. Use Postgres.TranslateError\(\) to convert them to standardized error types if needed.
+
 Example:
 
 ```
@@ -1011,6 +1065,9 @@ err := db.Query(ctx).
     Order("created_at DESC").
     Limit(10).
     Find(&users)
+if err != nil {
+    err = db.TranslateError(err) // Optional: translate to standardized error
+}
 ```
 
 <a name="Postgres.RetryConnection"></a>
@@ -1025,7 +1082,7 @@ RetryConnection continuously attempts to reconnect to the PostgresSQL database w
 It implements two nested loops: \- The outer loop waits for retry signals \- The inner loop attempts reconnection until successful
 
 <a name="Postgres.Save"></a>
-### func \(\*Postgres\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L84>)
+### func \(\*Postgres\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L91>)
 
 ```go
 func (p *Postgres) Save(ctx context.Context, value interface{}) error
@@ -1038,7 +1095,7 @@ Parameters:
 - ctx: Context for the database operation
 - value: The struct to be saved
 
-Returns an error if the operation fails or nil on success.
+Returns a GORM error if the operation fails or nil on success. Use TranslateError\(\) to convert to standardized error types if needed.
 
 Example:
 
@@ -1048,7 +1105,7 @@ err := db.Save(ctx, &user)
 ```
 
 <a name="Postgres.Transaction"></a>
-### func \(\*Postgres\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/transactions.go#L39>)
+### func \(\*Postgres\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/transactions.go#L41>)
 
 ```go
 func (p *Postgres) Transaction(ctx context.Context, fn func(pg *Postgres) error) error
@@ -1057,6 +1114,8 @@ func (p *Postgres) Transaction(ctx context.Context, fn func(pg *Postgres) error)
 Transaction executes the given function within a database transaction. It creates a transaction\-specific Postgres instance and passes it to the provided function. If the function returns an error, the transaction is rolled back; otherwise, it's committed.
 
 This method provides a clean way to execute multiple database operations as a single atomic unit, with automatic handling of commit/rollback based on the execution result.
+
+Returns a GORM error if the transaction fails or the error returned by the callback function.
 
 Example usage:
 
@@ -1081,7 +1140,7 @@ TranslateError converts GORM/database\-specific errors into standardized applica
 It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Postgres.Update"></a>
-### func \(\*Postgres\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L118>)
+### func \(\*Postgres\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L125>)
 
 ```go
 func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error)
@@ -1098,7 +1157,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the update operation
-- error: Error if the update fails, nil on success
+- error: GORM error if the update fails, nil on success
 
 Note: The current implementation has a bug where it executes the query twice. This should be fixed to execute only once and return both values properly.
 
@@ -1117,7 +1176,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumn"></a>
-### func \(\*Postgres\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L149>)
+### func \(\*Postgres\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L156>)
 
 ```go
 func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error)
@@ -1135,7 +1194,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the update operation
-- error: Error if the update fails, nil on success
+- error: GORM error if the update fails, nil on success
 
 Example:
 
@@ -1149,7 +1208,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumns"></a>
-### func \(\*Postgres\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L181>)
+### func \(\*Postgres\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L188>)
 
 ```go
 func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error)
@@ -1166,7 +1225,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the update operation
-- error: Error if the update fails, nil on success
+- error: GORM error if the update fails, nil on success
 
 Example:
 
@@ -1183,7 +1242,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateWhere"></a>
-### func \(\*Postgres\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L300>)
+### func \(\*Postgres\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L308>)
 
 ```go
 func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error)
@@ -1202,7 +1261,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the update operation
-- error: Error if the update fails, nil on success
+- error: GORM error if the update fails, nil on success
 
 Example:
 
@@ -1250,9 +1309,11 @@ type PostgresParams struct {
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L39-L45>)
+## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L49-L55>)
 
 QueryBuilder provides a fluent interface for building complex database queries. It wraps GORM's query building capabilities with thread\-safety and automatic resource cleanup. The builder maintains a chain of query modifiers that are applied when a terminal method is called.
+
+Note: All terminal methods \(First, Find, Create, etc.\) return GORM errors directly. This preserves the error chain and allows consumers to use errors.Is\(\) with GORM error types. Use Postgres.TranslateError\(\) to convert errors to standardized types if needed.
 
 ```go
 type QueryBuilder struct {
@@ -1261,7 +1322,7 @@ type QueryBuilder struct {
 ```
 
 <a name="QueryBuilder.Clauses"></a>
-### func \(\*QueryBuilder\) [Clauses](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L714>)
+### func \(\*QueryBuilder\) [Clauses](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L731>)
 
 ```go
 func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder
@@ -1288,7 +1349,7 @@ qb.Clauses(clause.GroupBy{
 ```
 
 <a name="QueryBuilder.Count"></a>
-### func \(\*QueryBuilder\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L383>)
+### func \(\*QueryBuilder\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L400>)
 
 ```go
 func (qb *QueryBuilder) Count(count *int64) error
@@ -1300,7 +1361,7 @@ Parameters:
 
 - count: Pointer to an int64 where the count will be stored
 
-Returns an error if the query fails or nil on success.
+Returns a GORM error if the query fails or nil on success.
 
 Example:
 
@@ -1310,7 +1371,7 @@ err := qb.Where("active = ?", true).Count(&count)
 ```
 
 <a name="QueryBuilder.Create"></a>
-### func \(\*QueryBuilder\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L746>)
+### func \(\*QueryBuilder\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L763>)
 
 ```go
 func (qb *QueryBuilder) Create(value interface{}) (int64, error)
@@ -1325,7 +1386,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected \(records created\)
-- error: Error if the operation fails, nil on success
+- error: GORM error if the operation fails, nil on success
 
 Example:
 
@@ -1348,7 +1409,7 @@ if rowsAffected == 0 {
 ```
 
 <a name="QueryBuilder.CreateInBatches"></a>
-### func \(\*QueryBuilder\) [CreateInBatches](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L773>)
+### func \(\*QueryBuilder\) [CreateInBatches](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L790>)
 
 ```go
 func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error)
@@ -1364,7 +1425,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected \(records created\)
-- error: Error if the operation fails, nil on success
+- error: GORM error if the operation fails, nil on success
 
 Example:
 
@@ -1378,7 +1439,7 @@ fmt.Printf("Created %d records\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Delete"></a>
-### func \(\*QueryBuilder\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L430>)
+### func \(\*QueryBuilder\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L447>)
 
 ```go
 func (qb *QueryBuilder) Delete(value interface{}) (int64, error)
@@ -1393,7 +1454,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the delete operation
-- error: Error if the deletion fails, nil on success
+- error: GORM error if the deletion fails, nil on success
 
 Example:
 
@@ -1406,7 +1467,7 @@ fmt.Printf("Deleted %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Distinct"></a>
-### func \(\*QueryBuilder\) [Distinct](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L477>)
+### func \(\*QueryBuilder\) [Distinct](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L494>)
 
 ```go
 func (qb *QueryBuilder) Distinct(args ...interface{}) *QueryBuilder
@@ -1428,7 +1489,7 @@ qb.Distinct().Where("age > ?", 18).Find(&users) // SELECT DISTINCT * FROM users 
 ```
 
 <a name="QueryBuilder.Done"></a>
-### func \(\*QueryBuilder\) [Done](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L829>)
+### func \(\*QueryBuilder\) [Done](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L846>)
 
 ```go
 func (qb *QueryBuilder) Done()
@@ -1448,7 +1509,7 @@ if someCondition {
 ```
 
 <a name="QueryBuilder.Find"></a>
-### func \(\*QueryBuilder\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L332>)
+### func \(\*QueryBuilder\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L344>)
 
 ```go
 func (qb *QueryBuilder) Find(dest interface{}) error
@@ -1460,7 +1521,7 @@ Parameters:
 
 - dest: Pointer to a slice where results will be stored
 
-Returns an error if the query fails or nil on success.
+Returns a GORM error if the query fails or nil on success. Use Postgres.TranslateError\(\) to convert to standardized error types.
 
 Example:
 
@@ -1470,7 +1531,7 @@ err := qb.Where("active = ?", true).Find(&users)
 ```
 
 <a name="QueryBuilder.First"></a>
-### func \(\*QueryBuilder\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L349>)
+### func \(\*QueryBuilder\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L365>)
 
 ```go
 func (qb *QueryBuilder) First(dest interface{}) error
@@ -1482,17 +1543,20 @@ Parameters:
 
 - dest: Pointer to a struct where the result will be stored
 
-Returns an error if no record is found or the query fails, nil on success.
+Returns gorm.ErrRecordNotFound if no record is found, or another GORM error if the query fails, nil on success. Use Postgres.TranslateError\(\) to convert to standardized error types if needed.
 
 Example:
 
 ```
 var user User
 err := qb.Where("email = ?", "user@example.com").First(&user)
+if err != nil {
+    err = db.TranslateError(err) // Optional: convert to standardized error
+}
 ```
 
 <a name="QueryBuilder.FirstOrCreate"></a>
-### func \(\*QueryBuilder\) [FirstOrCreate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L812>)
+### func \(\*QueryBuilder\) [FirstOrCreate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L829>)
 
 ```go
 func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error
@@ -1505,7 +1569,7 @@ Parameters:
 - dest: Pointer to the struct where the result will be stored
 - conds: Optional conditions for the query
 
-Returns an error if the operation fails or nil on success.
+Returns a GORM error if the operation fails or nil on success.
 
 Example:
 
@@ -1515,7 +1579,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
 ```
 
 <a name="QueryBuilder.FirstOrInit"></a>
-### func \(\*QueryBuilder\) [FirstOrInit](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L794>)
+### func \(\*QueryBuilder\) [FirstOrInit](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L811>)
 
 ```go
 func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error
@@ -1528,7 +1592,7 @@ Parameters:
 - dest: Pointer to the struct where the result will be stored
 - conds: Optional conditions for the query
 
-Returns an error if the operation fails or nil on success.
+Returns a GORM error if the operation fails or nil on success.
 
 Example:
 
@@ -1538,7 +1602,7 @@ err := qb.Where("email = ?", "user@example.com").FirstOrInit(&user)
 ```
 
 <a name="QueryBuilder.ForKeyShare"></a>
-### func \(\*QueryBuilder\) [ForKeyShare](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L646>)
+### func \(\*QueryBuilder\) [ForKeyShare](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L663>)
 
 ```go
 func (qb *QueryBuilder) ForKeyShare() *QueryBuilder
@@ -1555,7 +1619,7 @@ qb.Where("id = ?", userID).ForKeyShare().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForNoKeyUpdate"></a>
-### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L632>)
+### func \(\*QueryBuilder\) [ForNoKeyUpdate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L649>)
 
 ```go
 func (qb *QueryBuilder) ForNoKeyUpdate() *QueryBuilder
@@ -1572,7 +1636,7 @@ qb.Where("id = ?", userID).ForNoKeyUpdate().First(&user) // PostgreSQL only
 ```
 
 <a name="QueryBuilder.ForShare"></a>
-### func \(\*QueryBuilder\) [ForShare](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L567>)
+### func \(\*QueryBuilder\) [ForShare](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L584>)
 
 ```go
 func (qb *QueryBuilder) ForShare() *QueryBuilder
@@ -1590,7 +1654,7 @@ qb.ForShare().Where("status = ?", "active").Find(&users) // Prevents updates but
 ```
 
 <a name="QueryBuilder.ForShareSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L598>)
+### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L615>)
 
 ```go
 func (qb *QueryBuilder) ForShareSkipLocked() *QueryBuilder
@@ -1607,7 +1671,7 @@ qb.Where("category = ?", "news").ForShareSkipLocked().Find(&articles)
 ```
 
 <a name="QueryBuilder.ForUpdate"></a>
-### func \(\*QueryBuilder\) [ForUpdate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L552>)
+### func \(\*QueryBuilder\) [ForUpdate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L569>)
 
 ```go
 func (qb *QueryBuilder) ForUpdate() *QueryBuilder
@@ -1625,7 +1689,7 @@ qb.ForUpdate().Where("status = ?", "pending").Find(&orders) // Locks all matchin
 ```
 
 <a name="QueryBuilder.ForUpdateNoWait"></a>
-### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L615>)
+### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L632>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateNoWait() *QueryBuilder
@@ -1642,7 +1706,7 @@ qb.Where("id = ?", accountID).ForUpdateNoWait().First(&account)
 ```
 
 <a name="QueryBuilder.ForUpdateSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L582>)
+### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L599>)
 
 ```go
 func (qb *QueryBuilder) ForUpdateSkipLocked() *QueryBuilder
@@ -1660,7 +1724,7 @@ qb.ForUpdateSkipLocked().Where("processed = ?", false).First(&task)
 ```
 
 <a name="QueryBuilder.Group"></a>
-### func \(\*QueryBuilder\) [Group](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L200>)
+### func \(\*QueryBuilder\) [Group](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L210>)
 
 ```go
 func (qb *QueryBuilder) Group(query string) *QueryBuilder
@@ -1682,7 +1746,7 @@ qb.Group("department, location")
 ```
 
 <a name="QueryBuilder.Having"></a>
-### func \(\*QueryBuilder\) [Having](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L217>)
+### func \(\*QueryBuilder\) [Having](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L227>)
 
 ```go
 func (qb *QueryBuilder) Having(query interface{}, args ...interface{}) *QueryBuilder
@@ -1704,7 +1768,7 @@ qb.Group("department").Having("COUNT(*) > ?", 3)
 ```
 
 <a name="QueryBuilder.Joins"></a>
-### func \(\*QueryBuilder\) [Joins](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L129>)
+### func \(\*QueryBuilder\) [Joins](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L139>)
 
 ```go
 func (qb *QueryBuilder) Joins(query string, args ...interface{}) *QueryBuilder
@@ -1726,7 +1790,7 @@ qb.Joins("JOIN orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Last"></a>
-### func \(\*QueryBuilder\) [Last](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L366>)
+### func \(\*QueryBuilder\) [Last](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L383>)
 
 ```go
 func (qb *QueryBuilder) Last(dest interface{}) error
@@ -1738,7 +1802,7 @@ Parameters:
 
 - dest: Pointer to a struct where the result will be stored
 
-Returns an error if no record is found or the query fails, nil on success.
+Returns gorm.ErrRecordNotFound if no record is found, or another GORM error if the query fails, nil on success. Use Postgres.TranslateError\(\) to convert to standardized error types if needed.
 
 Example:
 
@@ -1748,7 +1812,7 @@ err := qb.Where("department = ?", "Engineering").Order("joined_at ASC").Last(&us
 ```
 
 <a name="QueryBuilder.LeftJoin"></a>
-### func \(\*QueryBuilder\) [LeftJoin](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L146>)
+### func \(\*QueryBuilder\) [LeftJoin](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L156>)
 
 ```go
 func (qb *QueryBuilder) LeftJoin(query string, args ...interface{}) *QueryBuilder
@@ -1770,7 +1834,7 @@ qb.LeftJoin("orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Limit"></a>
-### func \(\*QueryBuilder\) [Limit](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L249>)
+### func \(\*QueryBuilder\) [Limit](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L259>)
 
 ```go
 func (qb *QueryBuilder) Limit(limit int) *QueryBuilder
@@ -1791,7 +1855,7 @@ qb.Limit(10) // Return at most 10 records
 ```
 
 <a name="QueryBuilder.MapRows"></a>
-### func \(\*QueryBuilder\) [MapRows](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/row_scanner.go#L66>)
+### func \(\*QueryBuilder\) [MapRows](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/row_scanner.go#L72>)
 
 ```go
 func (qb *QueryBuilder) MapRows(destSlice interface{}, mapFn func(*gorm.DB) error) error
@@ -1804,8 +1868,10 @@ Parameters:
 - destSlice: The slice to populate with mapped rows \(should be a pointer to a slice\)
 - mapFn: A function that defines how to map rows from the database to your slice items
 
+Returns a GORM error if the mapping fails or nil on success.
+
 <a name="QueryBuilder.Model"></a>
-### func \(\*QueryBuilder\) [Model](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L298>)
+### func \(\*QueryBuilder\) [Model](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L308>)
 
 ```go
 func (qb *QueryBuilder) Model(value interface{}) *QueryBuilder
@@ -1826,7 +1892,7 @@ qb.Model(&User{}).Where("active = ?", true).Count(&count)
 ```
 
 <a name="QueryBuilder.Not"></a>
-### func \(\*QueryBuilder\) [Not](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L112>)
+### func \(\*QueryBuilder\) [Not](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L122>)
 
 ```go
 func (qb *QueryBuilder) Not(query interface{}, args ...interface{}) *QueryBuilder
@@ -1848,7 +1914,7 @@ qb.Not("status = ?", "deleted")
 ```
 
 <a name="QueryBuilder.Offset"></a>
-### func \(\*QueryBuilder\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L265>)
+### func \(\*QueryBuilder\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L275>)
 
 ```go
 func (qb *QueryBuilder) Offset(offset int) *QueryBuilder
@@ -1869,7 +1935,7 @@ qb.Offset(20).Limit(10) // Skip 20 records and return the next 10
 ```
 
 <a name="QueryBuilder.OnConflict"></a>
-### func \(\*QueryBuilder\) [OnConflict](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L666>)
+### func \(\*QueryBuilder\) [OnConflict](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L683>)
 
 ```go
 func (qb *QueryBuilder) OnConflict(onConflict clause.OnConflict) *QueryBuilder
@@ -1893,7 +1959,7 @@ qb.OnConflict(clause.OnConflict{
 ```
 
 <a name="QueryBuilder.Or"></a>
-### func \(\*QueryBuilder\) [Or](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L95>)
+### func \(\*QueryBuilder\) [Or](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L105>)
 
 ```go
 func (qb *QueryBuilder) Or(query interface{}, args ...interface{}) *QueryBuilder
@@ -1915,7 +1981,7 @@ qb.Where("status = ?", "active").Or("status = ?", "pending")
 ```
 
 <a name="QueryBuilder.Order"></a>
-### func \(\*QueryBuilder\) [Order](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L234>)
+### func \(\*QueryBuilder\) [Order](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L244>)
 
 ```go
 func (qb *QueryBuilder) Order(value interface{}) *QueryBuilder
@@ -1937,7 +2003,7 @@ qb.Order("age ASC, name DESC")
 ```
 
 <a name="QueryBuilder.Pluck"></a>
-### func \(\*QueryBuilder\) [Pluck](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L457>)
+### func \(\*QueryBuilder\) [Pluck](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L474>)
 
 ```go
 func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error)
@@ -1953,7 +2019,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows found and processed
-- error: Error if the query fails, nil on success
+- error: GORM error if the query fails, nil on success
 
 Example:
 
@@ -1967,7 +2033,7 @@ fmt.Printf("Found %d email addresses\n", rowsFound)
 ```
 
 <a name="QueryBuilder.Preload"></a>
-### func \(\*QueryBuilder\) [Preload](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L183>)
+### func \(\*QueryBuilder\) [Preload](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L193>)
 
 ```go
 func (qb *QueryBuilder) Preload(query string, args ...interface{}) *QueryBuilder
@@ -1999,7 +2065,7 @@ func (qb *QueryBuilder) QueryRow() RowScanner
 QueryRow executes a query expected to return a single row and returns a RowScanner for it. This method is optimized for queries that return exactly one row of data and provides a simplified interface for scanning the values from that row.
 
 <a name="QueryBuilder.QueryRows"></a>
-### func \(\*QueryBuilder\) [QueryRows](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/row_scanner.go#L44>)
+### func \(\*QueryBuilder\) [QueryRows](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/row_scanner.go#L46>)
 
 ```go
 func (qb *QueryBuilder) QueryRows() (RowsScanner, error)
@@ -2007,8 +2073,10 @@ func (qb *QueryBuilder) QueryRows() (RowsScanner, error)
 
 QueryRows executes a query that returns multiple rows and returns a RowsScanner for them. This method provides an iterator\-style interface for processing multiple rows returned by a query, allowing for efficient traversal of large result sets.
 
+Returns a RowsScanner and a GORM error if the query fails.
+
 <a name="QueryBuilder.Raw"></a>
-### func \(\*QueryBuilder\) [Raw](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L282>)
+### func \(\*QueryBuilder\) [Raw](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L292>)
 
 ```go
 func (qb *QueryBuilder) Raw(sql string, values ...interface{}) *QueryBuilder
@@ -2030,7 +2098,7 @@ qb.Raw("SELECT * FROM users WHERE created_at > ?", time.Now().AddDate(0, -1, 0))
 ```
 
 <a name="QueryBuilder.Returning"></a>
-### func \(\*QueryBuilder\) [Returning](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L684>)
+### func \(\*QueryBuilder\) [Returning](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L701>)
 
 ```go
 func (qb *QueryBuilder) Returning(columns ...string) *QueryBuilder
@@ -2052,7 +2120,7 @@ qb.Where("status = ?", "pending").Returning("*").Updates(map[string]interface{}{
 ```
 
 <a name="QueryBuilder.RightJoin"></a>
-### func \(\*QueryBuilder\) [RightJoin](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L164>)
+### func \(\*QueryBuilder\) [RightJoin](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L174>)
 
 ```go
 func (qb *QueryBuilder) RightJoin(query string, args ...interface{}) *QueryBuilder
@@ -2074,7 +2142,7 @@ qb.RightJoin("orders ON orders.user_id = users.id")
 ```
 
 <a name="QueryBuilder.Scan"></a>
-### func \(\*QueryBuilder\) [Scan](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L315>)
+### func \(\*QueryBuilder\) [Scan](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L326>)
 
 ```go
 func (qb *QueryBuilder) Scan(dest interface{}) error
@@ -2086,7 +2154,7 @@ Parameters:
 
 - dest: Pointer to the struct or slice where results will be stored
 
-Returns an error if the query fails or nil on success.
+Returns a GORM error if the query fails or nil on success. Use Postgres.TranslateError\(\) to convert to standardized error types.
 
 Example:
 
@@ -2096,7 +2164,7 @@ err := qb.Raw("SELECT COUNT(*) as count FROM users").Scan(&result)
 ```
 
 <a name="QueryBuilder.ScanRow"></a>
-### func \(\*QueryBuilder\) [ScanRow](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/row_scanner.go#L53>)
+### func \(\*QueryBuilder\) [ScanRow](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/row_scanner.go#L57>)
 
 ```go
 func (qb *QueryBuilder) ScanRow(dest interface{}) error
@@ -2104,8 +2172,10 @@ func (qb *QueryBuilder) ScanRow(dest interface{}) error
 
 ScanRow is a convenience method to scan a single row directly into a struct. This is a higher\-level alternative to QueryRow that automatically maps column values to struct fields based on naming conventions or field tags. It's useful when you need to map a row to a predefined data structure.
 
+Returns a GORM error if the scan fails or nil on success.
+
 <a name="QueryBuilder.Scopes"></a>
-### func \(\*QueryBuilder\) [Scopes](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L537>)
+### func \(\*QueryBuilder\) [Scopes](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L554>)
 
 ```go
 func (qb *QueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) *QueryBuilder
@@ -2136,7 +2206,7 @@ qb.Scopes(ActiveUsers).Count(&count)
 ```
 
 <a name="QueryBuilder.Select"></a>
-### func \(\*QueryBuilder\) [Select](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L60>)
+### func \(\*QueryBuilder\) [Select](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L70>)
 
 ```go
 func (qb *QueryBuilder) Select(query interface{}, args ...interface{}) *QueryBuilder
@@ -2159,7 +2229,7 @@ qb.Select("COUNT(*) as user_count")
 ```
 
 <a name="QueryBuilder.Table"></a>
-### func \(\*QueryBuilder\) [Table](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L495>)
+### func \(\*QueryBuilder\) [Table](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L512>)
 
 ```go
 func (qb *QueryBuilder) Table(name string) *QueryBuilder
@@ -2182,7 +2252,7 @@ qb.Table("user_stats").Select("department, COUNT(*) as count").Group("department
 ```
 
 <a name="QueryBuilder.ToSubquery"></a>
-### func \(\*QueryBuilder\) [ToSubquery](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L869>)
+### func \(\*QueryBuilder\) [ToSubquery](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L886>)
 
 ```go
 func (qb *QueryBuilder) ToSubquery() *gorm.DB
@@ -2228,7 +2298,7 @@ err := pg.Query(ctx).
 ```
 
 <a name="QueryBuilder.Unscoped"></a>
-### func \(\*QueryBuilder\) [Unscoped](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L511>)
+### func \(\*QueryBuilder\) [Unscoped](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L528>)
 
 ```go
 func (qb *QueryBuilder) Unscoped() *QueryBuilder
@@ -2247,7 +2317,7 @@ qb.Unscoped().Count(&count) // Counts all records including soft-deleted
 ```
 
 <a name="QueryBuilder.Updates"></a>
-### func \(\*QueryBuilder\) [Updates](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L405>)
+### func \(\*QueryBuilder\) [Updates](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L422>)
 
 ```go
 func (qb *QueryBuilder) Updates(values interface{}) (int64, error)
@@ -2262,7 +2332,7 @@ Parameters:
 Returns:
 
 - int64: Number of rows affected by the update operation
-- error: Error if the update fails, nil on success
+- error: GORM error if the update fails, nil on success
 
 Example:
 
@@ -2275,7 +2345,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="QueryBuilder.Where"></a>
-### func \(\*QueryBuilder\) [Where](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L78>)
+### func \(\*QueryBuilder\) [Where](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/query_builder.go#L88>)
 
 ```go
 func (qb *QueryBuilder) Where(query interface{}, args ...interface{}) *QueryBuilder
