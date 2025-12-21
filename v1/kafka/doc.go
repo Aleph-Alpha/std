@@ -9,6 +9,7 @@
 //   - Simple publishing interface with error handling
 //   - Consumer interface with automatic commit handling
 //   - Consumer group support
+//   - Separate schema_registry package for Confluent Schema Registry
 //   - Integration with the Logger package for structured logging
 //   - Distributed tracing support via message headers
 //
@@ -23,9 +24,11 @@
 //
 //	// Create a new Kafka client
 //	client, err := kafka.NewClient(kafka.Config{
-//		Brokers: []string{"localhost:9092"},
-//		Topic:   "events",
-//		GroupID: "my-consumer-group",
+//		Brokers:    []string{"localhost:9092"},
+//		Topic:      "events",
+//		GroupID:    "my-consumer-group",
+//		IsConsumer: true,
+//		EnableAutoCommit: false,  // Manual commit for safety
 //	})
 //	if err != nil {
 //		log.Fatal("Failed to connect to Kafka", err, nil)
@@ -189,6 +192,321 @@
 //		Logger:     log, // Kafka internal errors will use this logger
 //		IsConsumer: false,
 //	})
+//
+// Commit Modes and Acknowledgment:
+//
+// Consumer Commit Modes:
+//
+// The module supports different commit modes for consumers:
+//
+// Manual Commit (Recommended for safety):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:          []string{"localhost:9092"},
+//	    Topic:            "events",
+//	    GroupID:          "my-group",
+//	    IsConsumer:       true,
+//	    EnableAutoCommit: false,  // Manual commit (default)
+//	})
+//
+//	msgChan := client.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    var event UserEvent
+//	    if err := msg.BodyAs(&event); err != nil {
+//	        continue  // Don't commit on error
+//	    }
+//
+//	    if err := processEvent(event); err != nil {
+//	        continue  // Don't commit on processing error
+//	    }
+//
+//	    // Commit only after successful processing
+//	    if err := msg.CommitMsg(); err != nil {
+//	        log.Error("Failed to commit", err, nil)
+//	    }
+//	}
+//
+// Auto-Commit (For high-throughput, at-least-once semantics):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:          []string{"localhost:9092"},
+//	    Topic:            "events",
+//	    GroupID:          "my-group",
+//	    IsConsumer:       true,
+//	    EnableAutoCommit: true,           // Enable auto-commit
+//	    CommitInterval:   1 * time.Second,  // Commit every second
+//	})
+//
+//	msgChan := client.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    // Process message - no need to call msg.CommitMsg()
+//	    // Offsets are committed automatically every CommitInterval
+//	    processEvent(msg)
+//	}
+//
+// Producer Acknowledgment Modes:
+//
+// The module supports different producer acknowledgment modes:
+//
+// Fire-and-Forget (Fastest, least safe):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:      []string{"localhost:9092"},
+//	    Topic:        "events",
+//	    IsConsumer:   false,
+//	    RequiredAcks: kafka.RequireNone,  // No acknowledgment (0)
+//	})
+//
+//	// Fast but no guarantee of delivery
+//	err := client.Publish(ctx, "key", event)
+//
+// Leader Acknowledgment (Balanced):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:      []string{"localhost:9092"},
+//	    Topic:        "events",
+//	    IsConsumer:   false,
+//	    RequiredAcks: kafka.RequireOne,  // Leader only (1)
+//	    WriteTimeout: 5 * time.Second,
+//	})
+//
+//	// Balanced speed and durability
+//	err := client.Publish(ctx, "key", event)
+//
+// All Replicas Acknowledgment (Most durable, default):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:      []string{"localhost:9092"},
+//	    Topic:        "events",
+//	    IsConsumer:   false,
+//	    RequiredAcks: kafka.RequireAll,  // All in-sync replicas (-1)
+//	    WriteTimeout: 10 * time.Second,
+//	})
+//
+//	// Slowest but most durable
+//	err := client.Publish(ctx, "key", event)
+//
+// Serialization Support:
+//
+// The kafka package provides optional serialization support for automatic encoding/decoding
+// of messages. Serializers are injected via dependency injection (FX) for better testability.
+//
+// Using JSON Serialization (with FX):
+//
+//	import (
+//	    "go.uber.org/fx"
+//	    "github.com/Aleph-Alpha/std/v1/kafka"
+//	)
+//
+//	type UserEvent struct {
+//	    Event  string `json:"event"`
+//	    UserID int    `json:"user_id"`
+//	    Email  string `json:"email"`
+//	}
+//
+//	app := fx.New(
+//	    kafka.FXModule,
+//	    fx.Provide(
+//	        func() kafka.Config {
+//	            return kafka.Config{
+//	                Brokers:    []string{"localhost:9092"},
+//	                Topic:      "user-events",
+//	                IsConsumer: false,
+//	            }
+//	        },
+//	        // Inject serializers
+//	        func() kafka.Serializer {
+//	            return &kafka.JSONSerializer{}
+//	        },
+//	        func() kafka.Deserializer {
+//	            return &kafka.JSONDeserializer{}
+//	        },
+//	    ),
+//	)
+//
+//	// Publishing with automatic serialization
+//	event := UserEvent{
+//	    Event:  "signup",
+//	    UserID: 123,
+//	    Email:  "user@example.com",
+//	}
+//	err := client.Publish(ctx, "user-123", event)  // Automatically serialized
+//
+//	// Consuming with automatic deserialization
+//	msgChan := client.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    var event UserEvent
+//	    if err := msg.BodyAs(&event); err != nil {  // Automatic JSON fallback
+//	        log.Error("Failed to deserialize", err, nil)
+//	        continue
+//	    }
+//	    fmt.Printf("User %d signed up: %s\n", event.UserID, event.Email)
+//	    msg.CommitMsg()
+//	}
+//
+// Using Protocol Buffers (with FX):
+//
+//	import (
+//	    "google.golang.org/protobuf/proto"
+//	    "github.com/Aleph-Alpha/std/v1/kafka"
+//	)
+//
+//	app := fx.New(
+//	    kafka.FXModule,
+//	    fx.Provide(
+//	        func() kafka.Config { /* ... */ },
+//	        // Inject Protobuf serializers
+//	        func() kafka.Serializer {
+//	            return &kafka.ProtobufSerializer{
+//	                MarshalFunc: proto.Marshal,
+//	            }
+//	        },
+//	        func() kafka.Deserializer {
+//	            return &kafka.ProtobufDeserializer{
+//	                UnmarshalFunc: proto.Unmarshal,
+//	            }
+//	        },
+//	    ),
+//	)
+//
+//	// Publish protobuf message
+//	protoMsg := &pb.UserEvent{
+//	    Event:  "signup",
+//	    UserId: 123,
+//	    Email:  "user@example.com",
+//	}
+//	err = client.Publish(ctx, "user-123", protoMsg)  // Automatically serialized
+//
+//	// Consume protobuf messages
+//	msgChan := consumer.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    var event pb.UserEvent
+//	    if err := msg.BodyAs(&event); err != nil{
+//	        log.Error("Failed to deserialize", err, nil)
+//	        continue
+//	    }
+//	    fmt.Printf("User %d signed up: %s\n", event.UserId, event.Email)
+//	    msg.CommitMsg()
+//	}
+//
+// Using Raw Bytes (no serialization):
+//
+//	// No serializer needed - []byte is always passed through
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:    []string{"localhost:9092"},
+//	    Topic:      "events",
+//	    IsConsumer: false,
+//	})
+//
+//	// Publish raw bytes
+//	message := []byte(`{"event":"signup","user_id":123}`)
+//	err = client.Publish(ctx, "user-123", message)  // Passed through directly
+//
+// Custom Serializers:
+//
+// You can implement your own serializer for custom formats:
+//
+// Apache Avro Example:
+//
+//	import "github.com/linkedin/goavro/v2"
+//
+//	codec, _ := goavro.NewCodec(`{
+//	    "type": "record",
+//	    "name": "UserEvent",
+//	    "fields": [
+//	        {"name": "event", "type": "string"},
+//	        {"name": "user_id", "type": "int"}
+//	    ]
+//	}`)
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers: []string{"localhost:9092"},
+//	    Topic:   "events",
+//	    Serializer: &kafka.AvroSerializer{
+//	        MarshalFunc: func(data interface{}) ([]byte, error) {
+//	            return codec.BinaryFromNative(nil, data)
+//	        },
+//	    },
+//	    Deserializer: &kafka.AvroDeserializer{
+//	        UnmarshalFunc: func(data []byte, target interface{}) error {
+//	            native, _, err := codec.NativeFromBinary(data)
+//	            if err != nil {
+//	                return err
+//	            }
+//	            if targetMap, ok := target.(*map[string]interface{}); ok {
+//	                *targetMap = native.(map[string]interface{})
+//	            }
+//	            return nil
+//	        },
+//	    },
+//	})
+//
+//	// Publish and consume work the same way
+//	eventData := map[string]interface{}{"event": "signup", "user_id": 123}
+//	err = client.Publish(ctx, "user-123", eventData)
+//
+// Schema Registry Integration:
+//
+// For production schema management with Confluent Schema Registry,
+// use the separate schema_registry package:
+//
+//	import (
+//	    "github.com/Aleph-Alpha/std/v1/kafka"
+//	    "github.com/Aleph-Alpha/std/v1/schema_registry"
+//	)
+//
+//	// Create schema registry client
+//	registry, _ := schema_registry.NewClient(schema_registry.Config{
+//	    URL: "http://localhost:8081",
+//	})
+//
+//	// Create serializer with schema registry
+//	serializer, _ := schema_registry.NewAvroSerializer(
+//	    schema_registry.AvroSerializerConfig{
+//	        Registry:    registry,
+//	        Subject:     "users-value",
+//	        Schema:      avroSchema,
+//	        MarshalFunc: marshalFunc,
+//	    },
+//	)
+//
+//	// Inject via FX
+//	fx.Provide(
+//	    func() (schema_registry.Registry, error) {
+//	        return schema_registry.NewClient(schema_registry.Config{
+//	            URL: "http://localhost:8081",
+//	        })
+//	    },
+//	    func(registry schema_registry.Registry) (kafka.Serializer, error) {
+//	        return schema_registry.NewAvroSerializer(...)
+//	    },
+//	)
+//
+// See the schema_registry package documentation for complete examples.
+//
+// Multi-Format Support:
+//
+// Use MultiFormatSerializer to support multiple formats:
+//
+//	multiSerializer := kafka.NewMultiFormatSerializer()
+//	multiSerializer.RegisterSerializer("protobuf", &kafka.ProtobufSerializer{
+//	    MarshalFunc: proto.Marshal,
+//	})
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:    []string{"localhost:9092"},
+//	    Topic:      "events",
+//	    Serializer: multiSerializer,
+//	})
+//
+// Built-in Serializers:
+//   - JSONSerializer: JSON format (default fallback)
+//   - ProtobufSerializer: Protocol Buffers
+//   - AvroSerializer: Apache Avro
+//   - StringSerializer: Plain text
+//   - GobSerializer: Go gob encoding (Go-to-Go only)
+//   - NoOpSerializer: Raw []byte passthrough
+//   - MultiFormatSerializer: Multiple formats with dynamic selection
 //
 // Thread Safety:
 //

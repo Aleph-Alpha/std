@@ -21,6 +21,11 @@ type Message interface {
 	// Body returns the message payload as a byte slice.
 	Body() []byte
 
+	// BodyAs deserializes the message body into the target structure.
+	// It uses the configured Deserializer, or falls back to JSONDeserializer.
+	// This is a convenience method equivalent to calling Deserialize(msg, target).
+	BodyAs(target interface{}) error
+
 	// Key returns the message key as a string.
 	Key() string
 
@@ -36,8 +41,9 @@ type Message interface {
 
 // ConsumerMessage implements the Message interface and wraps a Kafka message.
 type ConsumerMessage struct {
-	message kafka.Message
-	reader  *kafka.Reader
+	message      kafka.Message
+	reader       *kafka.Reader
+	deserializer Deserializer // Reference to deserializer for BodyAs
 }
 
 // Consume starts consuming messages from the topic specified in the configuration.
@@ -57,8 +63,16 @@ type ConsumerMessage struct {
 //
 //	msgChan := kafkaClient.Consume(ctx, wg)
 //	for msg := range msgChan {
-//	    // Process the message
-//	    fmt.Println("Received:", string(msg.Body()))
+//	    // Option 1: Use BodyAs for automatic deserialization
+//	    var event UserEvent
+//	    if err := msg.BodyAs(&event); err != nil {
+//	        log.Printf("Failed to deserialize: %v", err)
+//	        continue
+//	    }
+//
+//	    // Option 2: Use Body() for raw bytes
+//	    rawBytes := msg.Body()
+//	    fmt.Println("Received:", string(rawBytes))
 //
 //	    // Commit successful processing
 //	    if err := msg.CommitMsg(); err != nil {
@@ -157,8 +171,9 @@ func (k *Kafka) consumeWorker(ctx context.Context, outChan chan<- Message, worke
 
 			select {
 			case outChan <- &ConsumerMessage{
-				message: msg,
-				reader:  reader,
+				message:      msg,
+				reader:       reader,
+				deserializer: k.deserializer,
 			}:
 			case <-ctx.Done():
 				return
@@ -214,7 +229,7 @@ func (k *Kafka) consumeWorker(ctx context.Context, outChan chan<- Message, worke
 //	    span.RecordError(err)
 //	    log.Printf("Failed to publish message: %v", err)
 //	}
-func (k *Kafka) Publish(ctx context.Context, key string, msg []byte, headers ...map[string]interface{}) error {
+func (k *Kafka) Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error {
 	select {
 	case <-ctx.Done():
 		log.Printf("ERROR: Context error for publishing msg to Kafka: %v", ctx.Err())
@@ -229,10 +244,30 @@ func (k *Kafka) Publish(ctx context.Context, key string, msg []byte, headers ...
 			return ErrWriterNotInitialized
 		}
 
+		// Serialize the data
+		var msgBytes []byte
+		var err error
+
+		// If data is already []byte, use it directly
+		if bytes, ok := data.([]byte); ok {
+			msgBytes = bytes
+		} else if k.serializer != nil {
+			// Use injected serializer
+			msgBytes, err = k.serializer.Serialize(data)
+			if err != nil {
+				log.Printf("ERROR: Failed to serialize message: %v", err)
+				return fmt.Errorf("failed to serialize message: %w", err)
+			}
+		} else {
+			// No serializer available and data is not []byte
+			log.Printf("ERROR: Cannot publish non-[]byte data without a serializer, got type %T", data)
+			return fmt.Errorf("cannot publish non-[]byte data without a serializer, got type %T", data)
+		}
+
 		// Build Kafka message
 		kafkaMsg := kafka.Message{
 			Key:   []byte(key),
-			Value: msg,
+			Value: msgBytes,
 		}
 
 		// Add headers if provided
@@ -258,7 +293,7 @@ func (k *Kafka) Publish(ctx context.Context, key string, msg []byte, headers ...
 			kafkaMsg.Headers = kafkaHeaders
 		}
 
-		err := writer.WriteMessages(ctx, kafkaMsg)
+		err = writer.WriteMessages(ctx, kafkaMsg)
 		if err != nil {
 			log.Printf("ERROR: Failed to publish message: %v", err)
 			return err
@@ -279,6 +314,32 @@ func (cm *ConsumerMessage) CommitMsg() error {
 // Body returns the message payload as a byte slice.
 func (cm *ConsumerMessage) Body() []byte {
 	return cm.message.Value
+}
+
+// BodyAs deserializes the message body into the target structure.
+// It uses the configured Deserializer, or falls back to JSONDeserializer if none is configured.
+//
+// This is a convenience method that makes consuming messages more intuitive:
+//
+//	msgChan := consumer.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    var event UserEvent
+//	    if err := msg.BodyAs(&event); err != nil {
+//	        log.Printf("Failed to deserialize: %v", err)
+//	        continue
+//	    }
+//	    fmt.Printf("Event: %s, UserID: %d\n", event.Event, event.UserID)
+//	    msg.CommitMsg()
+//	}
+func (cm *ConsumerMessage) BodyAs(target interface{}) error {
+	deserializer := cm.deserializer
+
+	// If no deserializer configured, use JSONDeserializer as fallback
+	if deserializer == nil {
+		deserializer = &JSONDeserializer{}
+	}
+
+	return deserializer.Deserialize(cm.message.Value, target)
 }
 
 // Key returns the message key as a string.
@@ -303,4 +364,44 @@ func (cm *ConsumerMessage) Partition() int {
 // Offset returns the offset of this message.
 func (cm *ConsumerMessage) Offset() int64 {
 	return cm.message.Offset
+}
+
+// Deserialize is a helper method to deserialize a message body.
+// It automatically uses the injected Deserializer or falls back to JSONDeserializer.
+//
+// Parameters:
+//   - msg: The message to deserialize
+//   - target: Pointer to the target structure to deserialize into
+//
+// Returns an error if deserialization fails.
+//
+// Example with FX-injected deserializer:
+//
+//	// In your FX app:
+//	fx.Provide(func() kafka.Deserializer {
+//	    return &kafka.JSONDeserializer{}
+//	})
+//
+//	// Usage:
+//	msgChan := kafkaClient.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    var event UserEvent
+//	    if err := kafkaClient.Deserialize(msg, &event); err != nil {
+//	        log.Printf("Failed to deserialize: %v", err)
+//	        continue
+//	    }
+//	    fmt.Printf("Event: %s, UserID: %d\n", event.Event, event.UserID)
+//	    msg.CommitMsg()
+//	}
+func (k *Kafka) Deserialize(msg Message, target interface{}) error {
+	k.mu.RLock()
+	deserializer := k.deserializer
+	k.mu.RUnlock()
+
+	// If no deserializer injected, try JSONDeserializer as fallback
+	if deserializer == nil {
+		deserializer = &JSONDeserializer{}
+	}
+
+	return deserializer.Deserialize(msg.Body(), target)
 }

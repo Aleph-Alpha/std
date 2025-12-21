@@ -33,8 +33,21 @@ type Config struct {
 	MaxWait time.Duration
 
 	// CommitInterval is how often to commit offsets automatically
+	// Only used when EnableAutoCommit is true
 	// Default: 1s
 	CommitInterval time.Duration
+
+	// EnableAutoCommit determines whether offsets are committed automatically
+	// When true, offsets are committed at CommitInterval
+	// When false, you must call msg.CommitMsg() manually
+	// Default: false (manual commit for safety)
+	EnableAutoCommit bool
+
+	// EnableAutoOffsetStore determines whether to automatically store offsets
+	// When true with EnableAutoCommit false, offsets are stored but not committed
+	// This allows you to control commit timing while still tracking progress
+	// Default: true
+	EnableAutoOffsetStore bool
 
 	// StartOffset determines where to start consuming from when there's no committed offset
 	// Options: FirstOffset (-2), LastOffset (-1)
@@ -47,11 +60,17 @@ type Config struct {
 	Partition int
 
 	// RequiredAcks determines how many replica acknowledgments to wait for
-	// 0: NoResponse - don't wait for any acknowledgment
-	// 1: WaitForLocal - wait for only the leader to acknowledge
-	// -1: WaitForAll - wait for all in-sync replicas to acknowledge
-	// Default: -1 (WaitForAll)
+	// Options:
+	//   RequireNone (0): Don't wait for acknowledgment (fire-and-forget, fastest but least safe)
+	//   RequireOne (1): Wait for leader only (balance of speed and durability)
+	//   RequireAll (-1): Wait for all in-sync replicas (slowest but most durable)
+	// Default: RequireAll (-1)
 	RequiredAcks int
+
+	// WriteTimeout is the timeout for write operations
+	// If RequiredAcks > 0, this is how long to wait for acknowledgment
+	// Default: 10s
+	WriteTimeout time.Duration
 
 	// Async enables async write mode for producer
 	// When true, writes are batched and sent asynchronously
@@ -154,10 +173,14 @@ const (
 	DefaultBatchTimeout     = 1 * time.Second
 	DefaultRebalanceTimeout = 30 * time.Second
 	DefaultMaxAttempts      = 10
+	DefaultWriteTimeout     = 10 * time.Second
+
+	// Producer acknowledgment modes
+	RequireNone = 0  // Fire-and-forget (no acknowledgment)
+	RequireOne  = 1  // Wait for leader only
+	RequireAll  = -1 // Wait for all in-sync replicas (most durable)
+
+	// Consumer offset modes
+	FirstOffset = -2 // Start from the beginning
+	LastOffset  = -1 // Start from the end
 )
-
-// FirstOffset is the offset to start consuming from the beginning
-const FirstOffset = -2
-
-// LastOffset is the offset to start consuming from the end
-const LastOffset = -1

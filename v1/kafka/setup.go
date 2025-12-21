@@ -28,6 +28,12 @@ type Kafka struct {
 	// reader is the Kafka reader used for consuming messages
 	reader *kafka.Reader
 
+	// serializer is used to encode messages before publishing
+	serializer Serializer
+
+	// deserializer is used to decode messages after consuming
+	deserializer Deserializer
+
 	// mu protects concurrent access to writer and reader
 	mu sync.RWMutex
 
@@ -85,6 +91,11 @@ func NewClient(cfg Config) (*Kafka, error) {
 	if cfg.MaxAttempts == 0 {
 		cfg.MaxAttempts = DefaultMaxAttempts
 	}
+	if cfg.WriteTimeout == 0 {
+		cfg.WriteTimeout = DefaultWriteTimeout
+	}
+	// EnableAutoOffsetStore defaults to true if not explicitly set
+	// This is handled in createReader
 
 	k := &Kafka{
 		cfg:            cfg,
@@ -125,6 +136,22 @@ func NewClient(cfg Config) (*Kafka, error) {
 	return k, nil
 }
 
+// SetSerializer sets the serializer for the Kafka client.
+// This is typically called by the FX module during initialization.
+func (k *Kafka) SetSerializer(s Serializer) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.serializer = s
+}
+
+// SetDeserializer sets the deserializer for the Kafka client.
+// This is typically called by the FX module during initialization.
+func (k *Kafka) SetDeserializer(d Deserializer) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.deserializer = d
+}
+
 // createErrorLogger creates a Kafka error logger from the config
 func createErrorLogger(cfg Config) kafka.LoggerFunc {
 	// Priority 1: Use std/v1/logger if provided
@@ -154,11 +181,12 @@ func createErrorLogger(cfg Config) kafka.LoggerFunc {
 // createWriter creates a Kafka writer with the given configuration
 func createWriter(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism) *kafka.Writer {
 	writerConfig := kafka.WriterConfig{
-		Brokers:     cfg.Brokers,
-		Topic:       cfg.Topic,
-		Balancer:    &kafka.LeastBytes{},
-		MaxAttempts: cfg.MaxAttempts,
-		ErrorLogger: createErrorLogger(cfg),
+		Brokers:      cfg.Brokers,
+		Topic:        cfg.Topic,
+		Balancer:     &kafka.LeastBytes{},
+		MaxAttempts:  cfg.MaxAttempts,
+		WriteTimeout: cfg.WriteTimeout,
+		ErrorLogger:  createErrorLogger(cfg),
 	}
 
 	// Set required acks
@@ -196,15 +224,23 @@ func createWriter(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism) *
 // createReader creates a Kafka reader with the given configuration
 func createReader(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism) *kafka.Reader {
 	readerConfig := kafka.ReaderConfig{
-		Brokers:        cfg.Brokers,
-		Topic:          cfg.Topic,
-		GroupID:        cfg.GroupID,
-		MinBytes:       cfg.MinBytes,
-		MaxBytes:       cfg.MaxBytes,
-		MaxWait:        cfg.MaxWait,
-		CommitInterval: cfg.CommitInterval,
-		StartOffset:    cfg.StartOffset,
-		ErrorLogger:    createErrorLogger(cfg),
+		Brokers:     cfg.Brokers,
+		Topic:       cfg.Topic,
+		GroupID:     cfg.GroupID,
+		MinBytes:    cfg.MinBytes,
+		MaxBytes:    cfg.MaxBytes,
+		MaxWait:     cfg.MaxWait,
+		StartOffset: cfg.StartOffset,
+		ErrorLogger: createErrorLogger(cfg),
+	}
+
+	// Configure auto-commit behavior
+	if cfg.EnableAutoCommit {
+		// Auto-commit enabled: set CommitInterval
+		readerConfig.CommitInterval = cfg.CommitInterval
+	} else {
+		// Auto-commit disabled: set CommitInterval to 0
+		readerConfig.CommitInterval = 0
 	}
 
 	if cfg.Partition != -1 {

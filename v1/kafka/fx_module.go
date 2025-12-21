@@ -32,8 +32,10 @@ var FXModule = fx.Module("kafka",
 type KafkaParams struct {
 	fx.In
 
-	Config Config
-	Logger Logger `optional:"true"` // Optional logger from std/v1/logger
+	Config       Config
+	Logger       Logger       `optional:"true"` // Optional logger from std/v1/logger
+	Serializer   Serializer   `optional:"true"` // Optional serializer
+	Deserializer Deserializer `optional:"true"` // Optional deserializer
 }
 
 // NewClientWithDI creates a new Kafka client using dependency injection.
@@ -42,7 +44,8 @@ type KafkaParams struct {
 //
 // Parameters:
 //   - params: A KafkaParams struct that contains the Config instance
-//     and optionally a Logger instance required to initialize the Kafka client.
+//     and optionally a Logger, Serializer, and Deserializer instances
+//     required to initialize the Kafka client.
 //     This struct embeds fx.In to enable automatic injection of these dependencies.
 //
 // Returns:
@@ -57,17 +60,38 @@ type KafkaParams struct {
 //	        func() kafka.Config {
 //	            return loadKafkaConfig() // Your config loading function
 //	        },
+//	        func() kafka.Serializer {
+//	            return &kafka.JSONSerializer{}  // Or ProtobufSerializer, etc.
+//	        },
+//	        func() kafka.Deserializer {
+//	            return &kafka.JSONDeserializer{}
+//	        },
 //	    ),
 //	)
 //
-// Under the hood, this function injects the optional logger into the config
-// before delegating to the standard NewClient function.
+// Under the hood, this function injects the optional logger, serializer,
+// and deserializer before delegating to the standard NewClient function.
 func NewClientWithDI(params KafkaParams) (*Kafka, error) {
 	// Inject the logger into the config if provided
 	if params.Logger != nil {
 		params.Config.Logger = params.Logger
 	}
-	return NewClient(params.Config)
+
+	client, err := NewClient(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject serializers directly if provided
+	if params.Serializer != nil {
+		client.SetSerializer(params.Serializer)
+	}
+
+	if params.Deserializer != nil {
+		client.SetDeserializer(params.Deserializer)
+	}
+
+	return client, nil
 }
 
 // KafkaLifecycleParams groups the dependencies needed for Kafka lifecycle management
