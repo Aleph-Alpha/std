@@ -458,3 +458,105 @@ func (m *MultiFormatDeserializer) DeserializeWithFormat(format string, data []by
 
 	return deserializer.Deserialize(data, target)
 }
+
+// getDefaultSerializer returns the appropriate serializer based on the config's DataType
+func getDefaultSerializer(dataType string) Serializer {
+	switch dataType {
+	case "string":
+		return &StringSerializer{}
+	case "protobuf":
+		// Return nil - user must provide custom protobuf serializer
+		// since it requires MarshalFunc
+		return nil
+	case "avro":
+		// Return nil - user must provide custom avro serializer
+		// since it requires MarshalFunc
+		return nil
+	case "gob":
+		return &GobSerializer{}
+	case "bytes":
+		return &NoOpSerializer{}
+	case "json", "":
+		// Default to JSON
+		return &JSONSerializer{}
+	default:
+		// Unknown type, default to JSON
+		return &JSONSerializer{}
+	}
+}
+
+// getDefaultDeserializer returns the appropriate deserializer based on the config's DataType
+func getDefaultDeserializer(dataType string) Deserializer {
+	switch dataType {
+	case "string":
+		return &StringDeserializer{}
+	case "protobuf":
+		// Return nil - user must provide custom protobuf deserializer
+		// since it requires UnmarshalFunc
+		return nil
+	case "avro":
+		// Return nil - user must provide custom avro deserializer
+		// since it requires UnmarshalFunc
+		return nil
+	case "gob":
+		return &GobDeserializer{}
+	case "bytes":
+		return &NoOpDeserializer{}
+	case "json", "":
+		// Default to JSON
+		return &JSONDeserializer{}
+	default:
+		// Unknown type, default to JSON
+		return &JSONDeserializer{}
+	}
+}
+
+// SetDefaultSerializers sets default serializers on the Kafka client based on config DataType
+// This is called automatically during client creation if no serializers are provided
+func (k *Kafka) SetDefaultSerializers() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+
+	// Only set the default serializer if none is configured
+	if k.serializer == nil {
+		if defaultSer := getDefaultSerializer(k.cfg.DataType); defaultSer != nil {
+			k.serializer = defaultSer
+		}
+	}
+
+	// Only set the default deserializer if none is configured
+	if k.deserializer == nil {
+		if defaultDeser := getDefaultDeserializer(k.cfg.DataType); defaultDeser != nil {
+			k.deserializer = defaultDeser
+		}
+	}
+}
+
+// ValidateDataType checks if the provided DataType is supported
+// Returns error if DataType requires custom serializer but none is provided
+func ValidateDataType(dataType string, hasSerializer, hasDeserializer bool) error {
+	switch dataType {
+	case "protobuf":
+		if !hasSerializer {
+			return fmt.Errorf("DataType 'protobuf' requires a custom serializer with MarshalFunc")
+		}
+		if !hasDeserializer {
+			return fmt.Errorf("DataType 'protobuf' requires a custom deserializer with UnmarshalFunc")
+		}
+	case "avro":
+		if !hasSerializer {
+			return fmt.Errorf("DataType 'avro' requires a custom serializer with MarshalFunc")
+		}
+		if !hasDeserializer {
+			return fmt.Errorf("DataType 'avro' requires a custom deserializer with UnmarshalFunc")
+		}
+	case "json", "string", "gob", "bytes", "":
+		// These have default implementations, validation passes
+		return nil
+	default:
+		// Unknown type - will default to JSON, just log a warning
+		// Not an error, just use JSON as fallback
+		return nil
+	}
+	return nil
+}

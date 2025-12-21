@@ -115,6 +115,13 @@ type Config struct {
 	// This is only used if Logger is nil
 	// If both Logger and ErrorLogger are nil, errors will be logged using the standard log package
 	ErrorLogger ErrorLoggerFunc
+
+	// DataType specifies the default data type for automatic serializer selection
+	// When no explicit serializer is provided, the client will use a default serializer
+	// based on this type.
+	// Options: "json" (default), "string", "protobuf", "avro", "gob", "bytes"
+	// Default: "json"
+	DataType string
 }
 
 // Logger is an interface that matches the std/v1/logger.Logger

@@ -133,6 +133,9 @@ func NewClient(cfg Config) (*Kafka, error) {
 		log.Println("INFO: Kafka consumer initialized")
 	}
 
+	// Set default serializers based on DataType if not already set
+	k.SetDefaultSerializers()
+
 	return k, nil
 }
 

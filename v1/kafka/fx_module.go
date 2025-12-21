@@ -82,13 +82,19 @@ func NewClientWithDI(params KafkaParams) (*Kafka, error) {
 		return nil, err
 	}
 
-	// Inject serializers directly if provided
+	// Inject serializers directly if provided (overrides defaults)
 	if params.Serializer != nil {
 		client.SetSerializer(params.Serializer)
 	}
 
 	if params.Deserializer != nil {
 		client.SetDeserializer(params.Deserializer)
+	}
+
+	// If no serializers were injected, ensure defaults are set
+	// (already called in NewClient, but this is explicit)
+	if params.Serializer == nil && params.Deserializer == nil {
+		client.SetDefaultSerializers()
 	}
 
 	return client, nil

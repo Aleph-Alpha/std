@@ -29,16 +29,17 @@
 //		GroupID:    "my-consumer-group",
 //		IsConsumer: true,
 //		EnableAutoCommit: false,  // Manual commit for safety
+//		DataType:   "json",       // Automatic JSON serializer (default)
 //	})
 //	if err != nil {
 //		log.Fatal("Failed to connect to Kafka", err, nil)
 //	}
 //	defer client.Close()
 //
-//	// Publish a message
+//	// Publish a message (automatically serialized as JSON)
 //	ctx := context.Background()
-//	message := []byte(`{"id": "123", "name": "John"}`)
-//	err = client.Publish(ctx, "key", message, nil)
+//	event := map[string]interface{}{"id": "123", "name": "John"}
+//	err = client.Publish(ctx, "key", event, nil)
 //	if err != nil {
 //		log.Error("Failed to publish message", err, nil)
 //	}
@@ -285,6 +286,63 @@
 //
 //	// Slowest but most durable
 //	err := client.Publish(ctx, "key", event)
+//
+// Automatic Serializer Selection:
+//
+// The Kafka client can automatically select serializers based on the DataType config.
+// This eliminates the need to manually configure serializers for common use cases.
+//
+// JSON (default):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:  []string{"localhost:9092"},
+//	    Topic:    "events",
+//	    DataType: "json",  // Auto-uses JSONSerializer
+//	})
+//
+//	// Can now publish structs directly
+//	event := UserEvent{Name: "John", Age: 30}
+//	err = client.Publish(ctx, "key", event)  // Auto-serialized to JSON
+//
+// String:
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:  []string{"localhost:9092"},
+//	    Topic:    "logs",
+//	    DataType: "string",  // Auto-uses StringSerializer
+//	})
+//
+//	err = client.Publish(ctx, "key", "log message")
+//
+// Gob (Go binary encoding):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:  []string{"localhost:9092"},
+//	    Topic:    "data",
+//	    DataType: "gob",  // Auto-uses GobSerializer
+//	})
+//
+//	data := MyStruct{Field1: "value", Field2: 123}
+//	err = client.Publish(ctx, "key", data)
+//
+// Raw bytes (no serialization):
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:  []string{"localhost:9092"},
+//	    Topic:    "binary",
+//	    DataType: "bytes",  // No-op serializer
+//	})
+//
+//	rawBytes := []byte{0x01, 0x02, 0x03}
+//	err = client.Publish(ctx, "key", rawBytes)
+//
+// Supported DataTypes:
+//   - "json" (default): JSONSerializer/Deserializer
+//   - "string": StringSerializer/Deserializer
+//   - "gob": GobSerializer/Deserializer
+//   - "bytes": NoOpSerializer/Deserializer
+//   - "protobuf": Requires custom serializer
+//   - "avro": Requires custom serializer
 //
 // Serialization Support:
 //
