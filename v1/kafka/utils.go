@@ -1,0 +1,306 @@
+package kafka
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"sync"
+
+	"github.com/segmentio/kafka-go"
+)
+
+// Message defines the interface for consumed messages from Kafka.
+// This interface abstracts the underlying Kafka message structure and
+// provides methods for committing messages.
+type Message interface {
+	// CommitMsg commits the message, informing Kafka that the message
+	// has been successfully processed.
+	CommitMsg() error
+
+	// Body returns the message payload as a byte slice.
+	Body() []byte
+
+	// Key returns the message key as a string.
+	Key() string
+
+	// Header returns the headers associated with the message.
+	Header() map[string]interface{}
+
+	// Partition returns the partition this message came from.
+	Partition() int
+
+	// Offset returns the offset of this message.
+	Offset() int64
+}
+
+// ConsumerMessage implements the Message interface and wraps a Kafka message.
+type ConsumerMessage struct {
+	message kafka.Message
+	reader  *kafka.Reader
+}
+
+// Consume starts consuming messages from the topic specified in the configuration.
+// This method provides a channel where consumed messages will be delivered.
+//
+// Parameters:
+//   - ctx: Context for cancellation control
+//   - wg: WaitGroup for coordinating shutdown
+//
+// Returns a channel that delivers Message interfaces for each consumed message.
+//
+// Example:
+//
+//	wg := &sync.WaitGroup{}
+//	ctx, cancel := context.WithCancel(context.Background())
+//	defer cancel()
+//
+//	msgChan := kafkaClient.Consume(ctx, wg)
+//	for msg := range msgChan {
+//	    // Process the message
+//	    fmt.Println("Received:", string(msg.Body()))
+//
+//	    // Commit successful processing
+//	    if err := msg.CommitMsg(); err != nil {
+//	        log.Printf("Failed to commit message: %v", err)
+//	    }
+//	}
+func (k *Kafka) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
+	return k.ConsumeParallel(ctx, wg, 1)
+}
+
+// ConsumeParallel starts consuming messages from the topic with multiple concurrent goroutines.
+// This method provides better throughput for high-volume topics by processing messages in parallel.
+//
+// Parameters:
+//   - ctx: Context for cancellation control
+//   - wg: WaitGroup for coordinating shutdown
+//   - numWorkers: Number of concurrent goroutines to use for consuming (recommended: 1-10)
+//
+// Returns a channel that delivers Message interfaces for each consumed message.
+//
+// Example:
+//
+//	wg := &sync.WaitGroup{}
+//	ctx, cancel := context.WithCancel(context.Background())
+//	defer cancel()
+//
+//	// Use 5 concurrent workers for high throughput
+//	msgChan := kafkaClient.ConsumeParallel(ctx, wg, 5)
+//	for msg := range msgChan {
+//	    // Process the message
+//	    fmt.Println("Received:", string(msg.Body()))
+//
+//	    // Commit successful processing
+//	    if err := msg.CommitMsg(); err != nil {
+//	        log.Printf("Failed to commit message: %v", err)
+//	    }
+//	}
+func (k *Kafka) ConsumeParallel(ctx context.Context, wg *sync.WaitGroup, numWorkers int) <-chan Message {
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	outChan := make(chan Message, 100*numWorkers)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(outChan)
+
+		workerWg := &sync.WaitGroup{}
+
+		// Start multiple worker goroutines
+		for i := 0; i < numWorkers; i++ {
+			workerWg.Add(1)
+			go func(workerID int) {
+				defer workerWg.Done()
+				k.consumeWorker(ctx, outChan, workerID)
+			}(i)
+		}
+
+		workerWg.Wait()
+	}()
+
+	return outChan
+}
+
+// consumeWorker is a worker goroutine that fetches and sends messages
+func (k *Kafka) consumeWorker(ctx context.Context, outChan chan<- Message, workerID int) {
+	for {
+		select {
+		case <-k.shutdownSignal:
+			log.Printf("INFO: Stopping consumer worker %d due to shutdown signal", workerID)
+			return
+		case <-ctx.Done():
+			log.Printf("INFO: Stopping consumer worker %d due to context cancellation", workerID)
+			return
+		default:
+			k.mu.RLock()
+			reader := k.reader
+			k.mu.RUnlock()
+
+			if reader == nil {
+				log.Printf("ERROR: Kafka reader is not initialized for worker %d", workerID)
+				return
+			}
+
+			msg, err := reader.FetchMessage(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					log.Printf("INFO: Consumer worker %d context cancelled: %v", workerID, err)
+					return
+				}
+				log.Printf("ERROR: Worker %d failed to fetch message: %v", workerID, err)
+				continue
+			}
+
+			select {
+			case outChan <- &ConsumerMessage{
+				message: msg,
+				reader:  reader,
+			}:
+			case <-ctx.Done():
+				return
+			case <-k.shutdownSignal:
+				return
+			}
+		}
+	}
+}
+
+// Publish sends a message to the Kafka topic specified in the configuration.
+// This method is thread-safe and respects context cancellation.
+//
+// Parameters:
+//   - ctx: Context for cancellation control
+//   - key: Message key for partitioning
+//   - msg: Message payload as a byte slice
+//   - headers: Optional message headers as a map of key-value pairs; can be used for metadata
+//     and distributed tracing propagation
+//
+// The headers parameter is particularly useful for distributed tracing, allowing trace
+// context to be propagated across service boundaries through message queues. When using
+// with the tracer package, you can extract trace headers and include them in the message:
+//
+//	traceHeaders := tracerClient.GetCarrier(ctx)
+//	err := kafkaClient.Publish(ctx, "key", message, traceHeaders)
+//
+// Returns an error if publishing fails or if the context is canceled.
+//
+// Example:
+//
+//	ctx := context.Background()
+//	message := []byte("Hello, Kafka!")
+//
+//	// Basic publishing without headers
+//	err := kafkaClient.Publish(ctx, "my-key", message, nil)
+//	if err != nil {
+//	    log.Printf("Failed to publish message: %v", err)
+//	}
+//
+// Example with distributed tracing:
+//
+//	// Create a span for the publish operation
+//	ctx, span := tracer.StartSpan(ctx, "publish-message")
+//	defer span.End()
+//
+//	// Extract trace context to include in the message headers
+//	traceHeaders := tracerClient.GetCarrier(ctx)
+//
+//	// Publish the message with trace headers
+//	err := kafkaClient.Publish(ctx, "my-key", message, traceHeaders)
+//	if err != nil {
+//	    span.RecordError(err)
+//	    log.Printf("Failed to publish message: %v", err)
+//	}
+func (k *Kafka) Publish(ctx context.Context, key string, msg []byte, headers ...map[string]interface{}) error {
+	select {
+	case <-ctx.Done():
+		log.Printf("ERROR: Context error for publishing msg to Kafka: %v", ctx.Err())
+		return ctx.Err()
+	default:
+		k.mu.RLock()
+		writer := k.writer
+		k.mu.RUnlock()
+
+		if writer == nil {
+			log.Println("ERROR: Kafka writer is not initialized")
+			return ErrWriterNotInitialized
+		}
+
+		// Build Kafka message
+		kafkaMsg := kafka.Message{
+			Key:   []byte(key),
+			Value: msg,
+		}
+
+		// Add headers if provided
+		if len(headers) > 0 {
+			header := headers[0]
+			kafkaHeaders := make([]kafka.Header, 0, len(header))
+			for k, v := range header {
+				// Convert value to string
+				var valStr string
+				switch val := v.(type) {
+				case string:
+					valStr = val
+				case []byte:
+					valStr = string(val)
+				default:
+					valStr = fmt.Sprintf("%v", val)
+				}
+				kafkaHeaders = append(kafkaHeaders, kafka.Header{
+					Key:   k,
+					Value: []byte(valStr),
+				})
+			}
+			kafkaMsg.Headers = kafkaHeaders
+		}
+
+		err := writer.WriteMessages(ctx, kafkaMsg)
+		if err != nil {
+			log.Printf("ERROR: Failed to publish message: %v", err)
+			return err
+		}
+
+		return nil
+	}
+}
+
+// CommitMsg commits the message, informing Kafka that the message
+// has been successfully processed.
+//
+// Returns an error if the commit fails.
+func (cm *ConsumerMessage) CommitMsg() error {
+	return cm.reader.CommitMessages(context.Background(), cm.message)
+}
+
+// Body returns the message payload as a byte slice.
+func (cm *ConsumerMessage) Body() []byte {
+	return cm.message.Value
+}
+
+// Key returns the message key as a string.
+func (cm *ConsumerMessage) Key() string {
+	return string(cm.message.Key)
+}
+
+// Header returns the headers associated with the message.
+func (cm *ConsumerMessage) Header() map[string]interface{} {
+	headers := make(map[string]interface{})
+	for _, h := range cm.message.Headers {
+		headers[h.Key] = string(h.Value)
+	}
+	return headers
+}
+
+// Partition returns the partition this message came from.
+func (cm *ConsumerMessage) Partition() int {
+	return cm.message.Partition
+}
+
+// Offset returns the offset of this message.
+func (cm *ConsumerMessage) Offset() int64 {
+	return cm.message.Offset
+}
