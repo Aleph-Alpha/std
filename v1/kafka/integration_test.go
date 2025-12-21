@@ -22,6 +22,11 @@ import (
 
 // TestKafkaPublish verifies that publishing a message to Kafka works correctly.
 func TestKafkaPublish(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	ctx := context.Background()
 
 	// Initialize Kafka container
@@ -64,6 +69,11 @@ func TestKafkaPublish(t *testing.T) {
 
 // TestKafkaConsumeWithCommit verifies that a Kafka client can consume and commit a message.
 func TestKafkaConsumeWithCommit(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	ctx := context.Background()
 
 	// Initialize Kafka container
@@ -162,6 +172,11 @@ func TestKafkaConsumeWithCommit(t *testing.T) {
 
 // TestKafkaPublishWithHeaders verifies that publishing a message with headers works correctly.
 func TestKafkaPublishWithHeaders(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	ctx := context.Background()
 
 	// Initialize Kafka container
@@ -272,6 +287,11 @@ func TestKafkaPublishWithHeaders(t *testing.T) {
 // TestKafkaConsumerContextCancellation verifies that the Kafka consumer correctly handles
 // context cancellation during message consumption.
 func TestKafkaConsumerContextCancellation(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	ctx := context.Background()
 
 	// Initialize Kafka container
