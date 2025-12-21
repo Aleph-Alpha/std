@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/Aleph-Alpha/std/compare/v0.9.1...v0.10.0) (2025-12-21)
+
+
+### Features
+
+* add kafka, redis, and schema registry packages ([#33](https://github.com/Aleph-Alpha/std/issues/33)) ([e6658ab](https://github.com/Aleph-Alpha/std/commit/e6658ab57896d892cea216311c223fa17e862b46))
+
 ## [0.7.0](https://github.com/Aleph-Alpha/std/compare/v0.6.0...v0.7.0) (2025-12-10)
 
 
