@@ -5,7 +5,7 @@ import "context"
 // Service is the common interface for all vector databases.
 // It provides a database-agnostic abstraction for vector similarity search,
 // allowing applications to switch between different vector databases
-// (Qdrant, Weaviate, Pinecone, etc.) without changing application code.
+// (Qdrant, pgVector, etc.) without changing application code.
 //
 // Example usage:
 //
@@ -15,20 +15,31 @@ import "context"
 //
 //	// Works with any implementation:
 //	// - vectordb.NewQdrantAdapter(qdrantClient)
-//	// - vectordb.NewWeaviateAdapter(weaviateClient)
+//	// - vectordb.NewPgVectorAdapter(pgVectorClient)
 type Service interface {
 	// Search performs similarity search across one or more requests.
 	// Each request can target a different collection with different filters.
-	// Returns a slice of result slices—one []SearchResult per request.
+	// Returns:
+	//   - results: slice of result slices—one []SearchResult per request
+	//   - errs: per-request errors (errs[i] corresponds to requests[i])
+	//   - err: systemic error (context cancelled, etc.)
 	//
 	// Example:
-	//   results, err := db.Search(ctx,
+	//   results, errs, err := db.Search(ctx,
 	//       SearchRequest{CollectionName: "docs", Vector: vec1, TopK: 10},
 	//       SearchRequest{CollectionName: "docs", Vector: vec2, TopK: 5, Filters: filters},
 	//   )
-	//   // results[0] = results for first query
-	//   // results[1] = results for second query
-	Search(ctx context.Context, requests ...SearchRequest) ([][]SearchResult, error)
+	//   if err != nil {
+	//       return err // systemic failure
+	//   }
+	//   for i, res := range results {
+	//       if errs[i] != nil {
+	//           log.Printf("request %d failed: %v", i, errs[i])
+	//           continue
+	//       }
+	//       // use res...
+	//   }
+	Search(ctx context.Context, requests ...SearchRequest) ([][]SearchResult, []error, error)
 
 	// Insert adds embeddings to a collection.
 	// Uses batch processing internally for efficiency.

@@ -14,7 +14,7 @@
 //   - Database-agnostic interface via vectordb.Service
 //   - Type-safe collection creation and existence checks
 //   - Support for payload metadata and optional vector retrieval
-//   - Extensible abstraction layer for alternate vector stores (e.g., Pinecone, Weaviate)
+//   - Extensible abstraction layer for alternate vector stores (e.g. pgVector)
 //
 // # VectorDB Interface
 //
@@ -38,7 +38,7 @@
 //	// Create adapter for DB-agnostic usage
 //	var db vectordb.Service = qdrant.NewAdapter(qc.Client())
 //
-// This allows switching between vector databases (Qdrant, Weaviate, Pinecone) without
+// This allows switching between vector databases (Qdrant, pgVector) without
 // changing application code.
 //
 // # Basic Usage

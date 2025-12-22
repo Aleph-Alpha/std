@@ -229,12 +229,13 @@ func TestQdrantWithFXModule(t *testing.T) {
 
 		// Search for the inserted embedding
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, errs, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embedding.Vector,
 			TopK:           5,
 		})
 		assert.NoError(t, err)
+		assert.Nil(t, errs[0])
 		assert.Greater(t, len(batchResults), 0)
 		results := batchResults[0]
 		assert.Greater(t, len(results), 0)
@@ -275,7 +276,7 @@ func TestQdrantWithFXModule(t *testing.T) {
 
 		// Search and verify
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -393,7 +394,7 @@ func TestVectorDBAdapterOperations(t *testing.T) {
 		time.Sleep(1 * time.Second) // Allow time for indexing
 
 		// Search with topK = 5
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           5,
@@ -402,7 +403,7 @@ func TestVectorDBAdapterOperations(t *testing.T) {
 		assert.LessOrEqual(t, len(batchResults[0]), 5)
 
 		// Search with topK = 10
-		batchResults, err = adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err = adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -438,7 +439,7 @@ func TestVectorDBAdapterOperations(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Search and verify metadata
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embedding.Vector,
 			TopK:           1,
@@ -479,7 +480,7 @@ func TestVectorDBAdapterOperations(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// Verify some embeddings exist
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -550,12 +551,14 @@ func TestQdrantErrorHandling(t *testing.T) {
 
 	t.Run("SearchOnNonExistentCollection", func(t *testing.T) {
 		vector := generateRandomVector(1536)
-		_, err := adapter.Search(ctx, vectordb.SearchRequest{
+		_, errs, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: "non_existent_collection",
 			Vector:         vector,
 			TopK:           5,
 		})
-		assert.Error(t, err)
+		// With partial results, systemic error is nil but per-request error exists
+		assert.NoError(t, err)
+		assert.NotNil(t, errs[0])
 	})
 }
 
@@ -670,7 +673,7 @@ func TestFilterOperations(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Test Must filter (color == "red")
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -706,7 +709,7 @@ func TestFilterOperations(t *testing.T) {
 
 		// Test numeric range filter (size >= 20)
 		gte := float64(20)
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -741,7 +744,7 @@ func TestFilterOperations(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Exclude archived items
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -777,7 +780,7 @@ func TestFilterOperations(t *testing.T) {
 
 		// color == red AND size < 20
 		lt := float64(20)
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -811,7 +814,7 @@ func TestFilterOperations(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Match any of ["ml", "nlp"]
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -846,7 +849,7 @@ func TestFilterOperations(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Should match red OR blue
-		batchResults, err := adapter.Search(ctx, vectordb.SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -919,7 +922,7 @@ func TestBatchSearch(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Batch search with multiple queries
-	batchResults, err := adapter.Search(ctx,
+	batchResults, _, err := adapter.Search(ctx,
 		vectordb.SearchRequest{CollectionName: collectionName, Vector: embeddings[0].Vector, TopK: 3},
 		vectordb.SearchRequest{CollectionName: collectionName, Vector: embeddings[1].Vector, TopK: 3},
 		vectordb.SearchRequest{CollectionName: collectionName, Vector: embeddings[2].Vector, TopK: 3},

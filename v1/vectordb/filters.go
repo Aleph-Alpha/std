@@ -20,7 +20,7 @@ const (
 // Each database adapter converts these to its native filter format.
 type FilterCondition interface {
 	// isFilterCondition is a marker method to ensure type safety
-	isFilterCondition()
+	IsFilterCondition()
 }
 
 // FilterSet supports Must (AND), Should (OR), and MustNot (NOT) clauses.
@@ -59,7 +59,7 @@ type MatchCondition struct {
 	FieldType FieldType `json:"-"`
 }
 
-func (c *MatchCondition) isFilterCondition() {}
+func (c *MatchCondition) IsFilterCondition() {}
 
 // MatchAnyCondition matches if value is one of the given values (IN operator).
 // SQL equivalent: WHERE field IN (value1, value2, ...)
@@ -69,7 +69,7 @@ type MatchAnyCondition struct {
 	FieldType FieldType `json:"-"`
 }
 
-func (c *MatchAnyCondition) isFilterCondition() {}
+func (c *MatchAnyCondition) IsFilterCondition() {}
 
 // MatchExceptCondition matches if value is NOT one of the given values (NOT IN).
 // SQL equivalent: WHERE field NOT IN (value1, value2, ...)
@@ -79,7 +79,7 @@ type MatchExceptCondition struct {
 	FieldType FieldType `json:"-"`
 }
 
-func (c *MatchExceptCondition) isFilterCondition() {}
+func (c *MatchExceptCondition) IsFilterCondition() {}
 
 // ── Range Types ──────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ type NumericRangeCondition struct {
 	FieldType FieldType    `json:"-"`
 }
 
-func (c *NumericRangeCondition) isFilterCondition() {}
+func (c *NumericRangeCondition) IsFilterCondition() {}
 
 func (c *NumericRangeCondition) MarshalJSON() ([]byte, error) {
 	type Alias struct {
@@ -160,7 +160,7 @@ type TimeRangeCondition struct {
 	FieldType FieldType `json:"-"`
 }
 
-func (c *TimeRangeCondition) isFilterCondition() {}
+func (c *TimeRangeCondition) IsFilterCondition() {}
 
 func (c TimeRangeCondition) MarshalJSON() ([]byte, error) {
 	type Alias struct {
@@ -210,7 +210,7 @@ type IsNullCondition struct {
 	FieldType FieldType `json:"-"`
 }
 
-func (c *IsNullCondition) isFilterCondition() {}
+func (c *IsNullCondition) IsFilterCondition() {}
 
 // IsEmptyCondition checks if a field is empty (doesn't exist, null, or []).
 // SQL equivalent: WHERE field IS NULL OR field = ” OR field = []
@@ -219,4 +219,4 @@ type IsEmptyCondition struct {
 	FieldType FieldType `json:"-"`
 }
 
-func (c *IsEmptyCondition) isFilterCondition() {}
+func (c *IsEmptyCondition) IsFilterCondition() {}

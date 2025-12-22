@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"sync"
 
 	"github.com/Aleph-Alpha/std/v1/vectordb"
 	qdrant "github.com/qdrant/go-client/qdrant"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -42,9 +42,9 @@ func NewAdapter(client *qdrant.Client) *Adapter {
 }
 
 // Search performs similarity search across one or more requests.
-func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, error) {
+func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, []error, error) {
 	if len(requests) == 0 {
-		return nil, fmt.Errorf("at least one search request is required")
+		return nil, nil, fmt.Errorf("at least one search request is required")
 	}
 
 	log.Printf("[Qdrant] Starting search batch with %d requests", len(requests))
@@ -52,41 +52,50 @@ func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest
 	// Validate all requests first
 	for i, searchReq := range requests {
 		if err := validateSearchInput(searchReq.CollectionName, searchReq.Vector, searchReq.TopK); err != nil {
-			return nil, fmt.Errorf("request [%d]: %w", i, err)
+			return nil, nil, fmt.Errorf("request [%d]: %w", i, err)
 		}
 	}
 
 	results := make([][]vectordb.SearchResult, len(requests))
+	errs := make([]error, len(requests))
 
-	// Create errgroup with context
-	g, ctx := errgroup.WithContext(ctx)
+	// Use WaitGroup for partial results
+	var wg sync.WaitGroup
 
 	// Create semaphore to limit concurrent searches
 	sem := semaphore.NewWeighted(maxConcurrentSearches)
 
 	for i, searchReq := range requests {
 		i, searchReq := i, searchReq // Capture loop variables
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			// Acquire semaphore (blocks if at max concurrency)
 			if err := sem.Acquire(ctx, 1); err != nil {
-				return fmt.Errorf("request [%d]: failed to acquire semaphore: %w", i, err)
+				errs[i] = fmt.Errorf("request [%d]: failed to acquire semaphore: %w", i, err)
+				results[i] = []vectordb.SearchResult{}
+				return
 			}
 			defer sem.Release(1)
 
 			res, err := searchInternal(ctx, a.client, searchReq)
 			if err != nil {
-				return fmt.Errorf("request [%d]: search failed: %w", i, err)
+				errs[i] = fmt.Errorf("request [%d]: search failed: %w", i, err)
+				results[i] = []vectordb.SearchResult{}
+				return
 			}
 			results[i] = res
 			log.Printf("[Qdrant] Search request [%d] returned %d results", i, len(res))
-			return nil
-		})
+		}()
 	}
 
-	if err := g.Wait(); err != nil {
-		return nil, fmt.Errorf("search batch failed: %w", err)
+	wg.Wait()
+
+	// Check for systemic failure (context cancelled)
+	if ctx.Err() != nil {
+		return results, errs, fmt.Errorf("search batch interrupted: %w", ctx.Err())
 	}
-	return results, nil
+	return results, errs, nil
 }
 
 // Insert adds embeddings to a collection using batch processing.

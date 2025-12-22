@@ -3,28 +3,28 @@
 // # Overview
 //
 // This package defines a common interface [Service] that can be implemented
-// by different vector database adapters (Qdrant, Weaviate, Pinecone, etc.), allowing
+// by different vector database adapters (Qdrant, pgVector, etc.), allowing
 // applications to switch between databases without changing application code.
 //
 // # Architecture
 //
 //	┌─────────────────────────────────────────────────────────────┐
 //	│                    Application Layer                        │
-//	│  (uses vectordb.Service - no DB-specific imports)  │
+//	│  (uses vectordb.Service - no DB-specific imports)           │
 //	└──────────────────────────┬──────────────────────────────────┘
 //	                           │
 //	                           ▼
 //	┌─────────────────────────────────────────────────────────────┐
-//	│                  vectordb.Service                   │
+//	│                  vectordb.Service                           │
 //	│          (common interface + DB-agnostic types)             │
 //	└──────────────────────────┬──────────────────────────────────┘
 //	                           │
-//	        ┌──────────────────┼──────────────────┐
-//	        ▼                  ▼                  ▼
-//	┌───────────────┐  ┌───────────────┐  ┌───────────────┐
-//	│ qdrant.Adapter│  │weaviate.Adapter│ │pinecone.Adapter│
-//	│  (implements) │  │  (implements)  │ │  (implements)  │
-//	└───────────────┘  └───────────────┘  └───────────────┘
+//	              ┌────────────┴────────────┐
+//	              ▼                         ▼
+//	      ┌───────────────┐         ┌───────────────-┐
+//	      │ qdrant.Adapter│         │pgvector.Adapter│
+//	      │  (implements) │         │  (planned)     │
+//	      └───────────────┘         └───────────────-┘
 //
 // # Benefits
 //
@@ -108,8 +108,7 @@
 //
 // Future adapters would live in their own packages:
 //
-//	weaviate/             # (future) Weaviate adapter
-//	pinecone/             # (future) Pinecone adapter
+//	pgvector/             # (planned) PostgreSQL pgvector adapter
 //
 // # Filter Types
 //
