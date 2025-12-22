@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Aleph-Alpha/std/v1/vectordb"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
@@ -189,76 +190,80 @@ func TestQdrantWithFXModule(t *testing.T) {
 	err = qdrantClient.healthCheck()
 	assert.NoError(t, err)
 
+	// Create adapter for operations
+	adapter := NewAdapter(qdrantClient.api)
+
 	// Test collection operations
 	t.Run("EnsureCollection", func(t *testing.T) {
 		// First call should create the collection
-		err := qdrantClient.EnsureCollection(ctx, "test_collection_1")
+		err := adapter.EnsureCollection(ctx, "test_collection_1", 1536)
 		assert.NoError(t, err)
 
 		// Second call should be idempotent
-		err = qdrantClient.EnsureCollection(ctx, "test_collection_1")
+		err = adapter.EnsureCollection(ctx, "test_collection_1", 1536)
 		assert.NoError(t, err)
 
 		// Empty collection name should fail
-		err = qdrantClient.EnsureCollection(ctx, "")
+		err = adapter.EnsureCollection(ctx, "", 1536)
 		assert.Error(t, err)
 	})
 
 	// Test basic CRUD operations
 	t.Run("BasicCRUDOperations", func(t *testing.T) {
 		collectionName := "test_crud"
-		err := qdrantClient.EnsureCollection(ctx, collectionName)
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
 		require.NoError(t, err)
 
-		// Insert single embedding (use numeric ID or UUID format)
-		embedding := EmbeddingInput{
-			ID:     "00000000-0000-0000-0000-000000000001", // UUID format
+		// Insert single embedding (use UUID format)
+		embedding := vectordb.EmbeddingInput{
+			ID:     "00000000-0000-0000-0000-000000000001",
 			Vector: generateRandomVector(1536),
-			Meta: map[string]any{
+			Payload: map[string]any{
 				"title":   "Test Document 1",
 				"content": "This is a test document",
 			},
 		}
 
-		err = qdrantClient.Insert(ctx, collectionName, embedding)
+		err = adapter.Insert(ctx, collectionName, []vectordb.EmbeddingInput{embedding})
 		assert.NoError(t, err)
 
 		// Search for the inserted embedding
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		batchResults, err := qdrantClient.Search(ctx, SearchRequest{
+		batchResults, errs, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embedding.Vector,
 			TopK:           5,
 		})
 		assert.NoError(t, err)
+		assert.Nil(t, errs[0])
 		assert.Greater(t, len(batchResults), 0)
 		results := batchResults[0]
 		assert.Greater(t, len(results), 0)
 
 		// Verify the result
 		if len(results) > 0 {
-			assert.Equal(t, embedding.ID, results[0].GetID())
-			assert.Greater(t, results[0].GetScore(), float32(0.9)) // Should be very similar
+			assert.Equal(t, embedding.ID, results[0].ID)
+			assert.Greater(t, results[0].Score, float32(0.9)) // Should be very similar
 		}
 
 		// Delete the embedding
-		err = qdrantClient.Delete(ctx, collectionName, []string{embedding.ID})
+		err = adapter.Delete(ctx, collectionName, []string{embedding.ID})
 		assert.NoError(t, err)
 	})
 
 	// Test batch insert
 	t.Run("BatchInsert", func(t *testing.T) {
 		collectionName := "test_batch"
-		err := qdrantClient.EnsureCollection(ctx, collectionName)
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
 		require.NoError(t, err)
 
 		// Create multiple embeddings (use UUID format)
-		embeddings := make([]EmbeddingInput, 10)
+		embeddings := make([]vectordb.EmbeddingInput, 10)
 		for i := 0; i < 10; i++ {
-			embeddings[i] = EmbeddingInput{
+			embeddings[i] = vectordb.EmbeddingInput{
 				ID:     fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1),
 				Vector: generateRandomVector(1536),
-				Meta: map[string]any{
+				Payload: map[string]any{
 					"title": fmt.Sprintf("Document %d", i),
 					"index": i,
 				},
@@ -266,12 +271,12 @@ func TestQdrantWithFXModule(t *testing.T) {
 		}
 
 		// Batch insert
-		err = qdrantClient.BatchInsert(ctx, collectionName, embeddings)
+		err = adapter.Insert(ctx, collectionName, embeddings)
 		assert.NoError(t, err)
 
 		// Search and verify
 		time.Sleep(1 * time.Second) // Allow time for indexing
-		batchResults, err := qdrantClient.Search(ctx, SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -284,22 +289,22 @@ func TestQdrantWithFXModule(t *testing.T) {
 		for i, emb := range embeddings {
 			ids[i] = emb.ID
 		}
-		err = qdrantClient.Delete(ctx, collectionName, ids)
+		err = adapter.Delete(ctx, collectionName, ids)
 		assert.NoError(t, err)
 	})
 
 	// Test empty operations
 	t.Run("EmptyOperations", func(t *testing.T) {
 		collectionName := "test_empty"
-		err := qdrantClient.EnsureCollection(ctx, collectionName)
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
 		require.NoError(t, err)
 
 		// Empty batch insert should be no-op
-		err = qdrantClient.BatchInsert(ctx, collectionName, []EmbeddingInput{})
+		err = adapter.Insert(ctx, collectionName, []vectordb.EmbeddingInput{})
 		assert.NoError(t, err)
 
 		// Empty delete should be no-op
-		err = qdrantClient.Delete(ctx, collectionName, []string{})
+		err = adapter.Delete(ctx, collectionName, []string{})
 		assert.NoError(t, err)
 	})
 
@@ -307,8 +312,8 @@ func TestQdrantWithFXModule(t *testing.T) {
 	require.NoError(t, app.Stop(ctx))
 }
 
-// TestQdrantClientOperations tests various client operations
-func TestQdrantClientOperations(t *testing.T) {
+// TestVectorDBAdapterOperations tests various adapter operations
+func TestVectorDBAdapterOperations(t *testing.T) {
 	// Skip if running in short mode
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -339,20 +344,23 @@ func TestQdrantClientOperations(t *testing.T) {
 	require.NotNil(t, client)
 	defer client.Close()
 
+	// Create adapter
+	adapter := NewAdapter(client.api)
+
 	collectionName := "test_operations"
 	// Ensure collection exists
-	err = client.EnsureCollection(ctx, collectionName)
+	err = adapter.EnsureCollection(ctx, collectionName, 1536)
 	require.NoError(t, err)
 
 	t.Run("GetCollectionByName", func(t *testing.T) {
 		// Fetch collection info using GetCollection
-		col, err := client.GetCollection(ctx, collectionName)
+		col, err := adapter.GetCollection(ctx, collectionName)
 		assert.NoError(t, err, "expected GetCollection to succeed")
 		assert.NotNil(t, col, "expected non-nil collection info")
 
 		// Validate expected metadata fields
-		assert.GreaterOrEqual(t, int(col.Vectors), 0, "vector count should be >= 0")
-		assert.GreaterOrEqual(t, int(col.Points), 0, "points count should be >= 0")
+		assert.GreaterOrEqual(t, int(col.VectorCount), 0, "vector count should be >= 0")
+		assert.GreaterOrEqual(t, int(col.PointCount), 0, "points count should be >= 0")
 
 		// Validate vector config details (size and distance)
 		assert.NotZero(t, col.VectorSize, "vector size should not be zero")
@@ -362,8 +370,8 @@ func TestQdrantClientOperations(t *testing.T) {
 		t.Logf("Collection '%s': status=%s, vectors=%d, points=%d, vectorSize=%d, distance=%s",
 			col.Name,
 			col.Status,
-			col.Vectors,
-			col.Points,
+			col.VectorCount,
+			col.PointCount,
 			col.VectorSize,
 			col.Distance,
 		)
@@ -371,22 +379,22 @@ func TestQdrantClientOperations(t *testing.T) {
 
 	t.Run("SearchReturnsTopK", func(t *testing.T) {
 		// Insert multiple embeddings (use UUID format)
-		embeddings := make([]EmbeddingInput, 20)
+		embeddings := make([]vectordb.EmbeddingInput, 20)
 		for i := 0; i < 20; i++ {
-			embeddings[i] = EmbeddingInput{
-				ID:     fmt.Sprintf("00000000-0000-0000-0001-%012d", i+1),
-				Vector: generateRandomVector(1536),
-				Meta:   map[string]any{"index": i},
+			embeddings[i] = vectordb.EmbeddingInput{
+				ID:      fmt.Sprintf("00000000-0000-0000-0001-%012d", i+1),
+				Vector:  generateRandomVector(1536),
+				Payload: map[string]any{"index": i},
 			}
 		}
 
-		err := client.BatchInsert(ctx, collectionName, embeddings)
+		err := adapter.Insert(ctx, collectionName, embeddings)
 		require.NoError(t, err)
 
 		time.Sleep(1 * time.Second) // Allow time for indexing
 
 		// Search with topK = 5
-		batchResults, err := client.Search(ctx, SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           5,
@@ -395,7 +403,7 @@ func TestQdrantClientOperations(t *testing.T) {
 		assert.LessOrEqual(t, len(batchResults[0]), 5)
 
 		// Search with topK = 10
-		batchResults, err = client.Search(ctx, SearchRequest{
+		batchResults, _, err = adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -408,30 +416,30 @@ func TestQdrantClientOperations(t *testing.T) {
 		for i, emb := range embeddings {
 			ids[i] = emb.ID
 		}
-		err = client.Delete(ctx, collectionName, ids)
+		err = adapter.Delete(ctx, collectionName, ids)
 		assert.NoError(t, err)
 	})
 
 	t.Run("SearchWithMetadata", func(t *testing.T) {
 		// Insert embedding with rich metadata (UUID format, simple types only)
-		embedding := EmbeddingInput{
+		embedding := vectordb.EmbeddingInput{
 			ID:     "00000000-0000-0000-0002-000000000001",
 			Vector: generateRandomVector(1536),
-			Meta: map[string]any{
+			Payload: map[string]any{
 				"title":     "Test Title",
 				"author":    "Test Author",
 				"timestamp": time.Now().Unix(),
-				"category":  "test", // Use simple types instead of arrays
+				"category":  "test",
 			},
 		}
 
-		err := client.Insert(ctx, collectionName, embedding)
+		err := adapter.Insert(ctx, collectionName, []vectordb.EmbeddingInput{embedding})
 		require.NoError(t, err)
 
 		time.Sleep(1 * time.Second)
 
 		// Search and verify metadata
-		batchResults, err := client.Search(ctx, SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embedding.Vector,
 			TopK:           1,
@@ -440,39 +448,39 @@ func TestQdrantClientOperations(t *testing.T) {
 		assert.Greater(t, len(batchResults[0]), 0)
 
 		if len(batchResults[0]) > 0 {
-			meta := batchResults[0][0].GetMeta()
-			assert.NotNil(t, meta)
+			payload := batchResults[0][0].Payload
+			assert.NotNil(t, payload)
 		}
 
 		// Clean up
-		err = client.Delete(ctx, collectionName, []string{embedding.ID})
+		err = adapter.Delete(ctx, collectionName, []string{embedding.ID})
 		assert.NoError(t, err)
 	})
 
 	t.Run("LargeBatchInsert", func(t *testing.T) {
 		collectionName := "test_large_batch"
-		err := client.EnsureCollection(ctx, collectionName)
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
 		require.NoError(t, err)
 
 		// Create a large batch (more than defaultBatchSize, use UUID format)
 		largeCount := 500
-		embeddings := make([]EmbeddingInput, largeCount)
+		embeddings := make([]vectordb.EmbeddingInput, largeCount)
 		for i := 0; i < largeCount; i++ {
-			embeddings[i] = EmbeddingInput{
-				ID:     fmt.Sprintf("00000000-0000-0000-0003-%012d", i+1),
-				Vector: generateRandomVector(1536),
-				Meta:   map[string]any{"index": i},
+			embeddings[i] = vectordb.EmbeddingInput{
+				ID:      fmt.Sprintf("00000000-0000-0000-0003-%012d", i+1),
+				Vector:  generateRandomVector(1536),
+				Payload: map[string]any{"index": i},
 			}
 		}
 
 		// Should handle batching automatically
-		err = client.BatchInsert(ctx, collectionName, embeddings)
+		err = adapter.Insert(ctx, collectionName, embeddings)
 		assert.NoError(t, err)
 
 		time.Sleep(2 * time.Second)
 
 		// Verify some embeddings exist
-		batchResults, err := client.Search(ctx, SearchRequest{
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: collectionName,
 			Vector:         embeddings[0].Vector,
 			TopK:           10,
@@ -485,7 +493,7 @@ func TestQdrantClientOperations(t *testing.T) {
 		for i, emb := range embeddings {
 			ids[i] = emb.ID
 		}
-		err = client.Delete(ctx, collectionName, ids)
+		err = adapter.Delete(ctx, collectionName, ids)
 		assert.NoError(t, err)
 	})
 }
@@ -522,6 +530,8 @@ func TestQdrantErrorHandling(t *testing.T) {
 	require.NotNil(t, client)
 	defer client.Close()
 
+	adapter := NewAdapter(client.api)
+
 	t.Run("InvalidEndpoint", func(t *testing.T) {
 		invalidCfg := &Config{
 			Endpoint:           "invalid-host:9999",
@@ -534,19 +544,21 @@ func TestQdrantErrorHandling(t *testing.T) {
 	})
 
 	t.Run("EmptyCollectionName", func(t *testing.T) {
-		err := client.EnsureCollection(ctx, "")
+		err := adapter.EnsureCollection(ctx, "", 1536)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "collection name cannot be empty")
 	})
 
 	t.Run("SearchOnNonExistentCollection", func(t *testing.T) {
 		vector := generateRandomVector(1536)
-		_, err := client.Search(ctx, SearchRequest{
+		_, errs, err := adapter.Search(ctx, vectordb.SearchRequest{
 			CollectionName: "non_existent_collection",
 			Vector:         vector,
 			TopK:           5,
 		})
-		assert.Error(t, err)
+		// With partial results, systemic error is nil but per-request error exists
+		assert.NoError(t, err)
+		assert.NotNil(t, errs[0])
 	})
 }
 
@@ -586,9 +598,10 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	err = client.healthCheck()
 	require.NoError(t, err, "Qdrant health check failed")
 
-	// Ensure collection exists
+	// Create adapter and ensure collection exists
+	adapter := NewAdapter(client.api)
 	collectionName := "test_collection"
-	err = client.EnsureCollection(context.Background(), collectionName)
+	err = adapter.EnsureCollection(context.Background(), collectionName, 1536)
 	require.NoError(t, err, "failed to ensure collection")
 
 	// Close client
@@ -596,6 +609,396 @@ func TestQdrantLifecycleAndHealthCheck(t *testing.T) {
 	require.NoError(t, err, "client close failed")
 
 	t.Log("Qdrant client lifecycle test passed successfully")
+}
+
+// TestFilterOperations tests various filter scenarios
+func TestFilterOperations(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	ctx := context.Background()
+	containerInstance, err := setupQdrantContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate container: %s", err)
+		}
+	}()
+
+	// Convert port to uint
+	portNum, err := strconv.Atoi(containerInstance.Port)
+	require.NoError(t, err)
+
+	cfg := &Config{
+		Endpoint:           containerInstance.Host,
+		Port:               portNum,
+		CheckCompatibility: false,
+		Timeout:            10 * time.Second,
+	}
+
+	client, err := NewQdrantClient(QdrantParams{Config: cfg})
+	require.NoError(t, err)
+	defer client.Close()
+
+	adapter := NewAdapter(client.api)
+
+	t.Run("SearchWithMustFilter", func(t *testing.T) {
+		collectionName := "test_must_filter"
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
+		require.NoError(t, err)
+
+		// Insert embeddings with different metadata
+		embeddings := []vectordb.EmbeddingInput{
+			{
+				ID:      "00000000-0000-0000-0004-000000000001",
+				Vector:  generateRandomVector(1536),
+				Payload: map[string]any{"color": "red", "size": int64(10)},
+			},
+			{
+				ID:      "00000000-0000-0000-0004-000000000002",
+				Vector:  generateRandomVector(1536),
+				Payload: map[string]any{"color": "blue", "size": int64(20)},
+			},
+			{
+				ID:      "00000000-0000-0000-0004-000000000003",
+				Vector:  generateRandomVector(1536),
+				Payload: map[string]any{"color": "red", "size": int64(30)},
+			},
+		}
+
+		err = adapter.Insert(ctx, collectionName, embeddings)
+		require.NoError(t, err)
+		time.Sleep(1 * time.Second)
+
+		// Test Must filter (color == "red")
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+			Filters: []*vectordb.FilterSet{
+				vectordb.NewFilterSet(
+					vectordb.Must(vectordb.NewMatch("color", "red")),
+				),
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(batchResults[0])) // Only red items
+
+		// Clean up
+		ids := []string{embeddings[0].ID, embeddings[1].ID, embeddings[2].ID}
+		err = adapter.Delete(ctx, collectionName, ids)
+		assert.NoError(t, err)
+	})
+
+	t.Run("SearchWithNumericRangeFilter", func(t *testing.T) {
+		collectionName := "test_numeric_range"
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
+		require.NoError(t, err)
+
+		embeddings := []vectordb.EmbeddingInput{
+			{ID: "00000000-0000-0000-0010-000000000001", Vector: generateRandomVector(1536), Payload: map[string]any{"size": int64(10)}},
+			{ID: "00000000-0000-0000-0010-000000000002", Vector: generateRandomVector(1536), Payload: map[string]any{"size": int64(20)}},
+			{ID: "00000000-0000-0000-0010-000000000003", Vector: generateRandomVector(1536), Payload: map[string]any{"size": int64(30)}},
+		}
+
+		err = adapter.Insert(ctx, collectionName, embeddings)
+		require.NoError(t, err)
+		time.Sleep(1 * time.Second)
+
+		// Test numeric range filter (size >= 20)
+		gte := float64(20)
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+			Filters: []*vectordb.FilterSet{
+				vectordb.NewFilterSet(
+					vectordb.Must(vectordb.NewNumericRange("size", vectordb.NumericRange{Gte: &gte})),
+				),
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(batchResults[0])) // size 20 and 30
+
+		// Clean up
+		ids := []string{embeddings[0].ID, embeddings[1].ID, embeddings[2].ID}
+		err = adapter.Delete(ctx, collectionName, ids)
+		assert.NoError(t, err)
+	})
+
+	t.Run("SearchWithMustNotFilter", func(t *testing.T) {
+		collectionName := "test_must_not"
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
+		require.NoError(t, err)
+
+		embeddings := []vectordb.EmbeddingInput{
+			{ID: "00000000-0000-0000-0005-000000000001", Vector: generateRandomVector(1536), Payload: map[string]any{"status": "published"}},
+			{ID: "00000000-0000-0000-0005-000000000002", Vector: generateRandomVector(1536), Payload: map[string]any{"status": "draft"}},
+			{ID: "00000000-0000-0000-0005-000000000003", Vector: generateRandomVector(1536), Payload: map[string]any{"status": "archived"}},
+		}
+
+		err = adapter.Insert(ctx, collectionName, embeddings)
+		require.NoError(t, err)
+		time.Sleep(1 * time.Second)
+
+		// Exclude archived items
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+			Filters: []*vectordb.FilterSet{
+				vectordb.NewFilterSet(
+					vectordb.MustNot(vectordb.NewMatch("status", "archived")),
+				),
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(batchResults[0])) // published and draft only
+
+		// Clean up
+		ids := []string{embeddings[0].ID, embeddings[1].ID, embeddings[2].ID}
+		err = adapter.Delete(ctx, collectionName, ids)
+		assert.NoError(t, err)
+	})
+
+	t.Run("SearchWithMultipleFilterSets", func(t *testing.T) {
+		collectionName := "test_multi_filter"
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
+		require.NoError(t, err)
+
+		embeddings := []vectordb.EmbeddingInput{
+			{ID: "00000000-0000-0000-0006-000000000001", Vector: generateRandomVector(1536), Payload: map[string]any{"color": "red", "size": int64(10)}},
+			{ID: "00000000-0000-0000-0006-000000000002", Vector: generateRandomVector(1536), Payload: map[string]any{"color": "red", "size": int64(50)}},
+			{ID: "00000000-0000-0000-0006-000000000003", Vector: generateRandomVector(1536), Payload: map[string]any{"color": "blue", "size": int64(10)}},
+		}
+
+		err = adapter.Insert(ctx, collectionName, embeddings)
+		require.NoError(t, err)
+		time.Sleep(1 * time.Second)
+
+		// color == red AND size < 20
+		lt := float64(20)
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+			Filters: []*vectordb.FilterSet{
+				vectordb.NewFilterSet(vectordb.Must(vectordb.NewMatch("color", "red"))),
+				vectordb.NewFilterSet(vectordb.Must(vectordb.NewNumericRange("size", vectordb.NumericRange{Lt: &lt}))),
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(batchResults[0])) // Only red with size < 20
+
+		// Clean up
+		ids := []string{embeddings[0].ID, embeddings[1].ID, embeddings[2].ID}
+		err = adapter.Delete(ctx, collectionName, ids)
+		assert.NoError(t, err)
+	})
+
+	t.Run("SearchWithMatchAnyFilter", func(t *testing.T) {
+		collectionName := "test_match_any"
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
+		require.NoError(t, err)
+
+		embeddings := []vectordb.EmbeddingInput{
+			{ID: "00000000-0000-0000-0008-000000000001", Vector: generateRandomVector(1536), Payload: map[string]any{"tag": "ml"}},
+			{ID: "00000000-0000-0000-0008-000000000002", Vector: generateRandomVector(1536), Payload: map[string]any{"tag": "nlp"}},
+			{ID: "00000000-0000-0000-0008-000000000003", Vector: generateRandomVector(1536), Payload: map[string]any{"tag": "cv"}},
+		}
+
+		err = adapter.Insert(ctx, collectionName, embeddings)
+		require.NoError(t, err)
+		time.Sleep(1 * time.Second)
+
+		// Match any of ["ml", "nlp"]
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+			Filters: []*vectordb.FilterSet{
+				vectordb.NewFilterSet(
+					vectordb.Must(vectordb.NewMatchAny("tag", "ml", "nlp")),
+				),
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(batchResults[0])) // ml and nlp only
+
+		// Clean up
+		ids := []string{embeddings[0].ID, embeddings[1].ID, embeddings[2].ID}
+		err = adapter.Delete(ctx, collectionName, ids)
+		assert.NoError(t, err)
+	})
+
+	t.Run("SearchWithShouldFilter", func(t *testing.T) {
+		collectionName := "test_should_filter"
+		err := adapter.EnsureCollection(ctx, collectionName, 1536)
+		require.NoError(t, err)
+
+		embeddings := []vectordb.EmbeddingInput{
+			{ID: "00000000-0000-0000-0009-000000000001", Vector: generateRandomVector(1536), Payload: map[string]any{"color": "red"}},
+			{ID: "00000000-0000-0000-0009-000000000002", Vector: generateRandomVector(1536), Payload: map[string]any{"color": "blue"}},
+			{ID: "00000000-0000-0000-0009-000000000003", Vector: generateRandomVector(1536), Payload: map[string]any{"color": "green"}},
+		}
+
+		err = adapter.Insert(ctx, collectionName, embeddings)
+		require.NoError(t, err)
+		time.Sleep(1 * time.Second)
+
+		// Should match red OR blue
+		batchResults, _, err := adapter.Search(ctx, vectordb.SearchRequest{
+			CollectionName: collectionName,
+			Vector:         embeddings[0].Vector,
+			TopK:           10,
+			Filters: []*vectordb.FilterSet{
+				vectordb.NewFilterSet(
+					vectordb.Should(
+						vectordb.NewMatch("color", "red"),
+						vectordb.NewMatch("color", "blue"),
+					),
+				),
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(batchResults[0])) // red and blue only
+
+		// Clean up
+		ids := []string{embeddings[0].ID, embeddings[1].ID, embeddings[2].ID}
+		err = adapter.Delete(ctx, collectionName, ids)
+		assert.NoError(t, err)
+	})
+}
+
+// TestBatchSearch tests batch search with multiple queries
+func TestBatchSearch(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	ctx := context.Background()
+	containerInstance, err := setupQdrantContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate container: %s", err)
+		}
+	}()
+
+	portNum, err := strconv.Atoi(containerInstance.Port)
+	require.NoError(t, err)
+
+	cfg := &Config{
+		Endpoint:           containerInstance.Host,
+		Port:               portNum,
+		CheckCompatibility: false,
+		Timeout:            10 * time.Second,
+	}
+
+	client, err := NewQdrantClient(QdrantParams{Config: cfg})
+	require.NoError(t, err)
+	defer client.Close()
+
+	adapter := NewAdapter(client.api)
+
+	collectionName := "test_batch_search"
+	err = adapter.EnsureCollection(ctx, collectionName, 1536)
+	require.NoError(t, err)
+
+	embeddings := make([]vectordb.EmbeddingInput, 5)
+	for i := 0; i < 5; i++ {
+		embeddings[i] = vectordb.EmbeddingInput{
+			ID:      fmt.Sprintf("00000000-0000-0000-0007-%012d", i+1),
+			Vector:  generateRandomVector(1536),
+			Payload: map[string]any{"index": int64(i)},
+		}
+	}
+
+	err = adapter.Insert(ctx, collectionName, embeddings)
+	require.NoError(t, err)
+	time.Sleep(1 * time.Second)
+
+	// Batch search with multiple queries
+	batchResults, _, err := adapter.Search(ctx,
+		vectordb.SearchRequest{CollectionName: collectionName, Vector: embeddings[0].Vector, TopK: 3},
+		vectordb.SearchRequest{CollectionName: collectionName, Vector: embeddings[1].Vector, TopK: 3},
+		vectordb.SearchRequest{CollectionName: collectionName, Vector: embeddings[2].Vector, TopK: 3},
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(batchResults)) // 3 result sets
+
+	// Each result set should have results
+	for i, results := range batchResults {
+		assert.Greater(t, len(results), 0, "result set %d should have results", i)
+	}
+
+	// Clean up
+	ids := make([]string, len(embeddings))
+	for i, emb := range embeddings {
+		ids[i] = emb.ID
+	}
+	err = adapter.Delete(ctx, collectionName, ids)
+	assert.NoError(t, err)
+}
+
+// TestListCollections tests collection listing
+func TestListCollections(t *testing.T) {
+	// Skip if running in short mode
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	ctx := context.Background()
+	containerInstance, err := setupQdrantContainer(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if err := containerInstance.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate container: %s", err)
+		}
+	}()
+
+	portNum, err := strconv.Atoi(containerInstance.Port)
+	require.NoError(t, err)
+
+	cfg := &Config{
+		Endpoint:           containerInstance.Host,
+		Port:               portNum,
+		CheckCompatibility: false,
+		Timeout:            10 * time.Second,
+	}
+
+	client, err := NewQdrantClient(QdrantParams{Config: cfg})
+	require.NoError(t, err)
+	defer client.Close()
+
+	adapter := NewAdapter(client.api)
+
+	// Create a few collections
+	err = adapter.EnsureCollection(ctx, "list_test_1", 1536)
+	require.NoError(t, err)
+	err = adapter.EnsureCollection(ctx, "list_test_2", 1536)
+	require.NoError(t, err)
+
+	// List collections
+	collections, err := adapter.ListCollections(ctx)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(collections), 2)
+
+	// Verify our collections are in the list
+	found1, found2 := false, false
+	for _, name := range collections {
+		if name == "list_test_1" {
+			found1 = true
+		}
+		if name == "list_test_2" {
+			found2 = true
+		}
+	}
+	assert.True(t, found1, "list_test_1 should be in collections")
+	assert.True(t, found2, "list_test_2 should be in collections")
 }
 
 // Helper function to generate random vectors for testing

@@ -19,7 +19,7 @@ Core Features:
 - Vector similarity search with abstracted SearchResult interface
 - Type\-safe collection creation and existence checks
 - Support for payload metadata and optional vector retrieval
-- Extensible abstraction layer for alternate vector stores \(e.g., Pinecone, Postgres\)
+- Extensible abstraction layer for alternate vector stores \(e.g. pgVector\)
 
 Basic Usage:
 

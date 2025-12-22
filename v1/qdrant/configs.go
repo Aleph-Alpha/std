@@ -31,6 +31,12 @@ type Config struct {
 	// Optional authentication token for secured deployments.
 	ApiKey string `yaml:"api_key" env:"QDRANT_API_KEY"`
 
+	// ────────────────────────────────────────────────────────────────────────────
+	// Connection Settings
+	// ────────────────────────────────────────────────────────────────────────────
+	// Note: The following fields are reserved for future use.
+	// They are not currently passed to the Qdrant SDK client.
+
 	// Maximum request duration before timing out.
 	Timeout time.Duration `yaml:"timeout" env:"QDRANT_TIMEOUT"`
 

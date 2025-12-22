@@ -5,452 +5,207 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"sync"
 
+	"github.com/Aleph-Alpha/std/v1/vectordb"
 	qdrant "github.com/qdrant/go-client/qdrant"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
 
-// EnsureCollection ──────────────────────────────────────────────────────────────
-// EnsureCollection
-// ──────────────────────────────────────────────────────────────
+// Ensure Adapter implements Service at compile time
+var _ vectordb.Service = (*Adapter)(nil)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Adapter - implements vectordb.Service interface
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Adapter implements vectordb.Service for Qdrant.
+// It wraps a Qdrant client and converts between generic vectordb types
+// and Qdrant-specific protobuf types.
 //
-// EnsureCollection verifies if a given collection exists, and creates it if missing.
-//
-// It’s safe to call this multiple times — if the collection already exists,
-// the function exits early. This pattern simplifies startup logic for embedding
-// services that may bootstrap their own Qdrant collections.
-func (c *QdrantClient) EnsureCollection(ctx context.Context, name string) error {
-	if name == "" {
-		return fmt.Errorf("collection name cannot be empty")
-	}
-
-	collections, err := c.api.ListCollections(ctx)
-	if err != nil {
-		return fmt.Errorf("[Qdrant] failed to list collections: %w", err)
-	}
-
-	if slices.Contains(collections, name) {
-		log.Printf("[Qdrant] Collection '%s' already exists", name)
-		return nil
-	}
-
-	log.Printf("[Qdrant] Collection '%s' not found, creating it...", name)
-
-	req := &qdrant.CreateCollection{
-		CollectionName: name,
-		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
-			Size:     1536,                   // default dimension (model-dependent)
-			Distance: qdrant.Distance_Cosine, // cosine similarity
-		}),
-	}
-
-	if err := c.api.CreateCollection(ctx, req); err != nil {
-		return fmt.Errorf("[Qdrant] failed to create collection '%s': %w", name, err)
-	}
-
-	log.Printf("[Qdrant] Created collection '%s' successfully", name)
-	return nil
+// This is the recommended way to use Qdrant - it provides a database-agnostic
+// interface that allows switching between different vector databases.
+type Adapter struct {
+	client *qdrant.Client
 }
 
-// Insert ──────────────────────────────────────────────────────────────
-// Insert
-// ──────────────────────────────────────────────────────────────
-//
-// Insert adds a single embedding to Qdrant.
-//
-// Internally, it reuses the BatchInsert logic to ensure consistent handling
-// of payload serialization and error management.
-func (c *QdrantClient) Insert(ctx context.Context, collectionName string, input EmbeddingInput) error {
-	return c.BatchInsert(ctx, collectionName, []EmbeddingInput{input})
-}
-
-// BatchInsert ──────────────────────────────────────────────────────────────
-// BatchInsert
-// ──────────────────────────────────────────────────────────────
-//
-// BatchInsert efficiently inserts multiple embeddings in batches
-// to reduce network overhead.
-//
-// This method is safe to call for large datasets — it will automatically
-// split inserts into smaller chunks (`defaultBatchSize`) and perform
-// multiple upserts sequentially.
-//
-// Logs batch indices and collection name for debugging.
-func (c *QdrantClient) BatchInsert(ctx context.Context, collectionName string, inputs []EmbeddingInput) error {
-	if len(inputs) == 0 {
-		return nil
-	}
-
-	if collectionName == "" {
-		return fmt.Errorf("collection name cannot be empty")
-	}
-
-	// Convert all inputs into internal embeddings
-	embeddings := make([]Embedding, len(inputs))
-	for i, in := range inputs {
-		embeddings[i] = NewEmbedding(in)
-	}
-
-	for start := 0; start < len(embeddings); start += defaultBatchSize {
-		end := start + defaultBatchSize
-		if end > len(embeddings) {
-			end = len(embeddings)
-		}
-		batch := embeddings[start:end]
-
-		if err := c.upsertBatch(ctx, batch, collectionName); err != nil {
-			return fmt.Errorf("[Qdrant] batch upsert failed at [%d:%d]: %w", start, end, err)
-		}
-		log.Printf("[Qdrant] Inserted batch [%d:%d] (collection=%s)", start, end, collectionName)
-	}
-
-	return nil
-}
-
-// ──────────────────────────────────────────────────────────────
-// upsertBatch
-// ──────────────────────────────────────────────────────────────
-//
-// upsertBatch sends a single `Upsert` request for a slice of embeddings.
-//
-// Converts Embedding structs into Qdrant’s `PointStruct` objects and
-// triggers a blocking insert (`Wait=true`) to ensure data persistence
-// before returning.
-func (c *QdrantClient) upsertBatch(ctx context.Context, batch []Embedding, collectionName string) error {
-	points := make([]*qdrant.PointStruct, 0, len(batch))
-	for _, e := range batch {
-		points = append(points, &qdrant.PointStruct{
-			Id:      qdrant.NewID(e.ID),
-			Vectors: qdrant.NewVectors(e.Vector...),
-			Payload: qdrant.NewValueMap(e.Meta),
-		})
-	}
-
-	wait := true
-	req := &qdrant.UpsertPoints{
-		CollectionName: collectionName,
-		Points:         points,
-		Wait:           &wait,
-	}
-
-	if _, err := c.api.Upsert(ctx, req); err != nil {
-		return fmt.Errorf("[Qdrant] upsert failed: %w", err)
-	}
-	return nil
-}
-
-// GetCollection ──────────────────────────────────────────────────────────────
-// GetCollection
-// ──────────────────────────────────────────────────────────────
-//
-// GetCollection retrieves detailed metadata about a specific collection
-// from the connected Qdrant instance.
-//
-// It returns a high-level, decoupled `Collection` struct containing
-// core details such as:
-//   • Collection name
-//   • Status (e.g., "Green", "Yellow")
-//   • Total vectors and points
-//   • Vector size (embedding dimension)
-//   • Distance metric (e.g., "Cosine", "Dot", "Euclid")
-//
-// This abstraction intentionally hides Qdrant SDK internals (`qdrant.CollectionInfo`)
-// so that the application layer remains independent of Qdrant’s client library.
+// NewAdapter creates a new Qdrant adapter for the vectordb interface.
+// Pass the underlying SDK client via QdrantClient.Client().
 //
 // Example:
 //
-//	collection, err := client.GetCollection(ctx, "my_collection")
-//	if err != nil {
-//	    log.Printf("Failed to fetch collection info: %v", err)
-//	    return
-//	}
-//	log.Printf("Collection '%s': vectors=%d, points=%d, vector_size=%d, distance=%s",
-//	    collection.Name,
-//	    collection.Vectors,
-//	    collection.Points,
-//	    collection.VectorSize,
-//	    collection.Distance,
-//	)
+//	qc, _ := qdrant.NewQdrantClient(params)
+//	adapter := qdrant.NewAdapter(qc.Client())
+//	var db vectordb.Service = adapter
+func NewAdapter(client *qdrant.Client) *Adapter {
+	return &Adapter{client: client}
+}
 
-func (c *QdrantClient) GetCollection(ctx context.Context, name string) (*Collection, error) {
-	if c.api == nil {
-		return nil, fmt.Errorf("[Qdrant] client not initialized")
+// Search performs similarity search across one or more requests.
+func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, []error, error) {
+	if len(requests) == 0 {
+		return nil, nil, fmt.Errorf("at least one search request is required")
 	}
 
+	log.Printf("[Qdrant] Starting search batch with %d requests", len(requests))
+
+	// Validate all requests first
+	for i, searchReq := range requests {
+		if err := validateSearchInput(searchReq.CollectionName, searchReq.Vector, searchReq.TopK); err != nil {
+			return nil, nil, fmt.Errorf("request [%d]: %w", i, err)
+		}
+	}
+
+	results := make([][]vectordb.SearchResult, len(requests))
+	errs := make([]error, len(requests))
+
+	// Use WaitGroup for partial results
+	var wg sync.WaitGroup
+
+	// Create semaphore to limit concurrent searches
+	sem := semaphore.NewWeighted(maxConcurrentSearches)
+
+	for i, searchReq := range requests {
+		i, searchReq := i, searchReq // Capture loop variables
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Acquire semaphore (blocks if at max concurrency)
+			if err := sem.Acquire(ctx, 1); err != nil {
+				errs[i] = fmt.Errorf("request [%d]: failed to acquire semaphore: %w", i, err)
+				results[i] = []vectordb.SearchResult{}
+				return
+			}
+			defer sem.Release(1)
+
+			res, err := searchInternal(ctx, a.client, searchReq)
+			if err != nil {
+				errs[i] = fmt.Errorf("request [%d]: search failed: %w", i, err)
+				results[i] = []vectordb.SearchResult{}
+				return
+			}
+			results[i] = res
+			log.Printf("[Qdrant] Search request [%d] returned %d results", i, len(res))
+		}()
+	}
+
+	wg.Wait()
+
+	// Check for systemic failure (context cancelled)
+	if ctx.Err() != nil {
+		return results, errs, fmt.Errorf("search batch interrupted: %w", ctx.Err())
+	}
+	return results, errs, nil
+}
+
+// Insert adds embeddings to a collection using batch processing.
+func (a *Adapter) Insert(ctx context.Context, collectionName string, inputs []vectordb.EmbeddingInput) error {
+	if len(inputs) == 0 {
+		return nil
+	}
+	if collectionName == "" {
+		return fmt.Errorf("collection name cannot be empty")
+	}
+	return insertInternal(ctx, a.client, collectionName, inputs)
+}
+
+// Delete removes points by their IDs from a collection.
+func (a *Adapter) Delete(ctx context.Context, collectionName string, ids []string) error {
+	return deleteInternal(ctx, a.client, collectionName, ids)
+}
+
+// EnsureCollection creates a collection if it doesn't exist.
+func (a *Adapter) EnsureCollection(ctx context.Context, name string, vectorSize uint64) error {
+	return ensureCollectionInternal(ctx, a.client, name, vectorSize)
+}
+
+// GetCollection retrieves metadata about a collection.
+func (a *Adapter) GetCollection(ctx context.Context, name string) (*vectordb.Collection, error) {
 	if name == "" {
 		return nil, fmt.Errorf("collection name cannot be empty")
 	}
 
-	info, err := c.api.GetCollectionInfo(ctx, name)
+	info, err := a.client.GetCollectionInfo(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("[Qdrant] failed to get collection '%s': %w", name, err)
+		return nil, fmt.Errorf("failed to get collection '%s': %w", name, err)
 	}
 
 	size, distance := extractVectorDetails(info)
 
-	collection := &Collection{
-		Name:       name,
-		Status:     info.Status.String(),
-		Vectors:    derefUint64(info.IndexedVectorsCount),
-		Points:     derefUint64(info.PointsCount),
-		VectorSize: size,
-		Distance:   distance,
+	collection := &vectordb.Collection{
+		Name:        name,
+		Status:      info.Status.String(),
+		VectorSize:  size,
+		Distance:    distance,
+		VectorCount: derefUint64(info.IndexedVectorsCount),
+		PointCount:  derefUint64(info.PointsCount),
 	}
 
 	return collection, nil
 }
 
-// ListCollections ──────────────────────────────────────────────────────────────
-// ListCollections
-// ──────────────────────────────────────────────────────────────
-//
-// ListCollections retrieves all existing collections from Qdrant and returns
-// their names as a string slice. This can be extended to preload metadata
-// using GetCollection for each name if needed.
-//
-// Example:
-//
-//	names, err := client.ListCollections(ctx)
-//	if err != nil {
-//	    log.Fatalf("failed to list collections: %v", err)
-//	}
-//	log.Printf("Found collections: %v", names)
-func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error) {
-	if c.api == nil {
-		return nil, fmt.Errorf("[Qdrant] client not initialized")
-	}
-
-	names, err := c.api.ListCollections(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("[Qdrant] failed to list collections: %w", err)
-	}
-
-	log.Printf("[Qdrant] Found %d collections", len(names))
-	return names, nil
+// ListCollections returns names of all collections.
+func (a *Adapter) ListCollections(ctx context.Context) ([]string, error) {
+	return listCollectionsInternal(ctx, a.client)
 }
 
-// Search ──────────────────────────────────────────────────────────────
-// Search
-// ──────────────────────────────────────────────────────────────
-//
-// Search performs a similarity search in the configured collection.
-//
-// Parameters:
-//   - collectionName — the collection to search in
-//   - vector — the query embedding to search against.
-//   - topK   — maximum number of nearest results to return.
-//
-// Returns:
-//
-//	A slice of `SearchResultInterface` instances representing the
-//	most similar stored embeddings.
-// func (c *QdrantClient) Search(ctx context.Context, collectionName string, vector []float32, topK int) ([]SearchResultInterface, error) {
-// 	if err := validateSearchInput(collectionName, vector, topK); err != nil {
-// 		return nil, err
-// 	}
+// ══════════════════════════════════════════════════════════════════════════════
+// Internal Functions
+// ══════════════════════════════════════════════════════════════════════════════
 
-// 	limit := uint64(topK)
-// 	req := &qdrant.QueryPoints{
-// 		CollectionName: collectionName,
-// 		Query:          qdrant.NewQuery(vector...),
-// 		Limit:          &limit,
-// 		WithPayload:    qdrant.NewWithPayload(true),
-// 	}
-
-// 	resp, err := c.api.Query(ctx, req)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("[Qdrant] search failed: %w", err)
-// 	}
-
-// 	results, err := c.parseSearchResults(resp)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	log.Printf("[Qdrant] Search returned %d results", len(results))
-// 	return results, nil
-// }
-
-// SearchWithFilter ──────────────────────────────────────────────────────────────
-// SearchWithFilter
-// ──────────────────────────────────────────────────────────────
-//
-// SearchWithFilter performs a similarity search with required filters (AND logic).
-// Returns error if filters is nil or empty - use Search() for unfiltered searches.
-//
-// Parameters:
-//   - collectionName — the collection to search in
-//   - vector — the query embedding to search against
-//   - topK — maximum number of nearest results to return
-//   - filters — required key-value filters (all must match)
-//
-// Returns:
-//
-//	A slice of SearchResultInterface instances matching the filter criteria.
-// func (c *QdrantClient) SearchWithFilter(ctx context.Context, collectionName string, vector []float32, topK int, filters map[string]string) ([]SearchResultInterface, error) {
-// 	if err := validateSearchInput(collectionName, vector, topK); err != nil {
-// 		return nil, err
-// 	}
-
-// 	if len(filters) == 0 {
-// 		return nil, fmt.Errorf("filters cannot be empty, use Search() for unfiltered searches")
-// 	}
-
-// 	limit := uint64(topK)
-// 	req := &qdrant.QueryPoints{
-// 		CollectionName: collectionName,
-// 		Query:          qdrant.NewQuery(vector...),
-// 		Limit:          &limit,
-// 		WithPayload:    qdrant.NewWithPayload(true),
-// 		Filter:         buildFilter(filters),
-// 	}
-
-// 	resp, err := c.api.Query(ctx, req)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("[Qdrant] search failed: %w", err)
-// 	}
-
-// 	results, err := c.parseSearchResults(resp)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	log.Printf("[Qdrant] SearchWithFilter returned %d results", len(results))
-// 	return results, nil
-// }
-
-// executeSearch performs a single search request against Qdrant
-func (c *QdrantClient) executeSearch(ctx context.Context, searchReq SearchRequest) ([]SearchResultInterface, error) {
+func searchInternal(ctx context.Context, client *qdrant.Client, searchReq vectordb.SearchRequest) ([]vectordb.SearchResult, error) {
 	limit := uint64(searchReq.TopK)
-	req := &qdrant.QueryPoints{
+	queryReq := &qdrant.QueryPoints{
 		CollectionName: searchReq.CollectionName,
 		Query:          qdrant.NewQuery(searchReq.Vector...),
 		Limit:          &limit,
 		WithPayload:    qdrant.NewWithPayload(true),
-		Filter:         buildFilter(searchReq.Filters),
+		Filter:         convertVectorDBFilterSets(searchReq.Filters),
 	}
 
-	resp, err := c.api.Query(ctx, req)
+	resp, err := client.Query(ctx, queryReq)
 	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
-
-	return c.parseSearchResults(resp)
+	return parseVectorDBSearchResults(resp)
 }
 
-// Search ──────────────────────────────────────────────────────────────
-// Search
-// ──────────────────────────────────────────────────────────────
-//
-// Search performs multiple searches and returns results for each request.
-// Each request can optionally include filters.
-//
-// Parameters:
-//   - requests — variadic SearchRequest structs, each containing:
-//   - CollectionName: the collection to search in
-//   - Vector: the query embedding
-//   - TopK: maximum number of results per request
-//   - Filters: optional key-value filters (AND logic)
-//
-// Returns:
-//
-//	A slice of result slices — one []SearchResultInterface per request.
-//
-// Example:
-//
-//	results, err := client.Search(ctx,
-//	    SearchRequest{CollectionName: "docs", Vector: vec1, TopK: 10, Filters: map[string]string{"partition_id": "store-A"}},
-//	    SearchRequest{CollectionName: "docs", Vector: vec2, TopK: 5},
-//	)
-//	// results[0] = results for first request
-//	// results[1] = results for second request
-func (c *QdrantClient) Search(ctx context.Context, requests ...SearchRequest) ([][]SearchResultInterface, error) {
-	if len(requests) == 0 {
-		return nil, fmt.Errorf("at least one search request is required")
-	}
-
-	log.Printf("[Qdrant] Starting search batch with %d requests", len(requests))
-
-	// Validate all requests first (fail fast)
-	for i, searchReq := range requests {
-		if err := validateSearchInput(searchReq.CollectionName, searchReq.Vector, searchReq.TopK); err != nil {
-			return nil, fmt.Errorf("request [%d]: %w", i, err)
+func insertInternal(ctx context.Context, client *qdrant.Client, collectionName string, inputs []vectordb.EmbeddingInput) error {
+	for start := 0; start < len(inputs); start += defaultBatchSize {
+		end := start + defaultBatchSize
+		if end > len(inputs) {
+			end = len(inputs)
 		}
-	}
+		batch := inputs[start:end]
 
-	results := make([][]SearchResultInterface, len(requests))
-
-	// Create errgroup with context
-	g, ctx := errgroup.WithContext(ctx)
-
-	// Semaphore to limit concurrency
-	sem := semaphore.NewWeighted(maxConcurrentSearches)
-
-	for i, searchReq := range requests {
-		i, searchReq := i, searchReq // Capture loop variables
-
-		g.Go(func() error {
-			// Acquire semaphore (blocks if at max concurrency)
-			if err := sem.Acquire(ctx, 1); err != nil {
-				return fmt.Errorf("request [%d]: failed to acquire semaphore: %w", i, err)
-			}
-			defer sem.Release(1)
-
-			res, err := c.executeSearch(ctx, searchReq)
-			if err != nil {
-				return fmt.Errorf("request [%d]: search failed: %w", i, err)
-			}
-
-			results[i] = res
-			log.Printf("[Qdrant] Search request [%d] returned %d results", i, len(res))
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		return nil, fmt.Errorf("search batch failed: %w", err)
-	}
-
-	return results, nil
-}
-
-// parseSearchResults converts Qdrant response to SearchResultInterface slice
-func (c *QdrantClient) parseSearchResults(resp []*qdrant.ScoredPoint) ([]SearchResultInterface, error) {
-	results := make([]SearchResultInterface, 0, len(resp))
-	for _, r := range resp {
-		var id string
-		switch v := r.Id.PointIdOptions.(type) {
-		case *qdrant.PointId_Num:
-			id = fmt.Sprintf("%d", v.Num)
-		case *qdrant.PointId_Uuid:
-			id = v.Uuid
-		default:
-			return nil, fmt.Errorf("[Qdrant] unexpected PointId type: %T", v)
+		points := make([]*qdrant.PointStruct, 0, len(batch))
+		for _, e := range batch {
+			points = append(points, &qdrant.PointStruct{
+				Id:      qdrant.NewID(e.ID),
+				Vectors: qdrant.NewVectors(e.Vector...),
+				Payload: qdrant.NewValueMap(e.Payload),
+			})
 		}
 
-		results = append(results, SearchResult{
-			ID:    id,
-			Score: r.Score,
-			Meta:  r.Payload,
-		})
+		wait := true
+		req := &qdrant.UpsertPoints{
+			CollectionName: collectionName,
+			Points:         points,
+			Wait:           &wait,
+		}
+
+		if _, err := client.Upsert(ctx, req); err != nil {
+			return fmt.Errorf("[Qdrant] batch upsert failed at [%d:%d]: %w", start, end, err)
+		}
+		log.Printf("[Qdrant] Inserted batch [%d:%d] (collection=%s)", start, end, collectionName)
 	}
-	return results, nil
+	return nil
 }
 
-// Delete ──────────────────────────────────────────────────────────────
-// Delete
-// ──────────────────────────────────────────────────────────────
-//
-// Delete removes embeddings from a collection by their IDs.
-//
-// It constructs a `DeletePoints` request containing a list of `PointId`s,
-// waits synchronously for completion, and logs the operation status.
-func (c *QdrantClient) Delete(ctx context.Context, collectionName string, ids []string) error {
+func deleteInternal(ctx context.Context, client *qdrant.Client, collectionName string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-
 	if collectionName == "" {
 		return fmt.Errorf("collection name cannot be empty")
 	}
@@ -471,12 +226,53 @@ func (c *QdrantClient) Delete(ctx context.Context, collectionName string, ids []
 		Wait: &wait,
 	}
 
-	resp, err := c.api.Delete(ctx, req)
+	resp, err := client.Delete(ctx, req)
 	if err != nil {
 		return fmt.Errorf("[Qdrant] delete failed: %w", err)
 	}
 
-	log.Printf("[Qdrant] Delete completed (status=%s, collection=%s)",
-		resp.Status.String(), collectionName)
+	log.Printf("[Qdrant] Delete completed (status=%s, collection=%s)", resp.Status.String(), collectionName)
 	return nil
+}
+
+func ensureCollectionInternal(ctx context.Context, client *qdrant.Client, name string, vectorSize uint64) error {
+	if name == "" {
+		return fmt.Errorf("collection name cannot be empty")
+	}
+
+	collections, err := client.ListCollections(ctx)
+	if err != nil {
+		return fmt.Errorf("[Qdrant] failed to list collections: %w", err)
+	}
+
+	if slices.Contains(collections, name) {
+		log.Printf("[Qdrant] Collection '%s' already exists", name)
+		return nil
+	}
+
+	log.Printf("[Qdrant] Collection '%s' not found, creating it...", name)
+
+	req := &qdrant.CreateCollection{
+		CollectionName: name,
+		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
+			Size:     vectorSize,
+			Distance: qdrant.Distance_Cosine,
+		}),
+	}
+
+	if err := client.CreateCollection(ctx, req); err != nil {
+		return fmt.Errorf("[Qdrant] failed to create collection '%s': %w", name, err)
+	}
+
+	log.Printf("[Qdrant] Created collection '%s' successfully", name)
+	return nil
+}
+
+func listCollectionsInternal(ctx context.Context, client *qdrant.Client) ([]string, error) {
+	names, err := client.ListCollections(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("[Qdrant] failed to list collections: %w", err)
+	}
+	log.Printf("[Qdrant] Found %d collections", len(names))
+	return names, nil
 }
