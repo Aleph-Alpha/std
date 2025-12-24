@@ -30,7 +30,9 @@ type MariaDB struct {
 // It establishes the initial database connection and sets up the internal state
 // for connection monitoring and recovery. If the initial connection fails,
 // it returns an error.
-func NewMariaDB(cfg Config) (*MariaDB, error) {
+//
+// Returns Client interface, not *MariaDB concrete type.
+func NewMariaDB(cfg Config) (Client, error) {
 	conn, err := connectToMariaDB(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error in connecting to MariaDB after all retries: %w", err)
