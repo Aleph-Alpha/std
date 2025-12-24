@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/Aleph-Alpha/std/compare/v0.10.0...v0.11.0) (2025-12-24)
+
+
+### Features
+
+* add mariadb package ([#35](https://github.com/Aleph-Alpha/std/issues/35)) ([13c1ec9](https://github.com/Aleph-Alpha/std/commit/13c1ec915cb26e2e1a1d37d6762d5e0633bac218))
+* **vectordb:** Add database-agnostic vector search abstraction ([#27](https://github.com/Aleph-Alpha/std/issues/27)) ([94bca33](https://github.com/Aleph-Alpha/std/commit/94bca33a4cd39123cc488d4e1c6f66c54d5eb5f0))
+
 ## [0.10.0](https://github.com/Aleph-Alpha/std/compare/v0.9.1...v0.10.0) (2025-12-21)
 
 
