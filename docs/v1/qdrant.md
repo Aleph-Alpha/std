@@ -10,97 +10,130 @@ Package qdrant provides a modular, dependency\-injected client for the Qdrant ve
 
 The qdrant package is designed to simplify interaction with Qdrant in Go applications, offering a clean, testable abstraction layer for common vector database operations such as collection management, embedding insertion, similarity search, and deletion. It integrates seamlessly with the fx dependency injection framework and supports builder\-style configuration.
 
-Core Features:
+### Core Features
 
 - Managed Qdrant client lifecycle with Fx integration
 - Config struct supporting environment and YAML loading
 - Automatic health checks on client initialization
 - Safe, batched insertion of embeddings with configurable batch size
-- Vector similarity search with abstracted SearchResult interface
+- Database\-agnostic interface via vectordb.Service
 - Type\-safe collection creation and existence checks
 - Support for payload metadata and optional vector retrieval
 - Extensible abstraction layer for alternate vector stores \(e.g. pgVector\)
 
-Basic Usage:
+### VectorDB Interface
+
+This package includes [Adapter](<#Adapter>) which implements the database\-agnostic \[vectordb.Service\] interface. Use this for new projects to enable easy switching between vector databases:
 
 ```
-import "github.com/Aleph-Alpha/std/v1/qdrant"
+import (
+    "github.com/Aleph-Alpha/std/v1/vectordb"
+    "github.com/Aleph-Alpha/std/v1/qdrant"
+)
+
+// Create your existing QdrantClient
+qc, _ := qdrant.NewQdrantClient(qdrant.QdrantParams{
+    Config: &qdrant.Config{
+        Endpoint: "localhost",
+        Port:     6334,
+    },
+})
+
+// Create adapter for DB-agnostic usage
+var db vectordb.Service = qdrant.NewAdapter(qc.Client())
+```
+
+This allows switching between vector databases \(Qdrant, pgVector\) without changing application code.
+
+### Basic Usage
+
+```
+import (
+    "github.com/Aleph-Alpha/std/v1/qdrant"
+    "github.com/Aleph-Alpha/std/v1/vectordb"
+)
 
 // Create a new client
 client, err := qdrant.NewQdrantClient(qdrant.QdrantParams{
-	Config: &qdrant.Config{
-		Endpoint: "localhost:6334",
-		ApiKey:   "",
-	},
+    Config: &qdrant.Config{
+        Endpoint: "localhost",
+        Port:     6334,
+    },
 })
 if err != nil {
-	log.Fatal(err)
+    log.Fatal(err)
 }
+
+// Create adapter
+adapter := qdrant.NewAdapter(client.Client())
 
 collectionName := "documents"
 
-// Insert single embedding
-input := qdrant.EmbeddingInput{
-	ID:     "doc_1",
-	Vector: []float32{0.12, 0.43, 0.85},
-	Meta:   map[string]any{"title": "My Document"},
-}
-if err := client.Insert(ctx, collectionName, input); err != nil {
-	log.Fatal(err)
+// Ensure collection exists
+if err := adapter.EnsureCollection(ctx, collectionName, 1536); err != nil {
+    log.Fatal(err)
 }
 
-// Batch insert embeddings
-batch := []qdrant.EmbeddingInput{input1, input2, input3}
-if err := client.BatchInsert(ctx, collectionName, batch); err != nil {
-	log.Fatal(err)
+// Insert embeddings
+inputs := []vectordb.EmbeddingInput{
+    {
+        ID:      "doc_1",
+        Vector:  []float32{0.12, 0.43, 0.85, ...},
+        Payload: map[string]any{"title": "My Document"},
+    },
+}
+if err := adapter.Insert(ctx, collectionName, inputs); err != nil {
+    log.Fatal(err)
 }
 
 // Perform similarity search
-results, err := client.Search(ctx, qdrant.SearchRequest{
-	CollectionName: collectionName,
-	Vector:         queryVector,
-	TopK:           5,
+results, err := adapter.Search(ctx, vectordb.SearchRequest{
+    CollectionName: collectionName,
+    Vector:         queryVector,
+    TopK:           5,
 })
 for _, res := range results[0] {
-	fmt.Printf("ID=%s Score=%.4f\n", res.GetID(), res.GetScore())
+    fmt.Printf("ID=%s Score=%.4f\n", res.ID, res.Score)
 }
 ```
 
-FX Module Integration:
+### FX Module Integration
 
 The package exposes an Fx module for automatic dependency injection:
 
 ```
 app := fx.New(
-	qdrant.FXModule,
-	// other modules...
+    qdrant.FXModule,
+    // other modules...
 )
 app.Run()
 ```
 
-Abstractions:
+### Search Results
 
-The package defines a lightweight SearchResultInterface that encapsulates search results via methods such as GetID\(\), GetScore\(\), GetMeta\(\), and GetCollectionName\(\). The underlying concrete type remains SearchResult, allowing both strong typing internally and loose coupling externally.
-
-Example:
+Search results are returned as \[vectordb.SearchResult\] structs with public fields:
 
 ```
-type SearchResultInterface interface {
-	GetID() string
-	GetScore() float32
-	GetMeta() map[string]*qdrant.Value
-	GetCollectionName() string
+type SearchResult struct {
+    ID             string         // Unique identifier of the matched point
+    Score          float32        // Similarity score
+    Payload        map[string]any // Metadata stored with the vector
+    Vector         []float32      // Stored embedding (if requested)
+    CollectionName string         // Source collection name
 }
+```
 
-type SearchResult struct { /* implements SearchResultInterface */ }
+Access fields directly \(no getter methods needed\):
 
-// Function signature:
-func (c *QdrantClient) Search(ctx context.Context, vector []float32, topK int) ([]SearchResultInterface, error)
+```
+for _, result := range results[0] {
+    fmt.Println(result.ID, result.Score, result.Payload["title"])
+}
 ```
 
 ### Filtering
 
-The package provides a comprehensive, type\-safe filtering system for vector searches. Filters support boolean logic \(AND, OR, NOT\) and various condition types.
+Filters are defined in the \[vectordb\] package and support boolean logic \(AND, OR, NOT\). The qdrant adapter converts these to native Qdrant filters automatically.
 
 Filter Structure:
 
@@ -112,17 +145,13 @@ type FilterSet struct {
 }
 ```
 
-Condition Types:
+Condition Types \(all in vectordb package\):
 
-- TextCondition: Exact string match
-- BoolCondition: Exact boolean match
-- IntCondition: Exact integer match
-- TextAnyCondition: String IN operator \(match any of values\)
-- IntAnyCondition: Integer IN operator
-- TextExceptCondition: String NOT IN operator
-- IntExceptCondition: Integer NOT IN operator
-- TimeRangeCondition: DateTime range filter \(gte, lte, gt, lt\)
-- NumericRangeCondition: Numeric range filter
+- MatchCondition: Exact match \(string, bool, int64\)
+- MatchAnyCondition: IN operator \(match any of values\)
+- MatchExceptCondition: NOT IN operator
+- NumericRangeCondition: Numeric range filter \(gt, gte, lt, lte\)
+- TimeRangeCondition: DateTime range filter
 - IsNullCondition: Check if field is null
 - IsEmptyCondition: Check if field is empty, null, or missing
 
@@ -132,31 +161,33 @@ The package distinguishes between system\-managed and user\-defined metadata:
 
 ```
 const (
-    InternalField FieldType = iota  // Top-level: "search_store_id"
-    UserField                        // Nested: "custom.document_id"
+    InternalField FieldType = iota  // Top-level: "status"
+    UserField                        // Prefixed: "custom.document_id"
 )
 ```
 
 User fields are automatically prefixed with "custom." when querying Qdrant.
 
-Basic Filter Example:
+### Filter Examples Using Convenience Constructors
+
+The vectordb package provides convenience constructors for clean filter creation:
+
+Basic Filter \(Must \- AND logic\):
 
 ```
 // Filter: city = "London" AND active = true
-filters := &qdrant.FilterSet{
-    Must: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.TextCondition{Key: "city", Value: "London"},
-            qdrant.BoolCondition{Key: "active", Value: true},
-        },
-    },
-}
-
-results, err := client.Search(ctx, qdrant.SearchRequest{
+results, err := adapter.Search(ctx, vectordb.SearchRequest{
     CollectionName: "documents",
     Vector:         queryVector,
     TopK:           10,
-    Filters:        filters,
+    Filters: []*vectordb.FilterSet{
+        vectordb.NewFilterSet(
+            vectordb.Must(
+                vectordb.NewMatch("city", "London"),
+                vectordb.NewMatch("active", true),
+            ),
+        ),
+    },
 })
 ```
 
@@ -164,13 +195,13 @@ OR Conditions \(Should\):
 
 ```
 // Filter: city = "London" OR city = "Berlin"
-filters := &qdrant.FilterSet{
-    Should: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.TextCondition{Key: "city", Value: "London"},
-            qdrant.TextCondition{Key: "city", Value: "Berlin"},
-        },
-    },
+filters := []*vectordb.FilterSet{
+    vectordb.NewFilterSet(
+        vectordb.Should(
+            vectordb.NewMatch("city", "London"),
+            vectordb.NewMatch("city", "Berlin"),
+        ),
+    ),
 }
 ```
 
@@ -178,147 +209,147 @@ IN Operator \(MatchAny\):
 
 ```
 // Filter: city IN ["London", "Berlin", "Paris"]
-filters := &qdrant.FilterSet{
-    Must: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.TextAnyCondition{
-                Key:    "city",
-                Values: []string{"London", "Berlin", "Paris"},
-            },
-        },
-    },
+filters := []*vectordb.FilterSet{
+    vectordb.NewFilterSet(
+        vectordb.Must(
+            vectordb.NewMatchAny("city", "London", "Berlin", "Paris"),
+        ),
+    ),
+}
+```
+
+Numeric Range Filter:
+
+```
+// Filter: price >= 100 AND price < 500
+min, max := float64(100), float64(500)
+filters := []*vectordb.FilterSet{
+    vectordb.NewFilterSet(
+        vectordb.Must(
+            vectordb.NewNumericRange("price", vectordb.NumericRange{
+                Gte: &min,
+                Lt:  &max,
+            }),
+        ),
+    ),
 }
 ```
 
 Time Range Filter:
 
 ```
+// Filter: created_at >= yesterday AND created_at < now
 now := time.Now()
 yesterday := now.Add(-24 * time.Hour)
-
-filters := &qdrant.FilterSet{
-    Must: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.TimeRangeCondition{
-                Key: "created_at",
-                Value: qdrant.TimeRange{
-                    Gte: &yesterday,
-                    Lt:  &now,
-                },
-            },
-        },
-    },
+filters := []*vectordb.FilterSet{
+    vectordb.NewFilterSet(
+        vectordb.Must(
+            vectordb.NewTimeRange("created_at", vectordb.TimeRange{
+                Gte: &yesterday,
+                Lt:  &now,
+            }),
+        ),
+    ),
 }
 ```
 
 Complex Filter \(Combined Clauses\):
 
 ```
-// Filter: (status = "published") AND (category = "tech" OR "science") AND NOT (deleted = true)
-filters := &qdrant.FilterSet{
-    Must: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.TextCondition{Key: "status", Value: "published"},
-        },
-    },
-    Should: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.TextCondition{Key: "category", Value: "tech", FieldType: qdrant.UserField},
-            qdrant.TextCondition{Key: "category", Value: "science", FieldType: qdrant.UserField},
-        },
-    },
-    MustNot: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.BoolCondition{Key: "deleted", Value: true},
-        },
-    },
+// Filter: status = "published" AND (tag = "ml" OR tag = "ai") AND NOT deleted = true
+filters := []*vectordb.FilterSet{
+    vectordb.NewFilterSet(
+        vectordb.Must(vectordb.NewMatch("status", "published")),
+        vectordb.Should(
+            vectordb.NewMatch("tag", "ml"),
+            vectordb.NewMatch("tag", "ai"),
+        ),
+        vectordb.MustNot(vectordb.NewMatch("deleted", true)),
+    ),
 }
 ```
 
-UUID Filtering:
+User\-Defined Fields:
 
-UUIDs are filtered as strings using TextCondition:
+For fields stored under a custom prefix, use the User\* constructors:
 
 ```
-filters := &qdrant.FilterSet{
-    Must: &qdrant.ConditionSet{
-        Conditions: []qdrant.FilterCondition{
-            qdrant.TextCondition{
-                Key:       "document_id",
-                Value:     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-                FieldType: qdrant.UserField,
-            },
-        },
-    },
+// Filter on user-defined field: custom.document_id = "doc-123"
+filters := []*vectordb.FilterSet{
+    vectordb.NewFilterSet(
+        vectordb.Must(
+            vectordb.NewUserMatch("document_id", "doc-123"),
+        ),
+    ),
 }
 ```
 
-Payload Structure Helper:
+Multiple FilterSets \(AND between sets\):
 
-The BuildPayload function creates properly structured payloads that separate internal and user fields:
+When you provide multiple FilterSets, they are combined with AND logic:
 
 ```
-payload := qdrant.BuildPayload(
-    map[string]any{"search_store_id": "store-123"},  // Internal (top-level)
-    map[string]any{"document_id": "doc-456"},        // User (under "custom.")
-)
-
-// Result:
-// {
-//     "search_store_id": "store-123",
-//     "custom": {
-//         "document_id": "doc-456"
-//     }
-// }
+// Filter: (color = "red") AND (size < 20)
+lt := float64(20)
+filters := []*vectordb.FilterSet{
+    vectordb.NewFilterSet(vectordb.Must(vectordb.NewMatch("color", "red"))),
+    vectordb.NewFilterSet(vectordb.Must(vectordb.NewNumericRange("size", vectordb.NumericRange{Lt: &lt}))),
+}
 ```
 
-This structure ensures user\-defined filter indexes are created at the correct path \(custom.field\_name\).
-
-Configuration:
+### Configuration
 
 Qdrant can be configured via environment variables or YAML:
 
 ```
-QDRANT_ENDPOINT=http://localhost:6334
+QDRANT_ENDPOINT=localhost
+QDRANT_PORT=6334
 QDRANT_API_KEY=your-api-key
 ```
 
-Performance Considerations:
+### Performance Considerations
 
-The BatchInsert method automatically splits large embedding inserts into smaller upserts \(default batch size = 500\). This minimizes memory usage and avoids timeouts when ingesting large datasets.
+The Insert method automatically splits large embedding batches into smaller upserts \(default batch size = 100\). This minimizes memory usage and avoids timeouts when ingesting large datasets.
 
-Thread Safety:
+### Thread Safety
 
-All exported methods on QdrantClient are safe for concurrent use by multiple goroutines.
+All exported methods on the Adapter are safe for concurrent use by multiple goroutines.
 
-Testing:
+### Testing
 
-For testing and mocking, application code should depend on the public interface types \(e.g., SearchResultInterface, EmbeddingInput\) instead of concrete Qdrant structs. This allows replacing the QdrantClient with in\-memory or mock implementations in tests.
-
-Example Mock:
+For testing and mocking, depend on the \[vectordb.Service\] interface:
 
 ```
-type MockResult struct {
-	id    string
-	score float32
-	meta  map[string]any
+type MockVectorDB struct{}
+
+func (m *MockVectorDB) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, error) {
+    return [][]vectordb.SearchResult{
+        {{ID: "doc-1", Score: 0.95, Payload: map[string]any{"title": "Test"}}},
+    }, nil
 }
-func (m MockResult) GetID() string           { return m.id }
-func (m MockResult) GetScore() float32       { return m.score }
-func (m MockResult) GetMeta() map[string]any { return m.meta }
+
+// Use in tests:
+var db vectordb.Service = &MockVectorDB{}
 ```
 
-Package Layout:
+### Package Layout
 
 ```
 qdrant/
-├── client.go        // Qdrant client implementation
-├── operations.go    // CRUD operations (Insert, Search, Delete, etc.)
-├── filters.go       // Type-safe filtering system
-├── utils.go         // Shared types and interfaces
-├── configs.go       // Configuration struct and builder methods
+├── client.go        // Qdrant client wrapper and lifecycle
+├── operations.go    // Service implementation (Adapter)
+├── converter.go     // vectordb ↔ Qdrant type conversion
+├── utils.go         // Qdrant-specific helper functions
+├── configs.go       // Configuration struct
 └── fx_module.go     // Fx dependency injection module
 ```
+
+### Related Packages
+
+- \[vectordb\]: Database\-agnostic types and interfaces
+- \[vectordb.FilterSet\]: Filter structures for search queries
+- \[vectordb.SearchResult\]: Search result type
+- \[vectordb.EmbeddingInput\]: Input type for inserting vectors
 
 ## Index
 
@@ -326,9 +357,14 @@ qdrant/
 - [Variables](<#variables>)
 - [func BuildPayload\(internal map\[string\]any, user map\[string\]any\) map\[string\]any](<#BuildPayload>)
 - [func RegisterQdrantLifecycle\(lc fx.Lifecycle, client \*QdrantClient\)](<#RegisterQdrantLifecycle>)
-- [type BoolCondition](<#BoolCondition>)
-- [type Collection](<#Collection>)
-- [type ConditionSet](<#ConditionSet>)
+- [type Adapter](<#Adapter>)
+  - [func NewAdapter\(client \*qdrant.Client\) \*Adapter](<#NewAdapter>)
+  - [func \(a \*Adapter\) Delete\(ctx context.Context, collectionName string, ids \[\]string\) error](<#Adapter.Delete>)
+  - [func \(a \*Adapter\) EnsureCollection\(ctx context.Context, name string, vectorSize uint64\) error](<#Adapter.EnsureCollection>)
+  - [func \(a \*Adapter\) GetCollection\(ctx context.Context, name string\) \(\*vectordb.Collection, error\)](<#Adapter.GetCollection>)
+  - [func \(a \*Adapter\) Insert\(ctx context.Context, collectionName string, inputs \[\]vectordb.EmbeddingInput\) error](<#Adapter.Insert>)
+  - [func \(a \*Adapter\) ListCollections\(ctx context.Context\) \(\[\]string, error\)](<#Adapter.ListCollections>)
+  - [func \(a \*Adapter\) Search\(ctx context.Context, requests ...vectordb.SearchRequest\) \(\[\]\[\]vectordb.SearchResult, \[\]error, error\)](<#Adapter.Search>)
 - [type Config](<#Config>)
   - [func DefaultConfig\(\) \*Config](<#DefaultConfig>)
   - [func FromEndpoint\(url string\) \*Config](<#FromEndpoint>)
@@ -338,63 +374,16 @@ qdrant/
   - [func \(c \*Config\) WithConnectTimeout\(d time.Duration\) \*Config](<#Config.WithConnectTimeout>)
   - [func \(c \*Config\) WithKeepAlive\(enabled bool\) \*Config](<#Config.WithKeepAlive>)
   - [func \(c \*Config\) WithTimeout\(d time.Duration\) \*Config](<#Config.WithTimeout>)
-- [type Embedding](<#Embedding>)
-  - [func NewEmbedding\(input EmbeddingInput\) Embedding](<#NewEmbedding>)
-- [type EmbeddingInput](<#EmbeddingInput>)
-- [type FieldType](<#FieldType>)
-- [type FilterCondition](<#FilterCondition>)
-- [type FilterSet](<#FilterSet>)
-- [type IntAnyCondition](<#IntAnyCondition>)
-- [type IntCondition](<#IntCondition>)
-- [type IntExceptCondition](<#IntExceptCondition>)
-- [type IsEmptyCondition](<#IsEmptyCondition>)
-  - [func \(c IsEmptyCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#IsEmptyCondition.ToQdrantCondition>)
-- [type IsNullCondition](<#IsNullCondition>)
-  - [func \(c IsNullCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#IsNullCondition.ToQdrantCondition>)
-- [type MatchAnyCondition](<#MatchAnyCondition>)
-  - [func \(c MatchAnyCondition\[T\]\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#MatchAnyCondition[T].ToQdrantCondition>)
-- [type MatchCondition](<#MatchCondition>)
-  - [func \(c MatchCondition\[T\]\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#MatchCondition[T].ToQdrantCondition>)
-- [type MatchExceptCondition](<#MatchExceptCondition>)
-  - [func \(c MatchExceptCondition\[T\]\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#MatchExceptCondition[T].ToQdrantCondition>)
-- [type NumericRange](<#NumericRange>)
-- [type NumericRangeCondition](<#NumericRangeCondition>)
-  - [func \(c NumericRangeCondition\) MarshalJSON\(\) \(\[\]byte, error\)](<#NumericRangeCondition.MarshalJSON>)
-  - [func \(c NumericRangeCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#NumericRangeCondition.ToQdrantCondition>)
-  - [func \(c \*NumericRangeCondition\) UnmarshalJSON\(data \[\]byte\) error](<#NumericRangeCondition.UnmarshalJSON>)
 - [type QdrantClient](<#QdrantClient>)
   - [func NewQdrantClient\(p QdrantParams\) \(\*QdrantClient, error\)](<#NewQdrantClient>)
-  - [func \(c \*QdrantClient\) BatchInsert\(ctx context.Context, collectionName string, inputs \[\]EmbeddingInput\) error](<#QdrantClient.BatchInsert>)
+  - [func \(c \*QdrantClient\) Client\(\) \*qdrant.Client](<#QdrantClient.Client>)
   - [func \(c \*QdrantClient\) Close\(\) error](<#QdrantClient.Close>)
-  - [func \(c \*QdrantClient\) Delete\(ctx context.Context, collectionName string, ids \[\]string\) error](<#QdrantClient.Delete>)
-  - [func \(c \*QdrantClient\) EnsureCollection\(ctx context.Context, name string\) error](<#QdrantClient.EnsureCollection>)
-  - [func \(c \*QdrantClient\) GetCollection\(ctx context.Context, name string\) \(\*Collection, error\)](<#QdrantClient.GetCollection>)
-  - [func \(c \*QdrantClient\) Insert\(ctx context.Context, collectionName string, input EmbeddingInput\) error](<#QdrantClient.Insert>)
-  - [func \(c \*QdrantClient\) ListCollections\(ctx context.Context\) \(\[\]string, error\)](<#QdrantClient.ListCollections>)
-  - [func \(c \*QdrantClient\) Search\(ctx context.Context, requests ...SearchRequest\) \(\[\]\[\]SearchResultInterface, error\)](<#QdrantClient.Search>)
 - [type QdrantParams](<#QdrantParams>)
-- [type SearchRequest](<#SearchRequest>)
-- [type SearchResult](<#SearchResult>)
-  - [func \(r SearchResult\) GetCollectionName\(\) string](<#SearchResult.GetCollectionName>)
-  - [func \(r SearchResult\) GetID\(\) string](<#SearchResult.GetID>)
-  - [func \(r SearchResult\) GetMeta\(\) map\[string\]\*qdrant.Value](<#SearchResult.GetMeta>)
-  - [func \(r SearchResult\) GetScore\(\) float32](<#SearchResult.GetScore>)
-  - [func \(r SearchResult\) GetVector\(\) \[\]float32](<#SearchResult.GetVector>)
-  - [func \(r SearchResult\) HasVector\(\) bool](<#SearchResult.HasVector>)
-- [type SearchResultInterface](<#SearchResultInterface>)
-- [type TextAnyCondition](<#TextAnyCondition>)
-- [type TextCondition](<#TextCondition>)
-- [type TextExceptCondition](<#TextExceptCondition>)
-- [type TimeRange](<#TimeRange>)
-- [type TimeRangeCondition](<#TimeRangeCondition>)
-  - [func \(c TimeRangeCondition\) MarshalJSON\(\) \(\[\]byte, error\)](<#TimeRangeCondition.MarshalJSON>)
-  - [func \(c TimeRangeCondition\) ToQdrantCondition\(\) \[\]\*qdrant.Condition](<#TimeRangeCondition.ToQdrantCondition>)
-  - [func \(c \*TimeRangeCondition\) UnmarshalJSON\(data \[\]byte\) error](<#TimeRangeCondition.UnmarshalJSON>)
 
 
 ## Constants
 
-<a name="UserPayloadPrefix"></a>UserPayloadPrefix is the prefix for user\-defined metadata fields
+<a name="UserPayloadPrefix"></a>UserPayloadPrefix is the prefix for user\-defined metadata fields. User fields are stored under "custom." in the Qdrant payload.
 
 ```go
 const UserPayloadPrefix = "custom"
@@ -433,13 +422,23 @@ var FXModule = fx.Module("qdrant",
 ```
 
 <a name="BuildPayload"></a>
-## func [BuildPayload](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L383>)
+## func [BuildPayload](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/converter.go#L28>)
 
 ```go
 func BuildPayload(internal map[string]any, user map[string]any) map[string]any
 ```
 
-BuildPayload creates a Qdrant payload with separated internal and user fields. Internal fields are stored at the top level, while user fields are stored under the "custom" prefix. If internal contains a "custom" key, it will be overwritten by the user fields map.
+BuildPayload creates a Qdrant payload with separated internal and user fields. Internal fields are stored at the top level, while user fields are stored under the "custom" prefix.
+
+Example:
+
+```
+payload := BuildPayload(
+    map[string]any{"search_store_id": "store123"},
+    map[string]any{"document_id": "doc456"},
+)
+// Result: {"search_store_id": "store123", "custom": {"document_id": "doc456"}}
+```
 
 <a name="RegisterQdrantLifecycle"></a>
 ## func [RegisterQdrantLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/fx_module.go#L54>)
@@ -460,59 +459,92 @@ OnStop:
 - Ensures the Qdrant client is closed exactly once.
 - Logs a shutdown message.
 
-<a name="BoolCondition"></a>
-## type [BoolCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L122>)
+<a name="Adapter"></a>
+## type [Adapter](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L28-L30>)
 
+Adapter implements vectordb.Service for Qdrant. It wraps a Qdrant client and converts between generic vectordb types and Qdrant\-specific protobuf types.
 
-
-```go
-type BoolCondition = MatchCondition[bool] // Exact boolean match
-```
-
-<a name="Collection"></a>
-## type [Collection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L89-L96>)
-
-Collection ────────────────────────────────────────────────────────────── Collection ──────────────────────────────────────────────────────────────
-
-Collection represents a high\-level, decoupled view of a Qdrant collection.
-
-It provides essential metadata about a vector collection without exposing Qdrant SDK types, allowing the application layer to remain independent of the underlying database implementation.
-
-Fields:
-
-- Name — The unique name of the collection.
-- Status — Current operational state \(e.g., "Green", "Yellow"\).
-- VectorSize — The dimension of stored vectors \(e.g., 1536\).
-- Distance — The similarity metric used \("Cosine", "Dot", "Euclid"\).
-- Vectors — Total number of stored vectors in the collection.
-- Points — Total number of indexed points/documents in the collection.
-
-This struct serves as an abstraction layer between Qdrant's low\-level protobuf models and the higher\-level application logic.
+This is the recommended way to use Qdrant \- it provides a database\-agnostic interface that allows switching between different vector databases.
 
 ```go
-type Collection struct {
-    Name       string
-    Status     string
-    VectorSize int
-    Distance   string
-    Vectors    uint64
-    Points     uint64
+type Adapter struct {
+    // contains filtered or unexported fields
 }
 ```
 
-<a name="ConditionSet"></a>
-## type [ConditionSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L244-L246>)
-
-ConditionSet holds conditions for a single clause
+<a name="NewAdapter"></a>
+### func [NewAdapter](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L40>)
 
 ```go
-type ConditionSet struct {
-    Conditions []FilterCondition `json:"conditions,omitempty"`
-}
+func NewAdapter(client *qdrant.Client) *Adapter
 ```
+
+NewAdapter creates a new Qdrant adapter for the vectordb interface. Pass the underlying SDK client via QdrantClient.Client\(\).
+
+Example:
+
+```
+qc, _ := qdrant.NewQdrantClient(params)
+adapter := qdrant.NewAdapter(qc.Client())
+var db vectordb.Service = adapter
+```
+
+<a name="Adapter.Delete"></a>
+### func \(\*Adapter\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L113>)
+
+```go
+func (a *Adapter) Delete(ctx context.Context, collectionName string, ids []string) error
+```
+
+Delete removes points by their IDs from a collection.
+
+<a name="Adapter.EnsureCollection"></a>
+### func \(\*Adapter\) [EnsureCollection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L118>)
+
+```go
+func (a *Adapter) EnsureCollection(ctx context.Context, name string, vectorSize uint64) error
+```
+
+EnsureCollection creates a collection if it doesn't exist.
+
+<a name="Adapter.GetCollection"></a>
+### func \(\*Adapter\) [GetCollection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L123>)
+
+```go
+func (a *Adapter) GetCollection(ctx context.Context, name string) (*vectordb.Collection, error)
+```
+
+GetCollection retrieves metadata about a collection.
+
+<a name="Adapter.Insert"></a>
+### func \(\*Adapter\) [Insert](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L102>)
+
+```go
+func (a *Adapter) Insert(ctx context.Context, collectionName string, inputs []vectordb.EmbeddingInput) error
+```
+
+Insert adds embeddings to a collection using batch processing.
+
+<a name="Adapter.ListCollections"></a>
+### func \(\*Adapter\) [ListCollections](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L148>)
+
+```go
+func (a *Adapter) ListCollections(ctx context.Context) ([]string, error)
+```
+
+ListCollections returns names of all collections.
+
+<a name="Adapter.Search"></a>
+### func \(\*Adapter\) [Search](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L45>)
+
+```go
+func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, []error, error)
+```
+
+Search performs similarity search across one or more requests.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L24-L48>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L24-L54>)
 
 Config holds connection and behavior settings for the Qdrant client.
 
@@ -564,7 +596,7 @@ type Config struct {
 ```
 
 <a name="DefaultConfig"></a>
-### func [DefaultConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L51>)
+### func [DefaultConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L57>)
 
 ```go
 func DefaultConfig() *Config
@@ -573,7 +605,7 @@ func DefaultConfig() *Config
 DefaultConfig provides sensible defaults for most use cases.
 
 <a name="FromEndpoint"></a>
-### func [FromEndpoint](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L64>)
+### func [FromEndpoint](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L70>)
 
 ```go
 func FromEndpoint(url string) *Config
@@ -582,7 +614,7 @@ func FromEndpoint(url string) *Config
 FromEndpoint returns a default config pre\-filled with a specific endpoint.
 
 <a name="Config.WithApiKey"></a>
-### func \(\*Config\) [WithApiKey](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L71>)
+### func \(\*Config\) [WithApiKey](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L77>)
 
 ```go
 func (c *Config) WithApiKey(key string) *Config
@@ -591,7 +623,7 @@ func (c *Config) WithApiKey(key string) *Config
 Builder\-style helpers \(optional, ergonomic\)
 
 <a name="Config.WithCompatibilityCheck"></a>
-### func \(\*Config\) [WithCompatibilityCheck](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L96>)
+### func \(\*Config\) [WithCompatibilityCheck](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L102>)
 
 ```go
 func (c *Config) WithCompatibilityCheck(enabled bool) *Config
@@ -600,7 +632,7 @@ func (c *Config) WithCompatibilityCheck(enabled bool) *Config
 
 
 <a name="Config.WithCompression"></a>
-### func \(\*Config\) [WithCompression](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L86>)
+### func \(\*Config\) [WithCompression](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L92>)
 
 ```go
 func (c *Config) WithCompression(enabled bool) *Config
@@ -609,7 +641,7 @@ func (c *Config) WithCompression(enabled bool) *Config
 
 
 <a name="Config.WithConnectTimeout"></a>
-### func \(\*Config\) [WithConnectTimeout](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L81>)
+### func \(\*Config\) [WithConnectTimeout](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L87>)
 
 ```go
 func (c *Config) WithConnectTimeout(d time.Duration) *Config
@@ -618,7 +650,7 @@ func (c *Config) WithConnectTimeout(d time.Duration) *Config
 
 
 <a name="Config.WithKeepAlive"></a>
-### func \(\*Config\) [WithKeepAlive](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L91>)
+### func \(\*Config\) [WithKeepAlive](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L97>)
 
 ```go
 func (c *Config) WithKeepAlive(enabled bool) *Config
@@ -627,290 +659,10 @@ func (c *Config) WithKeepAlive(enabled bool) *Config
 
 
 <a name="Config.WithTimeout"></a>
-### func \(\*Config\) [WithTimeout](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L76>)
+### func \(\*Config\) [WithTimeout](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/configs.go#L82>)
 
 ```go
 func (c *Config) WithTimeout(d time.Duration) *Config
-```
-
-
-
-<a name="Embedding"></a>
-## type [Embedding](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L18-L22>)
-
-Embedding represents a dense embedding vector.
-
-```go
-type Embedding struct {
-    ID     string         // Unique identifier (same as Qdrant point ID)
-    Vector []float32      // Vector representation of the embedding
-    Meta   map[string]any // Optional metadata associated with the embedding
-}
-```
-
-<a name="NewEmbedding"></a>
-### func [NewEmbedding](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L54>)
-
-```go
-func NewEmbedding(input EmbeddingInput) Embedding
-```
-
-NewEmbedding converts a high\-level EmbeddingInput into the internal Embedding type. Having this builder allows for future validation or normalization logic. For now, it performs a shallow copy.
-
-<a name="EmbeddingInput"></a>
-## type [EmbeddingInput](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L11-L15>)
-
-EmbeddingInput is the type the application provides to insert embeddings. Keeps the app decoupled from internal Qdrant SDK structs.
-
-```go
-type EmbeddingInput struct {
-    ID     string         // Unique identifier for the embedding (e.g., document ID)
-    Vector []float32      // Dense vector representation of the embedding
-    Meta   map[string]any // Optional metadata associated with the embedding
-}
-```
-
-<a name="FieldType"></a>
-## type [FieldType](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L21>)
-
-FieldType indicates whether a field is internal or user\-defined
-
-```go
-type FieldType int
-```
-
-<a name="InternalField"></a>
-
-```go
-const (
-    // InternalField - system-managed fields stored at top-level
-    InternalField FieldType = iota
-    // UserField - user-defined fields stored under "custom." prefix
-    UserField
-)
-```
-
-<a name="FilterCondition"></a>
-## type [FilterCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L16-L18>)
-
-FilterCondition is the interface for all filter conditions
-
-```go
-type FilterCondition interface {
-    ToQdrantCondition() []*qdrant.Condition
-}
-```
-
-<a name="FilterSet"></a>
-## type [FilterSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L260-L264>)
-
-FilterSet supports Must \(AND\), Should \(OR\), and MustNot \(NOT\) clauses. Use with SearchRequest.Filters to filter search results.
-
-Example:
-
-```
-filters := &FilterSet{
-    Must: &ConditionSet{
-        Conditions: []FilterCondition{
-            TextCondition{Key: "city", Value: "London"},
-        },
-    },
-}
-```
-
-```go
-type FilterSet struct {
-    Must    *ConditionSet `json:"must,omitempty"`    // AND - all conditions must match
-    Should  *ConditionSet `json:"should,omitempty"`  // OR - at least one condition must match
-    MustNot *ConditionSet `json:"mustNot,omitempty"` // NOT - none of the conditions should match
-}
-```
-
-<a name="IntAnyCondition"></a>
-## type [IntAnyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L125>)
-
-
-
-```go
-type IntAnyCondition = MatchAnyCondition[int64] // Integer IN operator
-```
-
-<a name="IntCondition"></a>
-## type [IntCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L123>)
-
-
-
-```go
-type IntCondition = MatchCondition[int64] // Exact integer match
-```
-
-<a name="IntExceptCondition"></a>
-## type [IntExceptCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L127>)
-
-
-
-```go
-type IntExceptCondition = MatchExceptCondition[int64] // Integer NOT IN
-```
-
-<a name="IsEmptyCondition"></a>
-## type [IsEmptyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L367-L370>)
-
-IsEmptyCondition checks if a field is empty \(does not exist, null, or \[\]\)
-
-```go
-type IsEmptyCondition struct {
-    Key       string    `json:"field"`
-    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
-}
-```
-
-<a name="IsEmptyCondition.ToQdrantCondition"></a>
-### func \(IsEmptyCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L372>)
-
-```go
-func (c IsEmptyCondition) ToQdrantCondition() []*qdrant.Condition
-```
-
-
-
-<a name="IsNullCondition"></a>
-## type [IsNullCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L356-L359>)
-
-IsNullCondition checks if a field is null
-
-```go
-type IsNullCondition struct {
-    Key       string    `json:"field"`
-    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
-}
-```
-
-<a name="IsNullCondition.ToQdrantCondition"></a>
-### func \(IsNullCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L361>)
-
-```go
-func (c IsNullCondition) ToQdrantCondition() []*qdrant.Condition
-```
-
-
-
-<a name="MatchAnyCondition"></a>
-## type [MatchAnyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L76-L80>)
-
-MatchAnyCondition matches if value is one of the given values \(IN operator\). Applicable to keyword \(string\) and integer payloads. Returns nil if Values is empty. The FieldType defaults to InternalField if not specified.
-
-```go
-type MatchAnyCondition[T string | int64] struct {
-    Key       string    `json:"field"`
-    Values    []T       `json:"anyOf"`
-    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
-}
-```
-
-<a name="MatchAnyCondition[T].ToQdrantCondition"></a>
-### func \(MatchAnyCondition\[T\]\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L82>)
-
-```go
-func (c MatchAnyCondition[T]) ToQdrantCondition() []*qdrant.Condition
-```
-
-
-
-<a name="MatchCondition"></a>
-## type [MatchCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L50-L54>)
-
-MatchCondition represents an exact match condition for a field value. Supports string, bool, and int64 types. The FieldType defaults to InternalField if not specified, meaning the field is stored at the top level of the payload. Use UserField to indicate the field is stored under the "custom." prefix.
-
-```go
-type MatchCondition[T comparable] struct {
-    Key       string    `json:"field"`
-    Value     T         `json:"equalTo"`
-    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
-}
-```
-
-<a name="MatchCondition[T].ToQdrantCondition"></a>
-### func \(MatchCondition\[T\]\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L58>)
-
-```go
-func (c MatchCondition[T]) ToQdrantCondition() []*qdrant.Condition
-```
-
-ToQdrantCondition converts the MatchCondition to Qdrant conditions. Supports string, bool, and int64 types. Returns nil for unsupported types.
-
-<a name="MatchExceptCondition"></a>
-## type [MatchExceptCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L100-L104>)
-
-MatchExceptCondition matches if value is NOT one of the given values \(NOT IN operator\). Applicable to keyword \(string\) and integer payloads. Returns nil if Values is empty. The FieldType defaults to InternalField if not specified.
-
-```go
-type MatchExceptCondition[T string | int64] struct {
-    Key       string    `json:"field"`
-    Values    []T       `json:"noneOf"`
-    FieldType FieldType `json:"-"` // Internal or User field (default: InternalField)
-}
-```
-
-<a name="MatchExceptCondition[T].ToQdrantCondition"></a>
-### func \(MatchExceptCondition\[T\]\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L106>)
-
-```go
-func (c MatchExceptCondition[T]) ToQdrantCondition() []*qdrant.Condition
-```
-
-
-
-<a name="NumericRange"></a>
-## type [NumericRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L39-L44>)
-
-NumericRange represents a numeric range filter condition
-
-```go
-type NumericRange struct {
-    Gt  *float64 `json:"greaterThan,omitempty"`          // Greater than
-    Gte *float64 `json:"greaterThanOrEqualTo,omitempty"` // Greater than or equal
-    Lt  *float64 `json:"lessThan,omitempty"`             // Less than
-    Lte *float64 `json:"lessThanOrEqualTo,omitempty"`    // Less than or equal
-}
-```
-
-<a name="NumericRangeCondition"></a>
-## type [NumericRangeCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L180-L184>)
-
-NumericRangeCondition represents a numeric range filter
-
-```go
-type NumericRangeCondition struct {
-    Key       string       `json:"field"`
-    Value     NumericRange `json:"-"`
-    FieldType FieldType    `json:"-"`
-}
-```
-
-<a name="NumericRangeCondition.MarshalJSON"></a>
-### func \(NumericRangeCondition\) [MarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L190>)
-
-```go
-func (c NumericRangeCondition) MarshalJSON() ([]byte, error)
-```
-
-
-
-<a name="NumericRangeCondition.ToQdrantCondition"></a>
-### func \(NumericRangeCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L186>)
-
-```go
-func (c NumericRangeCondition) ToQdrantCondition() []*qdrant.Condition
-```
-
-
-
-<a name="NumericRangeCondition.UnmarshalJSON"></a>
-### func \(\*NumericRangeCondition\) [UnmarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L207>)
-
-```go
-func (c *NumericRangeCondition) UnmarshalJSON(data []byte) error
 ```
 
 
@@ -945,23 +697,17 @@ Example:
 client, _ := qdrant.NewQdrantClient(qdrant.QdrantParams{Config: cfg})
 ```
 
-<a name="QdrantClient.BatchInsert"></a>
-### func \(\*QdrantClient\) [BatchInsert](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L80>)
+<a name="QdrantClient.Client"></a>
+### func \(\*QdrantClient\) [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/client.go#L123>)
 
 ```go
-func (c *QdrantClient) BatchInsert(ctx context.Context, collectionName string, inputs []EmbeddingInput) error
+func (c *QdrantClient) Client() *qdrant.Client
 ```
 
-BatchInsert ────────────────────────────────────────────────────────────── BatchInsert ──────────────────────────────────────────────────────────────
-
-BatchInsert efficiently inserts multiple embeddings in batches to reduce network overhead.
-
-This method is safe to call for large datasets — it will automatically split inserts into smaller chunks \(\`defaultBatchSize\`\) and perform multiple upserts sequentially.
-
-Logs batch indices and collection name for debugging.
+Client returns the underlying Qdrant SDK client. This is useful for direct access to low\-level operations.
 
 <a name="QdrantClient.Close"></a>
-### func \(\*QdrantClient\) [Close](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/client.go#L125>)
+### func \(\*QdrantClient\) [Close](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/client.go#L135>)
 
 ```go
 func (c *QdrantClient) Close() error
@@ -971,112 +717,7 @@ Close ────────────────────────�
 
 Close gracefully shuts down the Qdrant client.
 
-Since the official Qdrant Go SDK doesn’t maintain persistent connections, this is currently a no\-op. It exists for lifecycle symmetry and future safety.
-
-<a name="QdrantClient.Delete"></a>
-### func \(\*QdrantClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L449>)
-
-```go
-func (c *QdrantClient) Delete(ctx context.Context, collectionName string, ids []string) error
-```
-
-Delete ────────────────────────────────────────────────────────────── Delete ──────────────────────────────────────────────────────────────
-
-Delete removes embeddings from a collection by their IDs.
-
-It constructs a \`DeletePoints\` request containing a list of \`PointId\`s, waits synchronously for completion, and logs the operation status.
-
-<a name="QdrantClient.EnsureCollection"></a>
-### func \(\*QdrantClient\) [EnsureCollection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L23>)
-
-```go
-func (c *QdrantClient) EnsureCollection(ctx context.Context, name string) error
-```
-
-EnsureCollection ────────────────────────────────────────────────────────────── EnsureCollection ──────────────────────────────────────────────────────────────
-
-EnsureCollection verifies if a given collection exists, and creates it if missing.
-
-It’s safe to call this multiple times — if the collection already exists, the function exits early. This pattern simplifies startup logic for embedding services that may bootstrap their own Qdrant collections.
-
-<a name="QdrantClient.GetCollection"></a>
-### func \(\*QdrantClient\) [GetCollection](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L176>)
-
-```go
-func (c *QdrantClient) GetCollection(ctx context.Context, name string) (*Collection, error)
-```
-
-
-
-<a name="QdrantClient.Insert"></a>
-### func \(\*QdrantClient\) [Insert](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L64>)
-
-```go
-func (c *QdrantClient) Insert(ctx context.Context, collectionName string, input EmbeddingInput) error
-```
-
-Insert ────────────────────────────────────────────────────────────── Insert ──────────────────────────────────────────────────────────────
-
-Insert adds a single embedding to Qdrant.
-
-Internally, it reuses the BatchInsert logic to ensure consistent handling of payload serialization and error management.
-
-<a name="QdrantClient.ListCollections"></a>
-### func \(\*QdrantClient\) [ListCollections](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L219>)
-
-```go
-func (c *QdrantClient) ListCollections(ctx context.Context) ([]string, error)
-```
-
-ListCollections ────────────────────────────────────────────────────────────── ListCollections ──────────────────────────────────────────────────────────────
-
-ListCollections retrieves all existing collections from Qdrant and returns their names as a string slice. This can be extended to preload metadata using GetCollection for each name if needed.
-
-Example:
-
-```
-names, err := client.ListCollections(ctx)
-if err != nil {
-    log.Fatalf("failed to list collections: %v", err)
-}
-log.Printf("Found collections: %v", names)
-```
-
-<a name="QdrantClient.Search"></a>
-### func \(\*QdrantClient\) [Search](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/operations.go#L368>)
-
-```go
-func (c *QdrantClient) Search(ctx context.Context, requests ...SearchRequest) ([][]SearchResultInterface, error)
-```
-
-Search ────────────────────────────────────────────────────────────── Search ──────────────────────────────────────────────────────────────
-
-Search performs multiple searches and returns results for each request. Each request can optionally include filters.
-
-Parameters:
-
-- requests — variadic SearchRequest structs, each containing:
-- CollectionName: the collection to search in
-- Vector: the query embedding
-- TopK: maximum number of results per request
-- Filters: optional key\-value filters \(AND logic\)
-
-Returns:
-
-```
-A slice of result slices — one []SearchResultInterface per request.
-```
-
-Example:
-
-```
-results, err := client.Search(ctx,
-    SearchRequest{CollectionName: "docs", Vector: vec1, TopK: 10, Filters: map[string]string{"partition_id": "store-A"}},
-    SearchRequest{CollectionName: "docs", Vector: vec2, TopK: 5},
-)
-// results[0] = results for first request
-// results[1] = results for second request
-```
+Since the official Qdrant Go SDK doesn't maintain persistent connections, this is currently a no\-op. It exists for lifecycle symmetry and future safety.
 
 <a name="QdrantParams"></a>
 ## type [QdrantParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/fx_module.go#L39-L42>)
@@ -1089,185 +730,5 @@ type QdrantParams struct {
     Config *Config
 }
 ```
-
-<a name="SearchRequest"></a>
-## type [SearchRequest](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L99-L104>)
-
-SearchRequest represents a single search request for batch operations
-
-```go
-type SearchRequest struct {
-    CollectionName string
-    Vector         []float32
-    TopK           int
-    Filters        *FilterSet // Optional: key-value filters
-}
-```
-
-<a name="SearchResult"></a>
-## type [SearchResult](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L25-L31>)
-
-SearchResult holds results from a similarity search.
-
-```go
-type SearchResult struct {
-    ID         string
-    Score      float32
-    Meta       map[string]*qdrant.Value
-    Vector     []float32
-    Collection string
-}
-```
-
-<a name="SearchResult.GetCollectionName"></a>
-### func \(SearchResult\) [GetCollectionName](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L49>)
-
-```go
-func (r SearchResult) GetCollectionName() string
-```
-
-GetCollectionName returns the name of the collection from which the result originated.
-
-<a name="SearchResult.GetID"></a>
-### func \(SearchResult\) [GetID](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L34>)
-
-```go
-func (r SearchResult) GetID() string
-```
-
-GetID returns the result's unique identifier.
-
-<a name="SearchResult.GetMeta"></a>
-### func \(SearchResult\) [GetMeta](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L40>)
-
-```go
-func (r SearchResult) GetMeta() map[string]*qdrant.Value
-```
-
-GetMeta returns the metadata stored with the vector.
-
-<a name="SearchResult.GetScore"></a>
-### func \(SearchResult\) [GetScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L37>)
-
-```go
-func (r SearchResult) GetScore() float32
-```
-
-GetScore returns the similarity score associated with the result.
-
-<a name="SearchResult.GetVector"></a>
-### func \(SearchResult\) [GetVector](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L43>)
-
-```go
-func (r SearchResult) GetVector() []float32
-```
-
-GetVector returns the dense embedding vector if available.
-
-<a name="SearchResult.HasVector"></a>
-### func \(SearchResult\) [HasVector](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L46>)
-
-```go
-func (r SearchResult) HasVector() bool
-```
-
-HasVector reports whether the result contains a non\-empty vector payload.
-
-<a name="SearchResultInterface"></a>
-## type [SearchResultInterface](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/utils.go#L60-L67>)
-
-SearchResultInterface is the public interface for search results. It provides a consistent way to access search results regardless of the underlying implementation.
-
-```go
-type SearchResultInterface interface {
-    GetID() string                     // Unique result identifier
-    GetScore() float32                 // Similarity score
-    GetMeta() map[string]*qdrant.Value // Metadata associated with the result
-    GetVector() []float32              // Optional embedding vector
-    HasVector() bool                   // Whether a vector payload is present
-    GetCollectionName() string         // Name of the Qdrant collection
-}
-```
-
-<a name="TextAnyCondition"></a>
-## type [TextAnyCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L124>)
-
-
-
-```go
-type TextAnyCondition = MatchAnyCondition[string] // String IN operator
-```
-
-<a name="TextCondition"></a>
-## type [TextCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L121>)
-
-
-
-```go
-type TextCondition = MatchCondition[string] // Exact string match
-```
-
-<a name="TextExceptCondition"></a>
-## type [TextExceptCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L126>)
-
-
-
-```go
-type TextExceptCondition = MatchExceptCondition[string] // String NOT IN
-```
-
-<a name="TimeRange"></a>
-## type [TimeRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L31-L36>)
-
-TimeRange represents a time\-based filter condition
-
-```go
-type TimeRange struct {
-    Gt  *time.Time `json:"after,omitempty"`      // Greater than this time
-    Gte *time.Time `json:"atOrAfter,omitempty"`  // Greater than or equal to this time
-    Lt  *time.Time `json:"before,omitempty"`     // Less than this time
-    Lte *time.Time `json:"atOrBefore,omitempty"` // Less than or equal to this time
-}
-```
-
-<a name="TimeRangeCondition"></a>
-## type [TimeRangeCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L130-L134>)
-
-TimeRangeCondition represents a time range filter condition
-
-```go
-type TimeRangeCondition struct {
-    Key       string    `json:"field"`
-    Value     TimeRange `json:"-"`
-    FieldType FieldType `json:"-"`
-}
-```
-
-<a name="TimeRangeCondition.MarshalJSON"></a>
-### func \(TimeRangeCondition\) [MarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L140>)
-
-```go
-func (c TimeRangeCondition) MarshalJSON() ([]byte, error)
-```
-
-
-
-<a name="TimeRangeCondition.ToQdrantCondition"></a>
-### func \(TimeRangeCondition\) [ToQdrantCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L136>)
-
-```go
-func (c TimeRangeCondition) ToQdrantCondition() []*qdrant.Condition
-```
-
-
-
-<a name="TimeRangeCondition.UnmarshalJSON"></a>
-### func \(\*TimeRangeCondition\) [UnmarshalJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/qdrant/filters.go#L157>)
-
-```go
-func (c *TimeRangeCondition) UnmarshalJSON(data []byte) error
-```
-
-
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)
