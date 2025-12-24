@@ -196,16 +196,20 @@ Thread Safety:
 
 All methods on the MariaDB interface are safe for concurrent use by multiple goroutines. Internal mutexes ensure thread\-safe access to the database connection.
 
+Package mariadb provides MariaDB/MySQL database operations with an interface\-first design. The interfaces defined here \(Client, QueryBuilder\) provide a consistent API that can be implemented by different database packages.
+
 ## Index
 
 - [Variables](<#variables>)
 - [func RegisterMariaDBLifecycle\(params MariaDBLifeCycleParams\)](<#RegisterMariaDBLifecycle>)
+- [type Client](<#Client>)
+  - [func NewMariaDB\(cfg Config\) \(Client, error\)](<#NewMariaDB>)
+  - [func ProvideClient\(db \*MariaDB\) Client](<#ProvideClient>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
 - [type ConnectionDetails](<#ConnectionDetails>)
 - [type ErrorCategory](<#ErrorCategory>)
 - [type MariaDB](<#MariaDB>)
-  - [func NewMariaDB\(cfg Config\) \(\*MariaDB, error\)](<#NewMariaDB>)
   - [func NewMariaDBClientWithDI\(params MariaDBParams\) \(\*MariaDB, error\)](<#NewMariaDBClientWithDI>)
   - [func \(p \*MariaDB\) AutoMigrate\(models ...interface\{\}\) error](<#MariaDB.AutoMigrate>)
   - [func \(m \*MariaDB\) Count\(ctx context.Context, model interface\{\}, count \*int64, conditions ...interface\{\}\) error](<#MariaDB.Count>)
@@ -225,10 +229,10 @@ All methods on the MariaDB interface are safe for concurrent use by multiple gor
   - [func \(p \*MariaDB\) MigrateDown\(ctx context.Context, migrationsDir string\) error](<#MariaDB.MigrateDown>)
   - [func \(p \*MariaDB\) MigrateUp\(ctx context.Context, migrationsDir string\) error](<#MariaDB.MigrateUp>)
   - [func \(m \*MariaDB\) MonitorConnection\(ctx context.Context\)](<#MariaDB.MonitorConnection>)
-  - [func \(m \*MariaDB\) Query\(ctx context.Context\) \*QueryBuilder](<#MariaDB.Query>)
+  - [func \(m \*MariaDB\) Query\(ctx context.Context\) QueryBuilder](<#MariaDB.Query>)
   - [func \(m \*MariaDB\) RetryConnection\(ctx context.Context\)](<#MariaDB.RetryConnection>)
   - [func \(m \*MariaDB\) Save\(ctx context.Context, value interface\{\}\) error](<#MariaDB.Save>)
-  - [func \(m \*MariaDB\) Transaction\(ctx context.Context, fn func\(db \*MariaDB\) error\) error](<#MariaDB.Transaction>)
+  - [func \(m \*MariaDB\) Transaction\(ctx context.Context, fn func\(tx Client\) error\) error](<#MariaDB.Transaction>)
   - [func \(m \*MariaDB\) TranslateError\(err error\) error](<#MariaDB.TranslateError>)
   - [func \(m \*MariaDB\) Update\(ctx context.Context, model interface\{\}, attrs interface\{\}\) \(int64, error\)](<#MariaDB.Update>)
   - [func \(m \*MariaDB\) UpdateColumn\(ctx context.Context, model interface\{\}, columnName string, value interface\{\}\) \(int64, error\)](<#MariaDB.UpdateColumn>)
@@ -241,50 +245,6 @@ All methods on the MariaDB interface are safe for concurrent use by multiple gor
 - [type MigrationHistoryRecord](<#MigrationHistoryRecord>)
 - [type MigrationType](<#MigrationType>)
 - [type QueryBuilder](<#QueryBuilder>)
-  - [func \(qb \*QueryBuilder\) Clauses\(conds ...clause.Expression\) \*QueryBuilder](<#QueryBuilder.Clauses>)
-  - [func \(qb \*QueryBuilder\) Count\(count \*int64\) error](<#QueryBuilder.Count>)
-  - [func \(qb \*QueryBuilder\) Create\(value interface\{\}\) \(int64, error\)](<#QueryBuilder.Create>)
-  - [func \(qb \*QueryBuilder\) CreateInBatches\(value interface\{\}, batchSize int\) \(int64, error\)](<#QueryBuilder.CreateInBatches>)
-  - [func \(qb \*QueryBuilder\) Delete\(value interface\{\}\) \(int64, error\)](<#QueryBuilder.Delete>)
-  - [func \(qb \*QueryBuilder\) Distinct\(args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Distinct>)
-  - [func \(qb \*QueryBuilder\) Done\(\)](<#QueryBuilder.Done>)
-  - [func \(qb \*QueryBuilder\) Find\(dest interface\{\}\) error](<#QueryBuilder.Find>)
-  - [func \(qb \*QueryBuilder\) First\(dest interface\{\}\) error](<#QueryBuilder.First>)
-  - [func \(qb \*QueryBuilder\) FirstOrCreate\(dest interface\{\}, conds ...interface\{\}\) error](<#QueryBuilder.FirstOrCreate>)
-  - [func \(qb \*QueryBuilder\) FirstOrInit\(dest interface\{\}, conds ...interface\{\}\) error](<#QueryBuilder.FirstOrInit>)
-  - [func \(qb \*QueryBuilder\) ForShare\(\) \*QueryBuilder](<#QueryBuilder.ForShare>)
-  - [func \(qb \*QueryBuilder\) ForShareSkipLocked\(\) \*QueryBuilder](<#QueryBuilder.ForShareSkipLocked>)
-  - [func \(qb \*QueryBuilder\) ForUpdate\(\) \*QueryBuilder](<#QueryBuilder.ForUpdate>)
-  - [func \(qb \*QueryBuilder\) ForUpdateNoWait\(\) \*QueryBuilder](<#QueryBuilder.ForUpdateNoWait>)
-  - [func \(qb \*QueryBuilder\) ForUpdateSkipLocked\(\) \*QueryBuilder](<#QueryBuilder.ForUpdateSkipLocked>)
-  - [func \(qb \*QueryBuilder\) Group\(query string\) \*QueryBuilder](<#QueryBuilder.Group>)
-  - [func \(qb \*QueryBuilder\) Having\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Having>)
-  - [func \(qb \*QueryBuilder\) Joins\(query string, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Joins>)
-  - [func \(qb \*QueryBuilder\) Last\(dest interface\{\}\) error](<#QueryBuilder.Last>)
-  - [func \(qb \*QueryBuilder\) LeftJoin\(query string, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.LeftJoin>)
-  - [func \(qb \*QueryBuilder\) Limit\(limit int\) \*QueryBuilder](<#QueryBuilder.Limit>)
-  - [func \(qb \*QueryBuilder\) MapRows\(destSlice interface\{\}, mapFn func\(\*gorm.DB\) error\) error](<#QueryBuilder.MapRows>)
-  - [func \(qb \*QueryBuilder\) Model\(value interface\{\}\) \*QueryBuilder](<#QueryBuilder.Model>)
-  - [func \(qb \*QueryBuilder\) Not\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Not>)
-  - [func \(qb \*QueryBuilder\) Offset\(offset int\) \*QueryBuilder](<#QueryBuilder.Offset>)
-  - [func \(qb \*QueryBuilder\) OnConflict\(onConflict clause.OnConflict\) \*QueryBuilder](<#QueryBuilder.OnConflict>)
-  - [func \(qb \*QueryBuilder\) Or\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Or>)
-  - [func \(qb \*QueryBuilder\) Order\(value interface\{\}\) \*QueryBuilder](<#QueryBuilder.Order>)
-  - [func \(qb \*QueryBuilder\) Pluck\(column string, dest interface\{\}\) \(int64, error\)](<#QueryBuilder.Pluck>)
-  - [func \(qb \*QueryBuilder\) Preload\(query string, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Preload>)
-  - [func \(qb \*QueryBuilder\) QueryRow\(\) RowScanner](<#QueryBuilder.QueryRow>)
-  - [func \(qb \*QueryBuilder\) QueryRows\(\) \(RowsScanner, error\)](<#QueryBuilder.QueryRows>)
-  - [func \(qb \*QueryBuilder\) Raw\(sql string, values ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Raw>)
-  - [func \(qb \*QueryBuilder\) RightJoin\(query string, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.RightJoin>)
-  - [func \(qb \*QueryBuilder\) Scan\(dest interface\{\}\) error](<#QueryBuilder.Scan>)
-  - [func \(qb \*QueryBuilder\) ScanRow\(dest interface\{\}\) error](<#QueryBuilder.ScanRow>)
-  - [func \(qb \*QueryBuilder\) Scopes\(funcs ...func\(\*gorm.DB\) \*gorm.DB\) \*QueryBuilder](<#QueryBuilder.Scopes>)
-  - [func \(qb \*QueryBuilder\) Select\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Select>)
-  - [func \(qb \*QueryBuilder\) Table\(name string\) \*QueryBuilder](<#QueryBuilder.Table>)
-  - [func \(qb \*QueryBuilder\) ToSubquery\(\) \*gorm.DB](<#QueryBuilder.ToSubquery>)
-  - [func \(qb \*QueryBuilder\) Unscoped\(\) \*QueryBuilder](<#QueryBuilder.Unscoped>)
-  - [func \(qb \*QueryBuilder\) Updates\(values interface\{\}\) \(int64, error\)](<#QueryBuilder.Updates>)
-  - [func \(qb \*QueryBuilder\) Where\(query interface\{\}, args ...interface\{\}\) \*QueryBuilder](<#QueryBuilder.Where>)
 - [type RowScanner](<#RowScanner>)
 - [type RowsScanner](<#RowsScanner>)
 
@@ -446,17 +406,23 @@ var (
 
 <a name="FXModule"></a>FXModule is an fx module that provides the MariaDB database component. It registers the MariaDB constructor for dependency injection and sets up lifecycle hooks to properly initialize and shut down the database connection.
 
+This module provides Client interface, not \*MariaDB concrete type.
+
 ```go
 var FXModule = fx.Module("mariadb",
     fx.Provide(
         NewMariaDBClientWithDI,
+        fx.Annotate(
+            ProvideClient,
+            fx.As(new(Client)),
+        ),
     ),
     fx.Invoke(RegisterMariaDBLifecycle),
 )
 ```
 
 <a name="RegisterMariaDBLifecycle"></a>
-## func [RegisterMariaDBLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L84>)
+## func [RegisterMariaDBLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L102>)
 
 ```go
 func RegisterMariaDBLifecycle(params MariaDBLifeCycleParams)
@@ -465,6 +431,73 @@ func RegisterMariaDBLifecycle(params MariaDBLifeCycleParams)
 RegisterMariaDBLifecycle registers lifecycle hooks for the MariaDB database component. It sets up: 1. Connection monitoring on the application starts 2. Automatic reconnection mechanism on application start 3. Graceful shutdown of database connections on application stop
 
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
+
+<a name="Client"></a>
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L22-L51>)
+
+Client is the main database client interface that provides CRUD operations, query building, and transaction management.
+
+This interface allows applications to:
+
+- Switch between different databases without code changes
+- Write database\-agnostic business logic
+- Mock database operations easily for testing
+- Depend on abstractions rather than concrete implementations
+
+The MariaDB type implements this interface.
+
+```go
+type Client interface {
+    // Basic CRUD operations
+    Find(ctx context.Context, dest interface{}, conditions ...interface{}) error
+    First(ctx context.Context, dest interface{}, conditions ...interface{}) error
+    Create(ctx context.Context, value interface{}) error
+    Save(ctx context.Context, value interface{}) error
+    Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error)
+    UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error)
+    UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error)
+    Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error)
+    Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error
+    UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error)
+    Exec(ctx context.Context, sql string, values ...interface{}) (int64, error)
+
+    // Query builder for complex queries
+    // Returns the QueryBuilder interface for method chaining
+    Query(ctx context.Context) QueryBuilder
+
+    // Transaction support
+    // The callback function receives a Client interface (not a concrete type)
+    // This allows the same transaction code to work with any database implementation
+    Transaction(ctx context.Context, fn func(tx Client) error) error
+
+    // Raw GORM access for advanced use cases
+    // Use this when you need direct access to GORM's functionality
+    DB() *gorm.DB
+
+    // Lifecycle management
+    GracefulShutdown() error
+}
+```
+
+<a name="NewMariaDB"></a>
+### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L35>)
+
+```go
+func NewMariaDB(cfg Config) (Client, error)
+```
+
+NewMariaDB creates a new MariaDB instance with the provided configuration. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it returns an error.
+
+Returns Client interface, not \*MariaDB concrete type.
+
+<a name="ProvideClient"></a>
+### func [ProvideClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L29>)
+
+```go
+func ProvideClient(db *MariaDB) Client
+```
+
+ProvideClient wraps the concrete \*MariaDB and returns it as Client interface. This enables applications to depend on the interface rather than concrete type.
 
 <a name="Config"></a>
 ## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L7-L13>)
@@ -600,17 +633,8 @@ type MariaDB struct {
 }
 ```
 
-<a name="NewMariaDB"></a>
-### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L33>)
-
-```go
-func NewMariaDB(cfg Config) (*MariaDB, error)
-```
-
-NewMariaDB creates a new MariaDB instance with the provided configuration. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it returns an error.
-
 <a name="NewMariaDBClientWithDI"></a>
-### func [NewMariaDBClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L58>)
+### func [NewMariaDBClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L71>)
 
 ```go
 func NewMariaDBClientWithDI(params MariaDBParams) (*MariaDB, error)
@@ -624,7 +648,7 @@ Parameters:
 
 Returns:
 
-- \*MariaDB: A fully initialized MariaDB Client ready for use.
+- \*MariaDB: A fully initialized MariaDB Client \(concrete type for lifecycle management\). To use the interface, inject Client instead.
 
 Example usage with fx:
 
@@ -897,7 +921,7 @@ if err == nil {
 ```
 
 <a name="MariaDB.GracefulShutdown"></a>
-### func \(\*MariaDB\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L127>)
+### func \(\*MariaDB\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L145>)
 
 ```go
 func (m *MariaDB) GracefulShutdown() error
@@ -977,7 +1001,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="MariaDB.MonitorConnection"></a>
-### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L184>)
+### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L186>)
 
 ```go
 func (m *MariaDB) MonitorConnection(ctx context.Context)
@@ -991,16 +1015,16 @@ The function respects context cancellation and shutdown signals, ensuring proper
 ### func \(\*MariaDB\) [Query](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L34>)
 
 ```go
-func (m *MariaDB) Query(ctx context.Context) *QueryBuilder
+func (m *MariaDB) Query(ctx context.Context) QueryBuilder
 ```
 
-Query provides a flexible way to build complex queries. It returns a QueryBuilder which can be used to chain query methods in a fluent interface. The method acquires a read lock on the database connection that will be automatically released when a terminal method is called or Done\(\) is invoked.
+Query provides a flexible way to build complex queries. It returns a QueryBuilder interface which can be used to chain query methods in a fluent interface. The method acquires a read lock on the database connection that will be automatically released when a terminal method is called or Done\(\) is invoked.
 
 Parameters:
 
 - ctx: Context for the database operation
 
-Returns a QueryBuilder instance that can be used to construct the query.
+Returns a QueryBuilder interface instance that can be used to construct the query.
 
 Note: QueryBuilder methods return GORM errors directly. Use MariaDB.TranslateError\(\) to convert them to standardized error types if needed.
 
@@ -1019,7 +1043,7 @@ if err != nil {
 ```
 
 <a name="MariaDB.RetryConnection"></a>
-### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L142>)
+### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L144>)
 
 ```go
 func (m *MariaDB) RetryConnection(ctx context.Context)
@@ -1056,10 +1080,10 @@ err := db.Save(ctx, &user)
 ### func \(\*MariaDB\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/transactions.go#L41>)
 
 ```go
-func (m *MariaDB) Transaction(ctx context.Context, fn func(db *MariaDB) error) error
+func (m *MariaDB) Transaction(ctx context.Context, fn func(tx Client) error) error
 ```
 
-Transaction executes the given function within a database transaction. It creates a transaction\-specific MariaDB instance and passes it to the provided function. If the function returns an error, the transaction is rolled back; otherwise, it's committed.
+Transaction executes the given function within a database transaction. It creates a transaction\-specific MariaDB instance and passes it as Client interface. If the function returns an error, the transaction is rolled back; otherwise, it's committed.
 
 This method provides a clean way to execute multiple database operations as a single atomic unit, with automatic handling of commit/rollback based on the execution result.
 
@@ -1068,11 +1092,11 @@ Returns a GORM error if the transaction fails or the error returned by the callb
 Example usage:
 
 ```
-err := db.Transaction(ctx, func(txDB *MariaDB) error {
-	if err := txDB.Create(ctx, user); err != nil {
+err := db.Transaction(ctx, func(tx Client) error {
+	if err := tx.Create(ctx, user); err != nil {
 		return err
 	}
-	return txDB.Create(ctx, userProfile)
+	return tx.Create(ctx, userProfile)
 })
 ```
 
@@ -1224,7 +1248,7 @@ fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="MariaDBLifeCycleParams"></a>
-## type [MariaDBLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L69-L74>)
+## type [MariaDBLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L87-L92>)
 
 MariaDBLifeCycleParams groups the dependencies needed for MariaDB lifecycle management. This struct combines all the components required to properly manage the lifecycle of a MariaDB Client within an fx application, including startup, monitoring, and graceful shutdown.
 
@@ -1240,7 +1264,7 @@ type MariaDBLifeCycleParams struct {
 ```
 
 <a name="MariaDBParams"></a>
-## type [MariaDBParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L27-L31>)
+## type [MariaDBParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L39-L43>)
 
 MariaDBParams groups the dependencies needed to create a MariaDB Client via dependency injection. This struct is designed to work with Uber's fx dependency injection framework and provides the necessary parameters for initializing a MariaDB database connection.
 
@@ -1357,1014 +1381,78 @@ const (
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L49-L55>)
+## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L65-L120>)
 
-QueryBuilder provides a fluent interface for building complex database queries. It wraps GORM's query building capabilities with thread\-safety and automatic resource cleanup. The builder maintains a chain of query modifiers that are applied when a terminal method is called.
-
-Note: All terminal methods \(First, Find, Create, etc.\) return GORM errors directly. This preserves the error chain and allows consumers to use errors.Is\(\) with GORM error types. Use MariaDB.TranslateError\(\) to convert errors to standardized types if needed.
-
-```go
-type QueryBuilder struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="QueryBuilder.Clauses"></a>
-### func \(\*QueryBuilder\) [Clauses](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L684>)
-
-```go
-func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder
-```
-
-Clauses adds custom clauses to the query. This is a generic method for adding any GORM clause type.
-
-Parameters:
-
-- conds: One or more clause expressions
-
-Returns the QueryBuilder for method chaining.
+QueryBuilder provides a fluent interface for building complex database queries. All chainable methods return the QueryBuilder interface, allowing method chaining. Terminal operations \(like Find, First, Create\) execute the query and return results.
 
 Example:
 
 ```
-qb.Clauses(clause.OrderBy{
-    Expression: clause.Expr{SQL: "RAND()"},
-}).Find(&users) // Random order (MySQL uses RAND())
-
-qb.Clauses(clause.GroupBy{
-    Columns: []clause.Column{{Name: "department"}},
-}).Find(&users)
-```
-
-<a name="QueryBuilder.Count"></a>
-### func \(\*QueryBuilder\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L400>)
-
-```go
-func (qb *QueryBuilder) Count(count *int64) error
-```
-
-Count counts records that match the query conditions. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- count: Pointer to an int64 where the count will be stored
-
-Returns a GORM error if the query fails or nil on success.
-
-Example:
-
-```
-var count int64
-err := qb.Where("active = ?", true).Count(&count)
-```
-
-<a name="QueryBuilder.Create"></a>
-### func \(\*QueryBuilder\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L715>)
-
-```go
-func (qb *QueryBuilder) Create(value interface{}) (int64, error)
-```
-
-Create inserts a new record into the database. This is a terminal method that executes the operation and releases the mutex lock. It can be combined with OnConflict\(\) for UPSERT operations and other query builder methods.
-
-Parameters:
-
-- value: Pointer to the struct or slice of structs to create
-
-Returns:
-
-- int64: Number of rows affected \(records created\)
-- error: GORM error if the operation fails, nil on success
-
-Example:
-
-```
-user := User{Name: "John", Email: "john@example.com"}
-rowsAffected, err := qb.Create(&user)
-if err != nil {
-    return err
-}
-fmt.Printf("Created %d record, ID: %d\n", rowsAffected, user.ID)
-```
-
-With OnConflict for idempotent create:
-
-```
-rowsAffected, err := qb.OnConflict(clause.OnConflict{DoNothing: true}).Create(&stage)
-if rowsAffected == 0 {
-    // Record already exists
-}
-```
-
-<a name="QueryBuilder.CreateInBatches"></a>
-### func \(\*QueryBuilder\) [CreateInBatches](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L742>)
-
-```go
-func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error)
-```
-
-CreateInBatches creates records in batches to avoid memory issues with large datasets. This is a terminal method that executes the operation and releases the mutex lock.
-
-Parameters:
-
-- value: Slice of records to create
-- batchSize: Number of records to process in each batch
-
-Returns:
-
-- int64: Number of rows affected \(records created\)
-- error: GORM error if the operation fails, nil on success
-
-Example:
-
-```
-users := []User{{Name: "John"}, {Name: "Jane"}, {Name: "Bob"}}
-rowsAffected, err := qb.CreateInBatches(&users, 100)
-if err != nil {
-    return err
-}
-fmt.Printf("Created %d records\n", rowsAffected)
-```
-
-<a name="QueryBuilder.Delete"></a>
-### func \(\*QueryBuilder\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L447>)
-
-```go
-func (qb *QueryBuilder) Delete(value interface{}) (int64, error)
-```
-
-Delete deletes records that match the query conditions. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- value: Model value or pointer to specify what to delete
-
-Returns:
-
-- int64: Number of rows affected by the delete operation
-- error: GORM error if the deletion fails, nil on success
-
-Example:
-
-```
-rowsAffected, err := qb.Where("created_at < ?", time.Now().AddDate(-1, 0, 0)).Delete(&User{})
-if err != nil {
-    return err
-}
-fmt.Printf("Deleted %d rows\n", rowsAffected)
-```
-
-<a name="QueryBuilder.Distinct"></a>
-### func \(\*QueryBuilder\) [Distinct](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L494>)
-
-```go
-func (qb *QueryBuilder) Distinct(args ...interface{}) *QueryBuilder
-```
-
-Distinct specifies that the query should return distinct results. It eliminates duplicate rows from the result set.
-
-Parameters:
-
-- args: Optional columns to apply DISTINCT to
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Distinct("department").Find(&departments)
-qb.Distinct().Where("age > ?", 18).Find(&users) // SELECT DISTINCT * FROM users WHERE age > 18
-```
-
-<a name="QueryBuilder.Done"></a>
-### func \(\*QueryBuilder\) [Done](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L798>)
-
-```go
-func (qb *QueryBuilder) Done()
-```
-
-Done releases the mutex lock without executing the query. This method should be called when you want to cancel a query building chain without executing any terminal operation.
-
-Example:
-
-```
-qb := db.Query(ctx)
-if someCondition {
-    err := qb.Where(...).Find(&results)
-} else {
-    qb.Done() // Release the lock without executing
-}
-```
-
-<a name="QueryBuilder.Find"></a>
-### func \(\*QueryBuilder\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L344>)
-
-```go
-func (qb *QueryBuilder) Find(dest interface{}) error
-```
-
-Find finds records that match the query conditions. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- dest: Pointer to a slice where results will be stored
-
-Returns a GORM error if the query fails or nil on success. Use MariaDB.TranslateError\(\) to convert to standardized error types.
-
-Example:
-
-```
-var users []User
-err := qb.Where("active = ?", true).Find(&users)
-```
-
-<a name="QueryBuilder.First"></a>
-### func \(\*QueryBuilder\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L365>)
-
-```go
-func (qb *QueryBuilder) First(dest interface{}) error
-```
-
-First finds the first record that matches the query conditions. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- dest: Pointer to a struct where the result will be stored
-
-Returns gorm.ErrRecordNotFound if no record is found, or another GORM error if the query fails, nil on success. Use MariaDB.TranslateError\(\) to convert to standardized error types if needed.
-
-Example:
-
-```
-var user User
-err := qb.Where("email = ?", "user@example.com").First(&user)
-if err != nil {
-    err = db.TranslateError(err) // Optional: convert to standardized error
-}
-```
-
-<a name="QueryBuilder.FirstOrCreate"></a>
-### func \(\*QueryBuilder\) [FirstOrCreate](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L781>)
-
-```go
-func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error
-```
-
-FirstOrCreate finds the first record matching the conditions, or creates a new one if not found. This is a terminal method.
-
-Parameters:
-
-- dest: Pointer to the struct where the result will be stored
-- conds: Optional conditions for the query
-
-Returns a GORM error if the operation fails or nil on success.
-
-Example:
-
-```
-var user User
-err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
-```
-
-<a name="QueryBuilder.FirstOrInit"></a>
-### func \(\*QueryBuilder\) [FirstOrInit](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L763>)
-
-```go
-func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error
-```
-
-FirstOrInit finds the first record matching the conditions, or initializes a new one if not found. This is a terminal method.
-
-Parameters:
-
-- dest: Pointer to the struct where the result will be stored
-- conds: Optional conditions for the query
-
-Returns a GORM error if the operation fails or nil on success.
-
-Example:
-
-```
-var user User
-err := qb.Where("email = ?", "user@example.com").FirstOrInit(&user)
-```
-
-<a name="QueryBuilder.ForShare"></a>
-### func \(\*QueryBuilder\) [ForShare](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L586>)
-
-```go
-func (qb *QueryBuilder) ForShare() *QueryBuilder
-```
-
-ForShare adds a FOR SHARE clause to the query for shared row\-level locking. This allows other transactions to read the rows but prevents them from updating or deleting until the current transaction commits or rolls back.
-
-Note: MySQL/MariaDB uses LOCK IN SHARE MODE for this functionality.
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Where("id = ?", userID).ForShare().First(&user) // Shared lock for reading
-qb.ForShare().Where("status = ?", "active").Find(&users) // Prevents updates but allows reads
-```
-
-<a name="QueryBuilder.ForShareSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForShareSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L621>)
-
-```go
-func (qb *QueryBuilder) ForShareSkipLocked() *QueryBuilder
-```
-
-ForShareSkipLocked adds a FOR SHARE SKIP LOCKED clause to the query. This acquires shared locks but skips any rows that are already exclusively locked.
-
-Note: Requires MySQL 8.0\+ or MariaDB 10.6\+
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Where("category = ?", "news").ForShareSkipLocked().Find(&articles)
-```
-
-<a name="QueryBuilder.ForUpdate"></a>
-### func \(\*QueryBuilder\) [ForUpdate](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L569>)
-
-```go
-func (qb *QueryBuilder) ForUpdate() *QueryBuilder
-```
-
-ForUpdate adds a FOR UPDATE clause to the query for exclusive row\-level locking. This prevents other transactions from modifying the selected rows until the current transaction commits or rolls back.
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Where("id = ?", userID).ForUpdate().First(&user) // Locks the row for update
-qb.ForUpdate().Where("status = ?", "pending").Find(&orders) // Locks all matching rows
-```
-
-<a name="QueryBuilder.ForUpdateNoWait"></a>
-### func \(\*QueryBuilder\) [ForUpdateNoWait](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L640>)
-
-```go
-func (qb *QueryBuilder) ForUpdateNoWait() *QueryBuilder
-```
-
-ForUpdateNoWait adds a FOR UPDATE NOWAIT clause to the query. This attempts to acquire exclusive locks but immediately fails if any target rows are already locked, instead of waiting.
-
-Note: Requires MySQL 8.0\+ or MariaDB 10.3\+
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Where("id = ?", accountID).ForUpdateNoWait().First(&account)
-```
-
-<a name="QueryBuilder.ForUpdateSkipLocked"></a>
-### func \(\*QueryBuilder\) [ForUpdateSkipLocked](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L603>)
-
-```go
-func (qb *QueryBuilder) ForUpdateSkipLocked() *QueryBuilder
-```
-
-ForUpdateSkipLocked adds a FOR UPDATE SKIP LOCKED clause to the query. This acquires exclusive locks but skips any rows that are already locked, making it ideal for job queue processing where you want to avoid blocking.
-
-Note: Requires MySQL 8.0\+ or MariaDB 10.6\+
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Where("status = ?", "pending").ForUpdateSkipLocked().Limit(10).Find(&jobs)
-qb.ForUpdateSkipLocked().Where("processed = ?", false).First(&task)
-```
-
-<a name="QueryBuilder.Group"></a>
-### func \(\*QueryBuilder\) [Group](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L210>)
-
-```go
-func (qb *QueryBuilder) Group(query string) *QueryBuilder
-```
-
-Group adds a GROUP BY clause to the query. It is used to group rows with the same values into summary rows.
-
-Parameters:
-
-- query: GROUP BY expression
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Group("status")
-qb.Group("department, location")
-```
-
-<a name="QueryBuilder.Having"></a>
-### func \(\*QueryBuilder\) [Having](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L227>)
-
-```go
-func (qb *QueryBuilder) Having(query interface{}, args ...interface{}) *QueryBuilder
-```
-
-Having added a HAVING clause to the query. It is used to filter groups created by the GROUP BY clause.
-
-Parameters:
-
-- query: HAVING condition with optional placeholders
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Group("department").Having("COUNT(*) > ?", 3)
-```
-
-<a name="QueryBuilder.Joins"></a>
-### func \(\*QueryBuilder\) [Joins](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L139>)
-
-```go
-func (qb *QueryBuilder) Joins(query string, args ...interface{}) *QueryBuilder
-```
-
-Joins add a JOIN clause to the query. It performs an INNER JOIN by default.
-
-Parameters:
-
-- query: JOIN condition string
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Joins("JOIN orders ON orders.user_id = users.id")
-```
-
-<a name="QueryBuilder.Last"></a>
-### func \(\*QueryBuilder\) [Last](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L383>)
-
-```go
-func (qb *QueryBuilder) Last(dest interface{}) error
-```
-
-Last finds the last record that matches the query conditions. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- dest: Pointer to a struct where the result will be stored
-
-Returns gorm.ErrRecordNotFound if no record is found, or another GORM error if the query fails, nil on success. Use MariaDB.TranslateError\(\) to convert to standardized error types if needed.
-
-Example:
-
-```
-var user User
-err := qb.Where("department = ?", "Engineering").Order("joined_at ASC").Last(&user)
-```
-
-<a name="QueryBuilder.LeftJoin"></a>
-### func \(\*QueryBuilder\) [LeftJoin](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L156>)
-
-```go
-func (qb *QueryBuilder) LeftJoin(query string, args ...interface{}) *QueryBuilder
-```
-
-LeftJoin adds a LEFT JOIN clause to the query. It retrieves all records from the left table and matching records from the right table.
-
-Parameters:
-
-- query: JOIN condition string without the "LEFT JOIN" prefix
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.LeftJoin("orders ON orders.user_id = users.id")
-```
-
-<a name="QueryBuilder.Limit"></a>
-### func \(\*QueryBuilder\) [Limit](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L259>)
-
-```go
-func (qb *QueryBuilder) Limit(limit int) *QueryBuilder
-```
-
-Limit sets the maximum number of records to return.
-
-Parameters:
-
-- limit: Maximum number of records
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Limit(10) // Return at most 10 records
-```
-
-<a name="QueryBuilder.MapRows"></a>
-### func \(\*QueryBuilder\) [MapRows](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/row_scanner.go#L72>)
-
-```go
-func (qb *QueryBuilder) MapRows(destSlice interface{}, mapFn func(*gorm.DB) error) error
-```
-
-MapRows executes a query and maps all rows into a destination slice using the provided mapping function. This provides a higher\-level abstraction than working with raw rows, allowing for custom mapping logic while still handling the query execution and resource management automatically.
-
-Parameters:
-
-- destSlice: The slice to populate with mapped rows \(should be a pointer to a slice\)
-- mapFn: A function that defines how to map rows from the database to your slice items
-
-Returns a GORM error if the mapping fails or nil on success.
-
-<a name="QueryBuilder.Model"></a>
-### func \(\*QueryBuilder\) [Model](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L308>)
-
-```go
-func (qb *QueryBuilder) Model(value interface{}) *QueryBuilder
-```
-
-Model specifies the model to use for the query. This is useful when the model can't be inferred from other methods.
-
-Parameters:
-
-- value: Pointer to the model struct or its instance
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Model(&User{}).Where("active = ?", true).Count(&count)
-```
-
-<a name="QueryBuilder.Not"></a>
-### func \(\*QueryBuilder\) [Not](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L122>)
-
-```go
-func (qb *QueryBuilder) Not(query interface{}, args ...interface{}) *QueryBuilder
-```
-
-Not adds a NOT condition to the query. It negates the specified condition.
-
-Parameters:
-
-- query: Condition string with optional placeholders or a map of conditions
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Not("status = ?", "deleted")
-```
-
-<a name="QueryBuilder.Offset"></a>
-### func \(\*QueryBuilder\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L275>)
-
-```go
-func (qb *QueryBuilder) Offset(offset int) *QueryBuilder
-```
-
-Offset sets the number of records to skip. It is typically used with Limit for pagination.
-
-Parameters:
-
-- offset: Number of records to skip
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Offset(20).Limit(10) // Skip 20 records and return the next 10
-```
-
-<a name="QueryBuilder.OnConflict"></a>
-### func \(\*QueryBuilder\) [OnConflict](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L662>)
-
-```go
-func (qb *QueryBuilder) OnConflict(onConflict clause.OnConflict) *QueryBuilder
-```
-
-OnConflict adds an ON DUPLICATE KEY UPDATE clause for UPSERT operations. This handles conflicts during INSERT operations by updating existing records.
-
-Parameters:
-
-- onConflict: ON CONFLICT clause configuration
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.OnConflict(clause.OnConflict{
-    Columns:   []clause.Column{{Name: "email"}},
-    DoUpdates: clause.AssignmentColumns([]string{"name", "updated_at"}),
-}).Create(&user)
-```
-
-<a name="QueryBuilder.Or"></a>
-### func \(\*QueryBuilder\) [Or](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L105>)
-
-```go
-func (qb *QueryBuilder) Or(query interface{}, args ...interface{}) *QueryBuilder
-```
-
-Or adds an OR condition to the query. It combines with previous conditions using OR logic.
-
-Parameters:
-
-- query: Condition string with optional placeholders or a map of conditions
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Where("status = ?", "active").Or("status = ?", "pending")
-```
-
-<a name="QueryBuilder.Order"></a>
-### func \(\*QueryBuilder\) [Order](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L244>)
-
-```go
-func (qb *QueryBuilder) Order(value interface{}) *QueryBuilder
-```
-
-Order adds an ORDER BY clause to the query. It is used to sort the result set.
-
-Parameters:
-
-- value: ORDER BY expression
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Order("created_at DESC")
-qb.Order("age ASC, name DESC")
-```
-
-<a name="QueryBuilder.Pluck"></a>
-### func \(\*QueryBuilder\) [Pluck](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L474>)
-
-```go
-func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error)
-```
-
-Pluck queries a single column and scans the results into a slice. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- column: Name of the column to query
-- dest: Pointer to a slice where results will be stored
-
-Returns:
-
-- int64: Number of rows found and processed
-- error: GORM error if the query fails, nil on success
-
-Example:
-
-```
-var emails []string
-rowsFound, err := qb.Where("department = ?", "Engineering").Pluck("email", &emails)
-if err != nil {
-    return err
-}
-fmt.Printf("Found %d email addresses\n", rowsFound)
-```
-
-<a name="QueryBuilder.Preload"></a>
-### func \(\*QueryBuilder\) [Preload](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L193>)
-
-```go
-func (qb *QueryBuilder) Preload(query string, args ...interface{}) *QueryBuilder
-```
-
-Preload preloads associations for the query results. This is used to eagerly load related models to avoid N\+1 query problems.
-
-Parameters:
-
-- query: Name of the association to preload
-- args: Optional conditions for the preloaded association
-
-Return the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Preload("Orders")
-qb.Preload("Orders", "state = ?", "paid")
-```
-
-<a name="QueryBuilder.QueryRow"></a>
-### func \(\*QueryBuilder\) [QueryRow](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/row_scanner.go#L36>)
-
-```go
-func (qb *QueryBuilder) QueryRow() RowScanner
-```
-
-QueryRow executes a query expected to return a single row and returns a RowScanner for it. This method is optimized for queries that return exactly one row of data and provides a simplified interface for scanning the values from that row.
-
-<a name="QueryBuilder.QueryRows"></a>
-### func \(\*QueryBuilder\) [QueryRows](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/row_scanner.go#L46>)
-
-```go
-func (qb *QueryBuilder) QueryRows() (RowsScanner, error)
-```
-
-QueryRows executes a query that returns multiple rows and returns a RowsScanner for them. This method provides an iterator\-style interface for processing multiple rows returned by a query, allowing for efficient traversal of large result sets.
-
-Returns a RowsScanner and a GORM error if the query fails.
-
-<a name="QueryBuilder.Raw"></a>
-### func \(\*QueryBuilder\) [Raw](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L292>)
-
-```go
-func (qb *QueryBuilder) Raw(sql string, values ...interface{}) *QueryBuilder
-```
-
-Raw executes raw SQL as part of the query. It provides full SQL flexibility when needed.
-
-Parameters:
-
-- SQL: Raw SQL statement with optional placeholders
-- values: Arguments for any placeholders in the SQL
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Raw("SELECT * FROM users WHERE created_at > ?", time.Now().AddDate(0, -1, 0))
-```
-
-<a name="QueryBuilder.RightJoin"></a>
-### func \(\*QueryBuilder\) [RightJoin](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L174>)
-
-```go
-func (qb *QueryBuilder) RightJoin(query string, args ...interface{}) *QueryBuilder
-```
-
-RightJoin adds a RIGHT JOIN clause to the query. It retrieves all records from the right table and matching records from the left table.
-
-Parameters:
-
-- query: JOIN condition string without the "RIGHT JOIN" prefix
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.RightJoin("orders ON orders.user_id = users.id")
-```
-
-<a name="QueryBuilder.Scan"></a>
-### func \(\*QueryBuilder\) [Scan](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L326>)
-
-```go
-func (qb *QueryBuilder) Scan(dest interface{}) error
-```
-
-Scan scans the result into the destination struct or slice. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- dest: Pointer to the struct or slice where results will be stored
-
-Returns a GORM error if the query fails or nil on success. Use MariaDB.TranslateError\(\) to convert to standardized error types.
-
-Example:
-
-```
-var result struct{ Count int }
-err := qb.Raw("SELECT COUNT(*) as count FROM users").Scan(&result)
-```
-
-<a name="QueryBuilder.ScanRow"></a>
-### func \(\*QueryBuilder\) [ScanRow](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/row_scanner.go#L57>)
-
-```go
-func (qb *QueryBuilder) ScanRow(dest interface{}) error
-```
-
-ScanRow is a convenience method to scan a single row directly into a struct. This is a higher\-level alternative to QueryRow that automatically maps column values to struct fields based on naming conventions or field tags. It's useful when you need to map a row to a predefined data structure.
-
-Returns a GORM error if the scan fails or nil on success.
-
-<a name="QueryBuilder.Scopes"></a>
-### func \(\*QueryBuilder\) [Scopes](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L554>)
-
-```go
-func (qb *QueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) *QueryBuilder
-```
-
-Scopes applies one or more scopes to the query. Scopes are reusable query conditions that can be applied to multiple queries.
-
-Parameters:
-
-- funcs: One or more scope functions that modify the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-// Define scopes
-func ActiveUsers(db *gorm.DB) *gorm.DB {
-    return db.Where("active = ?", true)
-}
-func AdultUsers(db *gorm.DB) *gorm.DB {
-    return db.Where("age >= ?", 18)
-}
-
-// Use scopes
-qb.Scopes(ActiveUsers, AdultUsers).Find(&users)
-qb.Scopes(ActiveUsers).Count(&count)
-```
-
-<a name="QueryBuilder.Select"></a>
-### func \(\*QueryBuilder\) [Select](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L70>)
-
-```go
-func (qb *QueryBuilder) Select(query interface{}, args ...interface{}) *QueryBuilder
-```
-
-Select specifies fields to be selected in the query. It corresponds to the SQL SELECT clause.
-
-Parameters:
-
-- query: Field selection string or raw SQL expression
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Select("id, name, email")
-qb.Select("COUNT(*) as user_count")
-```
-
-<a name="QueryBuilder.Table"></a>
-### func \(\*QueryBuilder\) [Table](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L512>)
-
-```go
-func (qb *QueryBuilder) Table(name string) *QueryBuilder
-```
-
-Table specifies the table name for the query. This overrides the default table name derived from the model.
-
-Parameters:
-
-- name: Table name to use for the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Table("users_archive").Where("deleted_at IS NOT NULL").Find(&users)
-qb.Table("custom_table_name").Count(&count)
-qb.Table("user_stats").Select("department, COUNT(*) as count").Group("department").Scan(&stats)
-```
-
-<a name="QueryBuilder.ToSubquery"></a>
-### func \(\*QueryBuilder\) [ToSubquery](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L838>)
-
-```go
-func (qb *QueryBuilder) ToSubquery() *gorm.DB
-```
-
-ToSubquery returns the underlying GORM DB for use as a subquery and releases the lock. This method is specifically designed for creating subqueries that can be passed to Where\(\), Having\(\), or other clauses that accept subqueries.
-
-Important: This method releases the lock immediately, so the returned \*gorm.DB should be used as a subquery argument right away.
-
-Returns:
-
-- \*gorm.DB: The underlying GORM DB instance configured with the query chain
-
-Example:
-
-```
-// Find users whose email is in a subquery of active accounts
-activeEmails := db.Query(ctx).
-    Model(&Account{}).
-    Select("email").
-    Where("status = ?", "active").
-    ToSubquery()
-
 var users []User
 err := db.Query(ctx).
-    Where("email IN (?)", activeEmails).
+    Where("age > ?", 18).
+    Order("created_at DESC").
+    Limit(10).
     Find(&users)
 ```
 
-Complex example with multiple subqueries:
-
-```
-// Find stages with no files
-stageIDsWithFiles := db.Query(ctx).
-    Model(&File{}).
-    Select("DISTINCT stage_id").
-    ToSubquery()
-
-err := db.Query(ctx).
-    Model(&Stage{}).
-    Where("stage_id NOT IN (?)", stageIDsWithFiles).
-    Find(&stages)
-```
-
-<a name="QueryBuilder.Unscoped"></a>
-### func \(\*QueryBuilder\) [Unscoped](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L528>)
-
 ```go
-func (qb *QueryBuilder) Unscoped() *QueryBuilder
-```
+type QueryBuilder interface {
+    // Query modifiers - these return QueryBuilder for chaining
+    Select(query interface{}, args ...interface{}) QueryBuilder
+    Where(query interface{}, args ...interface{}) QueryBuilder
+    Or(query interface{}, args ...interface{}) QueryBuilder
+    Not(query interface{}, args ...interface{}) QueryBuilder
+    Joins(query string, args ...interface{}) QueryBuilder
+    LeftJoin(query string, args ...interface{}) QueryBuilder
+    RightJoin(query string, args ...interface{}) QueryBuilder
+    Preload(query string, args ...interface{}) QueryBuilder
+    Group(query string) QueryBuilder
+    Having(query interface{}, args ...interface{}) QueryBuilder
+    Order(value interface{}) QueryBuilder
+    Limit(limit int) QueryBuilder
+    Offset(offset int) QueryBuilder
+    Raw(sql string, values ...interface{}) QueryBuilder
+    Model(value interface{}) QueryBuilder
+    Distinct(args ...interface{}) QueryBuilder
+    Table(name string) QueryBuilder
+    Unscoped() QueryBuilder
+    Scopes(funcs ...func(*gorm.DB) *gorm.DB) QueryBuilder
 
-Unscoped disables the default scope for the query. This allows querying soft\-deleted records or bypassing other default scopes. Commonly used with GORM's soft delete feature.
+    // Locking methods
+    ForUpdate() QueryBuilder
+    ForShare() QueryBuilder
+    ForUpdateSkipLocked() QueryBuilder
+    ForShareSkipLocked() QueryBuilder
+    ForUpdateNoWait() QueryBuilder
+    ForNoKeyUpdate() QueryBuilder // PostgreSQL-specific (no-op in MariaDB)
+    ForKeyShare() QueryBuilder    // PostgreSQL-specific (no-op in MariaDB)
 
-Returns the QueryBuilder for method chaining.
+    // Conflict handling and returning
+    OnConflict(onConflict interface{}) QueryBuilder
+    Returning(columns ...string) QueryBuilder
 
-Example:
+    // Custom clauses
+    Clauses(conds ...interface{}) QueryBuilder
 
-```
-qb.Unscoped().Where("name = ?", "John").Find(&users) // Includes soft-deleted records
-qb.Unscoped().Delete(&user) // Permanently deletes the record
-qb.Unscoped().Count(&count) // Counts all records including soft-deleted
-```
+    // Terminal operations - these execute the query
+    Scan(dest interface{}) error
+    Find(dest interface{}) error
+    First(dest interface{}) error
+    Last(dest interface{}) error
+    Count(count *int64) error
+    Updates(values interface{}) (int64, error)
+    Delete(value interface{}) (int64, error)
+    Pluck(column string, dest interface{}) (int64, error)
+    Create(value interface{}) (int64, error)
+    CreateInBatches(value interface{}, batchSize int) (int64, error)
+    FirstOrInit(dest interface{}, conds ...interface{}) error
+    FirstOrCreate(dest interface{}, conds ...interface{}) error
 
-<a name="QueryBuilder.Updates"></a>
-### func \(\*QueryBuilder\) [Updates](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L422>)
-
-```go
-func (qb *QueryBuilder) Updates(values interface{}) (int64, error)
-```
-
-Updates updates records that match the query conditions. This is a terminal method that executes the query and releases the mutex lock.
-
-Parameters:
-
-- values: Map or struct with the fields to update
-
-Returns:
-
-- int64: Number of rows affected by the update operation
-- error: GORM error if the update fails, nil on success
-
-Example:
-
-```
-rowsAffected, err := qb.Where("expired = ?", true).Updates(map[string]interface{}{"active": false})
-if err != nil {
-    return err
+    // Utility methods
+    Done()                // Release resources (like read locks)
+    ToSubquery() *gorm.DB // Convert to GORM subquery
 }
-fmt.Printf("Updated %d rows\n", rowsAffected)
-```
-
-<a name="QueryBuilder.Where"></a>
-### func \(\*QueryBuilder\) [Where](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L88>)
-
-```go
-func (qb *QueryBuilder) Where(query interface{}, args ...interface{}) *QueryBuilder
-```
-
-Where adds a WHERE condition to the query. Multiple Where calls are combined with AND logic.
-
-Parameters:
-
-- query: Condition string with optional placeholders or a map of conditions
-- args: Arguments for any placeholders in the query
-
-Returns the QueryBuilder for method chaining.
-
-Example:
-
-```
-qb.Where("age > ?", 18)
-qb.Where("status = ?", "active")
 ```
 
 <a name="RowScanner"></a>
