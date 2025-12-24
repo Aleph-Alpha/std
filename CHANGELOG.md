@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/Aleph-Alpha/std/compare/v0.11.0...v0.11.1) (2025-12-24)
+
+
+### Bug Fixes
+
+* Refactor to Interface-First Design for Postgres and MariaDB ([#36](https://github.com/Aleph-Alpha/std/issues/36)) ([e3be51a](https://github.com/Aleph-Alpha/std/commit/e3be51aa1b019a73606b34ec43f4b47c3a4ef434))
+
 ## [0.11.0](https://github.com/Aleph-Alpha/std/compare/v0.10.0...v0.11.0) (2025-12-24)
 
 
