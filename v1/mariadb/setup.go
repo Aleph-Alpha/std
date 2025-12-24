@@ -31,8 +31,8 @@ type MariaDB struct {
 // for connection monitoring and recovery. If the initial connection fails,
 // it returns an error.
 //
-// Returns Client interface, not *MariaDB concrete type.
-func NewMariaDB(cfg Config) (Client, error) {
+// Returns *MariaDB concrete type (following Go best practice: "accept interfaces, return structs").
+func NewMariaDB(cfg Config) (*MariaDB, error) {
 	conn, err := connectToMariaDB(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error in connecting to MariaDB after all retries: %w", err)

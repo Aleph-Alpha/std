@@ -12,7 +12,13 @@ import (
 // and sets up lifecycle hooks to properly initialize and shut down
 // the database connection.
 //
-// This module provides Client interface, not *Postgres concrete type.
+// This module provides:
+//   - *Postgres (concrete type) - for direct use and lifecycle management
+//   - Client (interface) - for consumers who want database abstraction
+//
+// Consumers can inject either:
+//   - *Postgres for full access to all methods
+//   - Client for interface-based programming
 var FXModule = fx.Module("postgres",
 	fx.Provide(
 		NewPostgresClientWithDI, // Returns *Postgres for internal lifecycle
@@ -52,8 +58,8 @@ type PostgresParams struct {
 //     automatic injection of these dependencies.
 //
 // Returns:
-//   - *Postgres: A fully initialized Postgres Client (concrete type for lifecycle management).
-//     To use the interface, inject Client instead.
+//   - *Postgres: A fully initialized Postgres Client (concrete type).
+//     The FX module also provides this as Client interface for consumers who want abstraction.
 //
 // Example usage with fx:
 //
@@ -69,12 +75,7 @@ type PostgresParams struct {
 // This function delegates to the standard NewPostgres function, maintaining the same
 // initialization logic while enabling seamless integration with dependency injection.
 func NewPostgresClientWithDI(params PostgresParams) (*Postgres, error) {
-	client, err := NewPostgres(params.Config)
-	if err != nil {
-		return nil, err
-	}
-	// Return concrete type for lifecycle management
-	return client.(*Postgres), nil
+	return NewPostgres(params.Config)
 }
 
 // PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management.

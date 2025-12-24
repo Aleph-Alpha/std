@@ -12,7 +12,13 @@ import (
 // and sets up lifecycle hooks to properly initialize and shut down
 // the database connection.
 //
-// This module provides Client interface, not *MariaDB concrete type.
+// This module provides:
+//   - *MariaDB (concrete type) - for direct use and lifecycle management
+//   - Client (interface) - for consumers who want database abstraction
+//
+// Consumers can inject either:
+//   - *MariaDB for full access to all methods
+//   - Client for interface-based programming
 var FXModule = fx.Module("mariadb",
 	fx.Provide(
 		NewMariaDBClientWithDI, // Returns *MariaDB for internal lifecycle
@@ -52,8 +58,8 @@ type MariaDBParams struct {
 //     automatic injection of these dependencies.
 //
 // Returns:
-//   - *MariaDB: A fully initialized MariaDB Client (concrete type for lifecycle management).
-//     To use the interface, inject Client instead.
+//   - *MariaDB: A fully initialized MariaDB Client (concrete type).
+//     The FX module also provides this as Client interface for consumers who want abstraction.
 //
 // Example usage with fx:
 //
@@ -69,12 +75,7 @@ type MariaDBParams struct {
 // This function delegates to the standard NewMariaDB function, maintaining the same
 // initialization logic while enabling seamless integration with dependency injection.
 func NewMariaDBClientWithDI(params MariaDBParams) (*MariaDB, error) {
-	client, err := NewMariaDB(params.Config)
-	if err != nil {
-		return nil, err
-	}
-	// Return concrete type for lifecycle management
-	return client.(*MariaDB), nil
+	return NewMariaDB(params.Config)
 }
 
 // MariaDBLifeCycleParams groups the dependencies needed for MariaDB lifecycle management.

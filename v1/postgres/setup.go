@@ -31,8 +31,8 @@ type Postgres struct {
 // for connection monitoring and recovery. If the initial connection fails,
 // it logs a fatal error and terminates.
 //
-// Returns Client interface, not *Postgres concrete type.
-func NewPostgres(cfg Config) (Client, error) {
+// Returns *Postgres concrete type (following Go best practice: "accept interfaces, return structs").
+func NewPostgres(cfg Config) (*Postgres, error) {
 	conn, err := connectToPostgres(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error in connecting to postgres after all retries: %w", err)
