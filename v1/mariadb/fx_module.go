@@ -144,23 +144,30 @@ func RegisterMariaDBLifecycle(params MariaDBLifeCycleParams) {
 }
 
 func (m *MariaDB) GracefulShutdown() error {
-	m.closeShutdownOnce.Do(func() {
-		close(m.shutdownSignal)
-	})
-
-	m.closeRetryChanOnce.Do(func() {
-		close(m.retryChanSignal)
-	})
-
-	m.mu.Lock()
-	// Close the database connection
-	sqlDB, err := m.DB().DB()
-	if err == nil {
-		err := sqlDB.Close()
-		if err != nil {
-			return err
-		}
+	if m.shutdownSignal != nil {
+		m.closeShutdownOnce.Do(func() {
+			close(m.shutdownSignal)
+		})
 	}
-	m.mu.Unlock()
+
+	if m.retryChanSignal != nil {
+		m.closeRetryChanOnce.Do(func() {
+			close(m.retryChanSignal)
+		})
+	}
+
+	// Snapshot the connection; do not hold any package-level lock while closing.
+	dbConn := m.DB()
+	if dbConn == nil {
+		return nil
+	}
+
+	sqlDB, err := dbConn.DB()
+	if err != nil {
+		return nil
+	}
+	if err := sqlDB.Close(); err != nil {
+		return err
+	}
 	return nil
 }

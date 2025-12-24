@@ -17,8 +17,12 @@ Core Features:
 - Transaction support with automatic rollback on errors
 - Schema migration tools
 - Row scanning utilities
-- Basic CRUD operations with thread safety
+- Basic CRUD operations
 - Query builder for complex queries
+
+### Concurrency model
+
+The active \`\*gorm.DB\` connection pointer is stored in an \`atomic.Pointer\`. Calls that need a DB snapshot simply load the pointer and run the operation without holding any package\-level locks. Reconnection swaps the pointer atomically.
 
 Basic Usage:
 
@@ -55,13 +59,13 @@ if err != nil {
 Transaction Example:
 
 ```
-err = db.Transaction(ctx, func(txDB *mariadb.MariaDB) error {
+err = db.Transaction(ctx, func(tx mariadb.Client) error {
 	// Execute multiple queries in a transaction
-	if err := txDB.Create(ctx, &user); err != nil {
+	if err := tx.Create(ctx, &user); err != nil {
 		return err  // Transaction will be rolled back
 	}
 
-	if err := txDB.Create(ctx, &userProfile); err != nil {
+	if err := tx.Create(ctx, &userProfile); err != nil {
 		return err  // Transaction will be rolled back
 	}
 
@@ -194,7 +198,7 @@ Performance Considerations:
 
 Thread Safety:
 
-All methods on the MariaDB interface are safe for concurrent use by multiple goroutines. Internal mutexes ensure thread\-safe access to the database connection.
+All methods on the MariaDB interface are safe for concurrent use by multiple goroutines. The connection pointer is read via an atomic load and can be swapped atomically during reconnection.
 
 Package mariadb provides MariaDB/MySQL database operations with an interface\-first design. The interfaces defined here \(Client, QueryBuilder\) provide a consistent API that can be implemented by different database packages.
 
@@ -203,13 +207,13 @@ Package mariadb provides MariaDB/MySQL database operations with an interface\-fi
 - [Variables](<#variables>)
 - [func RegisterMariaDBLifecycle\(params MariaDBLifeCycleParams\)](<#RegisterMariaDBLifecycle>)
 - [type Client](<#Client>)
-  - [func NewMariaDB\(cfg Config\) \(Client, error\)](<#NewMariaDB>)
   - [func ProvideClient\(db \*MariaDB\) Client](<#ProvideClient>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
 - [type ConnectionDetails](<#ConnectionDetails>)
 - [type ErrorCategory](<#ErrorCategory>)
 - [type MariaDB](<#MariaDB>)
+  - [func NewMariaDB\(cfg Config\) \(\*MariaDB, error\)](<#NewMariaDB>)
   - [func NewMariaDBClientWithDI\(params MariaDBParams\) \(\*MariaDB, error\)](<#NewMariaDBClientWithDI>)
   - [func \(p \*MariaDB\) AutoMigrate\(models ...interface\{\}\) error](<#MariaDB.AutoMigrate>)
   - [func \(m \*MariaDB\) Count\(ctx context.Context, model interface\{\}, count \*int64, conditions ...interface\{\}\) error](<#MariaDB.Count>)
@@ -406,7 +410,15 @@ var (
 
 <a name="FXModule"></a>FXModule is an fx module that provides the MariaDB database component. It registers the MariaDB constructor for dependency injection and sets up lifecycle hooks to properly initialize and shut down the database connection.
 
-This module provides Client interface, not \*MariaDB concrete type.
+This module provides:
+
+- \*MariaDB \(concrete type\) \- for direct use and lifecycle management
+- Client \(interface\) \- for consumers who want database abstraction
+
+Consumers can inject either:
+
+- \*MariaDB for full access to all methods
+- Client for interface\-based programming
 
 ```go
 var FXModule = fx.Module("mariadb",
@@ -422,7 +434,7 @@ var FXModule = fx.Module("mariadb",
 ```
 
 <a name="RegisterMariaDBLifecycle"></a>
-## func [RegisterMariaDBLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L102>)
+## func [RegisterMariaDBLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L103>)
 
 ```go
 func RegisterMariaDBLifecycle(params MariaDBLifeCycleParams)
@@ -479,19 +491,8 @@ type Client interface {
 }
 ```
 
-<a name="NewMariaDB"></a>
-### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L35>)
-
-```go
-func NewMariaDB(cfg Config) (Client, error)
-```
-
-NewMariaDB creates a new MariaDB instance with the provided configuration. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it returns an error.
-
-Returns Client interface, not \*MariaDB concrete type.
-
 <a name="ProvideClient"></a>
-### func [ProvideClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L29>)
+### func [ProvideClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L35>)
 
 ```go
 func ProvideClient(db *MariaDB) Client
@@ -578,18 +579,18 @@ ConnectionDetails holds configuration settings for the database connection pool.
 type ConnectionDetails struct {
     // MaxOpenConns controls the maximum number of open connections to the database.
     // Setting this appropriately helps prevent overwhelming the database with too many connections.
-    // Default is 0 (unlimited).
+    // If set to 0, the package default is used.
     MaxOpenConns int
 
     // MaxIdleConns controls the maximum number of connections in the idle connection pool.
     // A higher value can improve performance under a concurrent load but consumes more resources.
-    // Default is 2.
+    // If set to 0, the package default is used.
     MaxIdleConns int
 
     // ConnMaxLifetime is the maximum amount of time a connection may be reused.
     // Expired connections are closed and removed from the pool during connection acquisition.
     // This helps ensure database-enforced timeouts are respected.
-    // Default is 0 (unlimited).
+    // If set to 0, the package default is used.
     ConnMaxLifetime time.Duration
 }
 ```
@@ -622,19 +623,31 @@ const (
 ```
 
 <a name="MariaDB"></a>
-## type [MariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L18-L27>)
+## type [MariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L20-L28>)
 
-MariaDB is a thread\-safe wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations for MariaDB/MySQL. It guards all database operations with a mutex to ensure thread safety and includes mechanisms for graceful shutdown and connection health monitoring.
+MariaDB is a wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations for MariaDB/MySQL.
+
+Concurrency: the active \`\*gorm.DB\` pointer is stored in an atomic pointer and can be swapped during reconnection without blocking readers.
 
 ```go
 type MariaDB struct {
-    Client *gorm.DB
     // contains filtered or unexported fields
 }
 ```
 
+<a name="NewMariaDB"></a>
+### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L36>)
+
+```go
+func NewMariaDB(cfg Config) (*MariaDB, error)
+```
+
+NewMariaDB creates a new MariaDB instance with the provided configuration. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it returns an error.
+
+Returns \*MariaDB concrete type \(following Go best practice: "accept interfaces, return structs"\).
+
 <a name="NewMariaDBClientWithDI"></a>
-### func [NewMariaDBClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L71>)
+### func [NewMariaDBClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L77>)
 
 ```go
 func NewMariaDBClientWithDI(params MariaDBParams) (*MariaDB, error)
@@ -648,7 +661,7 @@ Parameters:
 
 Returns:
 
-- \*MariaDB: A fully initialized MariaDB Client \(concrete type for lifecycle management\). To use the interface, inject Client instead.
+- \*MariaDB: A fully initialized MariaDB Client \(concrete type\). The FX module also provides this as Client interface for consumers who want abstraction.
 
 Example usage with fx:
 
@@ -666,7 +679,7 @@ app := fx.New(
 This function delegates to the standard NewMariaDB function, maintaining the same initialization logic while enabling seamless integration with dependency injection.
 
 <a name="MariaDB.AutoMigrate"></a>
-### func \(\*MariaDB\) [AutoMigrate](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L99>)
+### func \(\*MariaDB\) [AutoMigrate](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L98>)
 
 ```go
 func (p *MariaDB) AutoMigrate(models ...interface{}) error
@@ -683,7 +696,7 @@ Returns a GORM error if any part of the migration process fails.
 This method is useful during development or for simple applications, but for production systems, explicit migrations are recommended.
 
 <a name="MariaDB.Count"></a>
-### func \(\*MariaDB\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L273>)
+### func \(\*MariaDB\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L255>)
 
 ```go
 func (m *MariaDB) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error
@@ -708,7 +721,7 @@ err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 ```
 
 <a name="MariaDB.Create"></a>
-### func \(\*MariaDB\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L69>)
+### func \(\*MariaDB\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L65>)
 
 ```go
 func (m *MariaDB) Create(ctx context.Context, value interface{}) error
@@ -731,7 +744,7 @@ err := db.Create(ctx, &user)
 ```
 
 <a name="MariaDB.CreateMigration"></a>
-### func \(\*MariaDB\) [CreateMigration](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L454>)
+### func \(\*MariaDB\) [CreateMigration](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L449>)
 
 ```go
 func (p *MariaDB) CreateMigration(migrationsDir, name string, migrationType MigrationType) (string, error)
@@ -763,12 +776,12 @@ if err == nil {
 func (m *MariaDB) DB() *gorm.DB
 ```
 
-DB returns the underlying GORM DB Client instance. This method provides direct access to the database connection while maintaining thread safety through a read lock.
+DB returns the underlying GORM DB Client instance. This method provides direct access to the database connection while maintaining thread safety through an atomic load.
 
 Use this method when you need to perform operations not covered by the wrapper methods or when you need to access specific GORM functionality. Note that direct usage bypasses some of the safety mechanisms, so use it with care.
 
 <a name="MariaDB.Delete"></a>
-### func \(\*MariaDB\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L218>)
+### func \(\*MariaDB\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L204>)
 
 ```go
 func (m *MariaDB) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error)
@@ -803,7 +816,7 @@ rowsAffected, err := db.Delete(ctx, &user)
 ```
 
 <a name="MariaDB.Exec"></a>
-### func \(\*MariaDB\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L248>)
+### func \(\*MariaDB\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L232>)
 
 ```go
 func (m *MariaDB) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error)
@@ -858,7 +871,7 @@ err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 ```
 
 <a name="MariaDB.First"></a>
-### func \(\*MariaDB\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L47>)
+### func \(\*MariaDB\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L45>)
 
 ```go
 func (m *MariaDB) First(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -894,7 +907,7 @@ func (m *MariaDB) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="MariaDB.GetMigrationStatus"></a>
-### func \(\*MariaDB\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L388>)
+### func \(\*MariaDB\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L384>)
 
 ```go
 func (p *MariaDB) GetMigrationStatus(ctx context.Context, migrationsDir string) ([]map[string]interface{}, error)
@@ -921,7 +934,7 @@ if err == nil {
 ```
 
 <a name="MariaDB.GracefulShutdown"></a>
-### func \(\*MariaDB\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L145>)
+### func \(\*MariaDB\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L146>)
 
 ```go
 func (m *MariaDB) GracefulShutdown() error
@@ -957,7 +970,7 @@ func (m *MariaDB) IsTemporary(err error) bool
 IsTemporary returns true if the error is likely temporary and might resolve itself
 
 <a name="MariaDB.MigrateDown"></a>
-### func \(\*MariaDB\) [MigrateDown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L251>)
+### func \(\*MariaDB\) [MigrateDown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L248>)
 
 ```go
 func (p *MariaDB) MigrateDown(ctx context.Context, migrationsDir string) error
@@ -979,7 +992,7 @@ err := db.MigrateDown(ctx, "./migrations")
 ```
 
 <a name="MariaDB.MigrateUp"></a>
-### func \(\*MariaDB\) [MigrateUp](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L152>)
+### func \(\*MariaDB\) [MigrateUp](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L150>)
 
 ```go
 func (p *MariaDB) MigrateUp(ctx context.Context, migrationsDir string) error
@@ -1001,7 +1014,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="MariaDB.MonitorConnection"></a>
-### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L186>)
+### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L185>)
 
 ```go
 func (m *MariaDB) MonitorConnection(ctx context.Context)
@@ -1018,7 +1031,7 @@ The function respects context cancellation and shutdown signals, ensuring proper
 func (m *MariaDB) Query(ctx context.Context) QueryBuilder
 ```
 
-Query provides a flexible way to build complex queries. It returns a QueryBuilder interface which can be used to chain query methods in a fluent interface. The method acquires a read lock on the database connection that will be automatically released when a terminal method is called or Done\(\) is invoked.
+Query provides a flexible way to build complex queries. It returns a QueryBuilder interface which can be used to chain query methods in a fluent interface. The builder snapshots the current \`\*gorm.DB\` connection and does not hold any package\-level locks while the chain is being built or executed.
 
 Parameters:
 
@@ -1043,7 +1056,7 @@ if err != nil {
 ```
 
 <a name="MariaDB.RetryConnection"></a>
-### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L144>)
+### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L145>)
 
 ```go
 func (m *MariaDB) RetryConnection(ctx context.Context)
@@ -1054,7 +1067,7 @@ RetryConnection continuously attempts to reconnect to the MariaDB database when 
 It implements two nested loops: \- The outer loop waits for retry signals \- The inner loop attempts reconnection until successful
 
 <a name="MariaDB.Save"></a>
-### func \(\*MariaDB\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L91>)
+### func \(\*MariaDB\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L85>)
 
 ```go
 func (m *MariaDB) Save(ctx context.Context, value interface{}) error
@@ -1112,7 +1125,7 @@ TranslateError converts GORM/database\-specific errors into standardized applica
 It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="MariaDB.Update"></a>
-### func \(\*MariaDB\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L122>)
+### func \(\*MariaDB\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L114>)
 
 ```go
 func (m *MariaDB) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error)
@@ -1146,7 +1159,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="MariaDB.UpdateColumn"></a>
-### func \(\*MariaDB\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L153>)
+### func \(\*MariaDB\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L143>)
 
 ```go
 func (m *MariaDB) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error)
@@ -1178,7 +1191,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="MariaDB.UpdateColumns"></a>
-### func \(\*MariaDB\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L185>)
+### func \(\*MariaDB\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L173>)
 
 ```go
 func (m *MariaDB) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error)
@@ -1212,7 +1225,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="MariaDB.UpdateWhere"></a>
-### func \(\*MariaDB\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L305>)
+### func \(\*MariaDB\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L288>)
 
 ```go
 func (m *MariaDB) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error)
@@ -1248,7 +1261,7 @@ fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="MariaDBLifeCycleParams"></a>
-## type [MariaDBLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L87-L92>)
+## type [MariaDBLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L88-L93>)
 
 MariaDBLifeCycleParams groups the dependencies needed for MariaDB lifecycle management. This struct combines all the components required to properly manage the lifecycle of a MariaDB Client within an fx application, including startup, monitoring, and graceful shutdown.
 
@@ -1264,7 +1277,7 @@ type MariaDBLifeCycleParams struct {
 ```
 
 <a name="MariaDBParams"></a>
-## type [MariaDBParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L39-L43>)
+## type [MariaDBParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L45-L49>)
 
 MariaDBParams groups the dependencies needed to create a MariaDB Client via dependency injection. This struct is designed to work with Uber's fx dependency injection framework and provides the necessary parameters for initializing a MariaDB database connection.
 
@@ -1279,7 +1292,7 @@ type MariaDBParams struct {
 ```
 
 <a name="Migration"></a>
-## type [Migration](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L42-L58>)
+## type [Migration](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L41-L57>)
 
 Migration represents a single database migration with all its metadata and content. Each migration contains the SQL to execute and information about its purpose and identity.
 
@@ -1304,7 +1317,7 @@ type Migration struct {
 ```
 
 <a name="MigrationDirection"></a>
-## type [MigrationDirection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L30>)
+## type [MigrationDirection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L29>)
 
 MigrationDirection specifies the direction of the migration, indicating whether it's applying a change or reverting one.
 
@@ -1325,7 +1338,7 @@ const (
 ```
 
 <a name="MigrationHistoryRecord"></a>
-## type [MigrationHistoryRecord](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L63-L87>)
+## type [MigrationHistoryRecord](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L62-L86>)
 
 MigrationHistoryRecord represents a record in the migration history table. It tracks when and how each migration was applied, enabling the system to determine which migrations have been run and providing an audit trail.
 
@@ -1358,7 +1371,7 @@ type MigrationHistoryRecord struct {
 ```
 
 <a name="MigrationType"></a>
-## type [MigrationType](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L16>)
+## type [MigrationType](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L15>)
 
 MigrationType defines the type of migration, categorizing the purpose of the change. This helps track and organize migrations based on their impact on the database.
 
@@ -1450,7 +1463,7 @@ type QueryBuilder interface {
     FirstOrCreate(dest interface{}, conds ...interface{}) error
 
     // Utility methods
-    Done()                // Release resources (like read locks)
+    Done()                // Finalize builder (currently a no-op)
     ToSubquery() *gorm.DB // Convert to GORM subquery
 }
 ```

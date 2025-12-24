@@ -12,13 +12,13 @@ import (
 // It enables transaction-scoped operations while maintaining the connection monitoring
 // and safety features of the MariaDB wrapper.
 func (m *MariaDB) cloneWithTx(tx *gorm.DB) *MariaDB {
-	return &MariaDB{
-		Client:          tx,
-		cfg:             m.cfg,
-		mu:              m.mu, // shared mutex is fine
-		shutdownSignal:  m.shutdownSignal,
-		retryChanSignal: m.retryChanSignal,
+	db := &MariaDB{
+		cfg: m.cfg,
 	}
+	// Avoid sharing lifecycle channels with the parent; tx clients should not be able
+	// to shut down monitoring goroutines.
+	db.client.Store(tx)
+	return db
 }
 
 // Transaction executes the given function within a database transaction.
@@ -39,10 +39,8 @@ func (m *MariaDB) cloneWithTx(tx *gorm.DB) *MariaDB {
 //		return tx.Create(ctx, userProfile)
 //	})
 func (m *MariaDB) Transaction(ctx context.Context, fn func(tx Client) error) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.Client.WithContext(ctx).Transaction(func(txDB *gorm.DB) error {
+	db := m.DB().WithContext(ctx)
+	return db.Transaction(func(txDB *gorm.DB) error {
 		dbWithTx := m.cloneWithTx(txDB)
 		return fn(dbWithTx) // Pass as Client interface
 	})

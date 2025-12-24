@@ -232,8 +232,8 @@ func TestMariaDBWithFXModule(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check if mariadb was populated
-	if mariadb == nil || mariadb.Client == nil {
-		t.Fatal("Failed to initialize MariaDB Client - connection likely failed")
+	if mariadb == nil || mariadb.DB() == nil {
+		t.Fatal("Failed to initialize MariaDB client - connection likely failed")
 	}
 
 	// Verify the connection is working using the DB() method

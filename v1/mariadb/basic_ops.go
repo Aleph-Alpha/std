@@ -20,10 +20,8 @@ import (
 //	var users []User
 //	err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 func (m *MariaDB) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.Client.WithContext(ctx).Find(dest, conditions...).Error
+	db := m.DB().WithContext(ctx)
+	return db.Find(dest, conditions...).Error
 }
 
 // First retrieves the first record that matches the given conditions.
@@ -45,10 +43,8 @@ func (m *MariaDB) Find(ctx context.Context, dest interface{}, conditions ...inte
 //	    // Handle not found
 //	}
 func (m *MariaDB) First(ctx context.Context, dest interface{}, conditions ...interface{}) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.Client.WithContext(ctx).First(dest, conditions...).Error
+	db := m.DB().WithContext(ctx)
+	return db.First(dest, conditions...).Error
 }
 
 // Create inserts a new record into the database.
@@ -67,10 +63,8 @@ func (m *MariaDB) First(ctx context.Context, dest interface{}, conditions ...int
 //	user := User{Name: "John", Email: "john@example.com"}
 //	err := db.Create(ctx, &user)
 func (m *MariaDB) Create(ctx context.Context, value interface{}) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.Client.WithContext(ctx).Create(value).Error
+	db := m.DB().WithContext(ctx)
+	return db.Create(value).Error
 }
 
 // Save updates the database record if the primary key exists,
@@ -89,10 +83,8 @@ func (m *MariaDB) Create(ctx context.Context, value interface{}) error {
 //	user.Name = "Updated Name"
 //	err := db.Save(ctx, &user)
 func (m *MariaDB) Save(ctx context.Context, value interface{}) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.Client.WithContext(ctx).Save(value).Error
+	db := m.DB().WithContext(ctx)
+	return db.Save(value).Error
 }
 
 // Update updates records that match the given model's non-zero fields or primary key.
@@ -120,10 +112,8 @@ func (m *MariaDB) Save(ctx context.Context, value interface{}) error {
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (m *MariaDB) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	result := m.Client.WithContext(ctx).Model(model).Updates(attrs)
+	db := m.DB().WithContext(ctx)
+	result := db.Model(model).Updates(attrs)
 
 	return result.RowsAffected, result.Error
 }
@@ -151,10 +141,8 @@ func (m *MariaDB) Update(ctx context.Context, model interface{}, attrs interface
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (m *MariaDB) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	result := m.Client.WithContext(ctx).Model(model).Update(columnName, value)
+	db := m.DB().WithContext(ctx)
+	result := db.Model(model).Update(columnName, value)
 
 	return result.RowsAffected, result.Error
 }
@@ -183,10 +171,8 @@ func (m *MariaDB) UpdateColumn(ctx context.Context, model interface{}, columnNam
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (m *MariaDB) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	result := m.Client.WithContext(ctx).Model(model).Updates(columnValues)
+	db := m.DB().WithContext(ctx)
+	result := db.Model(model).Updates(columnValues)
 
 	return result.RowsAffected, result.Error
 }
@@ -216,10 +202,8 @@ func (m *MariaDB) UpdateColumns(ctx context.Context, model interface{}, columnVa
 //	user := User{ID: 1}
 //	rowsAffected, err := db.Delete(ctx, &user)
 func (m *MariaDB) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	result := m.Client.WithContext(ctx).Delete(value, conditions...)
+	db := m.DB().WithContext(ctx)
+	result := db.Delete(value, conditions...)
 
 	return result.RowsAffected, result.Error
 }
@@ -246,10 +230,8 @@ func (m *MariaDB) Delete(ctx context.Context, value interface{}, conditions ...i
 //	}
 //	fmt.Printf("Updated %d users\n", rowsAffected)
 func (m *MariaDB) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	result := m.Client.WithContext(ctx).Exec(sql, values...)
+	db := m.DB().WithContext(ctx)
+	result := db.Exec(sql, values...)
 
 	return result.RowsAffected, result.Error
 }
@@ -271,10 +253,11 @@ func (m *MariaDB) Exec(ctx context.Context, sql string, values ...interface{}) (
 //	var count int64
 //	err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 func (m *MariaDB) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.Client.WithContext(ctx).Model(model).Where(conditions[0], conditions[1:]...).Count(count).Error
+	db := m.DB().WithContext(ctx).Model(model)
+	if len(conditions) == 0 {
+		return db.Count(count).Error
+	}
+	return db.Where(conditions[0], conditions[1:]...).Count(count).Error
 }
 
 // UpdateWhere updates records that match the specified WHERE condition.
@@ -303,10 +286,8 @@ func (m *MariaDB) Count(ctx context.Context, model interface{}, count *int64, co
 //	}
 //	fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 func (m *MariaDB) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	result := m.Client.WithContext(ctx).Model(model).Where(condition, args...).Updates(attrs)
+	db := m.DB().WithContext(ctx)
+	result := db.Model(model).Where(condition, args...).Updates(attrs)
 
 	return result.RowsAffected, result.Error
 }

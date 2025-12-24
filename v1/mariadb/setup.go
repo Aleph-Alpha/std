@@ -5,20 +5,21 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
-// MariaDB is a thread-safe wrapper around gorm.DB that provides connection monitoring,
+// MariaDB is a wrapper around gorm.DB that provides connection monitoring,
 // automatic reconnection, and standardized database operations for MariaDB/MySQL.
-// It guards all database operations with a mutex to ensure thread safety
-// and includes mechanisms for graceful shutdown and connection health monitoring.
+//
+// Concurrency: the active `*gorm.DB` pointer is stored in an atomic pointer and can be
+// swapped during reconnection without blocking readers.
 type MariaDB struct {
-	Client          *gorm.DB
 	cfg             Config
-	mu              *sync.RWMutex
+	client          atomic.Pointer[gorm.DB]
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
 
@@ -38,13 +39,13 @@ func NewMariaDB(cfg Config) (*MariaDB, error) {
 		return nil, fmt.Errorf("error in connecting to MariaDB after all retries: %w", err)
 	}
 
-	return &MariaDB{
-		Client:          conn,
+	db := &MariaDB{
 		cfg:             cfg,
-		mu:              &sync.RWMutex{},
 		shutdownSignal:  make(chan struct{}),
 		retryChanSignal: make(chan error, 1),
-	}, nil
+	}
+	db.client.Store(conn)
+	return db, nil
 }
 
 // connectToMariaDB establishes a connection to the MariaDB/MySQL database using the provided
@@ -165,9 +166,7 @@ outerLoop:
 						time.Sleep(time.Second)
 						continue innerLoop
 					}
-					m.mu.Lock()
-					m.Client = newConn
-					m.mu.Unlock()
+					m.client.Store(newConn)
 					log.Println("INFO: Successfully reconnected to MariaDB/MySQL database")
 					continue outerLoop
 				}
@@ -211,19 +210,17 @@ func (m *MariaDB) MonitorConnection(ctx context.Context) {
 }
 
 // healthCheck performs a health check on the MariaDB database connection.
-// It acquires a read lock to safely access the Client, then attempts to ping
-// the database with a timeout of 5 seconds to verify connectivity.
+// It snapshots the current *gorm.DB, then attempts to ping the database with a timeout
+// of 5 seconds to verify connectivity.
 //
 // It returns nil if the database is healthy, or an error with details about the issue.
 func (m *MariaDB) healthCheck() error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if m.Client == nil {
+	dbConn := m.DB()
+	if dbConn == nil {
 		return fmt.Errorf("database Client is not initialized")
 	}
 
-	db, err := m.Client.DB()
+	db, err := dbConn.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get database instance during health check: %w", err)
 	}

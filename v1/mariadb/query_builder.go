@@ -9,8 +9,8 @@ import (
 
 // Query provides a flexible way to build complex queries.
 // It returns a QueryBuilder interface which can be used to chain query methods in a fluent interface.
-// The method acquires a read lock on the database connection that will be automatically
-// released when a terminal method is called or Done() is invoked.
+// The builder snapshots the current `*gorm.DB` connection and does not hold any package-level
+// locks while the chain is being built or executed.
 //
 // Parameters:
 //   - ctx: Context for the database operation
@@ -32,10 +32,12 @@ import (
 //	    err = db.TranslateError(err) // Optional: translate to standardized error
 //	}
 func (m *MariaDB) Query(ctx context.Context) QueryBuilder {
-	m.mu.RLock() // Will be released when Done() is called
+	// Important: do NOT hold any package-level lock across the query-builder chain.
+	// Long-held locks can stall reconnect/migrations and reduce throughput if terminal ops
+	// are delayed or forgotten.
 	return &mariadbQueryBuilder{
-		db:      m.Client.WithContext(ctx),
-		release: m.mu.RUnlock,
+		db:      m.DB().WithContext(ctx), // snapshot current connection under an atomic load
+		release: func() {},               // no-op; kept to preserve the builder structure
 	}
 }
 
@@ -50,7 +52,7 @@ type mariadbQueryBuilder struct {
 	// db is the underlying GORM DB instance that handles the actual query execution
 	db *gorm.DB
 
-	// release is the function to call to release the mutex lock when done with the query
+	// release finalizes the builder (currently a no-op).
 	release func()
 }
 
@@ -311,7 +313,7 @@ func (qb *mariadbQueryBuilder) Model(value interface{}) QueryBuilder {
 }
 
 // Scan scans the result into the destination struct or slice.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to the struct or slice where results will be stored
@@ -329,7 +331,7 @@ func (qb *mariadbQueryBuilder) Scan(dest interface{}) error {
 }
 
 // Find finds records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to a slice where results will be stored
@@ -347,7 +349,7 @@ func (qb *mariadbQueryBuilder) Find(dest interface{}) error {
 }
 
 // First finds the first record that matches the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to a struct where the result will be stored
@@ -368,7 +370,7 @@ func (qb *mariadbQueryBuilder) First(dest interface{}) error {
 }
 
 // Last finds the last record that matches the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to a struct where the result will be stored
@@ -386,7 +388,7 @@ func (qb *mariadbQueryBuilder) Last(dest interface{}) error {
 }
 
 // Count counts records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - count: Pointer to an int64 where the count will be stored
@@ -403,7 +405,7 @@ func (qb *mariadbQueryBuilder) Count(count *int64) error {
 }
 
 // Updates updates records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - values: Map or struct with the fields to update
@@ -428,7 +430,7 @@ func (qb *mariadbQueryBuilder) Updates(values interface{}) (int64, error) {
 }
 
 // Delete deletes records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - value: Model value or pointer to specify what to delete
@@ -453,7 +455,7 @@ func (qb *mariadbQueryBuilder) Delete(value interface{}) (int64, error) {
 }
 
 // Pluck queries a single column and scans the results into a slice.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - column: Name of the column to query
@@ -717,7 +719,7 @@ func (qb *mariadbQueryBuilder) Clauses(conds ...interface{}) QueryBuilder {
 }
 
 // Create inserts a new record into the database.
-// This is a terminal method that executes the operation and releases the mutex lock.
+// This is a terminal method that executes the operation and finalizes the builder.
 // It can be combined with OnConflict() for UPSERT operations and other query builder methods.
 //
 // Parameters:
@@ -751,7 +753,7 @@ func (qb *mariadbQueryBuilder) Create(value interface{}) (int64, error) {
 }
 
 // CreateInBatches creates records in batches to avoid memory issues with large datasets.
-// This is a terminal method that executes the operation and releases the mutex lock.
+// This is a terminal method that executes the operation and finalizes the builder.
 //
 // Parameters:
 //   - value: Slice of records to create
@@ -813,9 +815,8 @@ func (qb *mariadbQueryBuilder) FirstOrCreate(dest interface{}, conds ...interfac
 	return qb.db.FirstOrCreate(dest, conds...).Error
 }
 
-// Done releases the mutex lock without executing the query.
-// This method should be called when you want to cancel a query building chain
-// without executing any terminal operation.
+// Done finalizes the builder without executing a terminal operation.
+// This exists mostly for symmetry and future-proofing; currently it is a no-op.
 //
 // Example:
 //
@@ -829,11 +830,11 @@ func (qb *mariadbQueryBuilder) Done() {
 	qb.release()
 }
 
-// ToSubquery returns the underlying GORM DB for use as a subquery and releases the lock.
+// ToSubquery returns the underlying GORM DB for use as a subquery and finalizes the builder.
 // This method is specifically designed for creating subqueries that can be passed to
 // Where(), Having(), or other clauses that accept subqueries.
 //
-// Important: This method releases the lock immediately, so the returned *gorm.DB should
+// Important: This method finalizes the builder immediately, so the returned *gorm.DB should
 // be used as a subquery argument right away.
 //
 // Returns:

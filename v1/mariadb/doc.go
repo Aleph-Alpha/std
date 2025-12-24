@@ -10,8 +10,14 @@
 //   - Transaction support with automatic rollback on errors
 //   - Schema migration tools
 //   - Row scanning utilities
-//   - Basic CRUD operations with thread safety
+//   - Basic CRUD operations
 //   - Query builder for complex queries
+//
+// # Concurrency model
+//
+// The active `*gorm.DB` connection pointer is stored in an `atomic.Pointer`. Calls that
+// need a DB snapshot simply load the pointer and run the operation without holding any
+// package-level locks. Reconnection swaps the pointer atomically.
 //
 // Basic Usage:
 //
@@ -45,13 +51,13 @@
 //
 // Transaction Example:
 //
-//	err = db.Transaction(ctx, func(txDB *mariadb.MariaDB) error {
+//	err = db.Transaction(ctx, func(tx mariadb.Client) error {
 //		// Execute multiple queries in a transaction
-//		if err := txDB.Create(ctx, &user); err != nil {
+//		if err := tx.Create(ctx, &user); err != nil {
 //			return err  // Transaction will be rolled back
 //		}
 //
-//		if err := txDB.Create(ctx, &userProfile); err != nil {
+//		if err := tx.Create(ctx, &userProfile); err != nil {
 //			return err  // Transaction will be rolled back
 //		}
 //
@@ -172,5 +178,6 @@
 // Thread Safety:
 //
 // All methods on the MariaDB interface are safe for concurrent use by multiple
-// goroutines. Internal mutexes ensure thread-safe access to the database connection.
+// goroutines. The connection pointer is read via an atomic load and can be swapped
+// atomically during reconnection.
 package mariadb
