@@ -144,23 +144,30 @@ func RegisterPostgresLifecycle(params PostgresLifeCycleParams) {
 }
 
 func (p *Postgres) GracefulShutdown() error {
-	p.closeShutdownOnce.Do(func() {
-		close(p.shutdownSignal)
-	})
-
-	p.closeRetryChanOnce.Do(func() {
-		close(p.retryChanSignal)
-	})
-
-	p.mu.Lock()
-	// Close the database connection
-	sqlDB, err := p.DB().DB()
-	if err == nil {
-		err := sqlDB.Close()
-		if err != nil {
-			return err
-		}
+	if p.shutdownSignal != nil {
+		p.closeShutdownOnce.Do(func() {
+			close(p.shutdownSignal)
+		})
 	}
-	p.mu.Unlock()
+
+	if p.retryChanSignal != nil {
+		p.closeRetryChanOnce.Do(func() {
+			close(p.retryChanSignal)
+		})
+	}
+
+	// Snapshot the connection; do not hold any package-level lock while closing.
+	dbConn := p.DB()
+	if dbConn == nil {
+		return nil
+	}
+
+	sqlDB, err := dbConn.DB()
+	if err != nil {
+		return nil
+	}
+	if err := sqlDB.Close(); err != nil {
+		return err
+	}
 	return nil
 }

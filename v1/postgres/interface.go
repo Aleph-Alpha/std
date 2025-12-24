@@ -115,6 +115,6 @@ type QueryBuilder interface {
 	FirstOrCreate(dest interface{}, conds ...interface{}) error
 
 	// Utility methods
-	Done()                // Release resources (like read locks)
+	Done()                // Finalize builder (currently a no-op)
 	ToSubquery() *gorm.DB // Convert to GORM subquery
 }

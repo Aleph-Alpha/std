@@ -20,10 +20,8 @@ import (
 //	var users []User
 //	err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	return p.Client.WithContext(ctx).Find(dest, conditions...).Error
+	db := p.DB().WithContext(ctx)
+	return db.Find(dest, conditions...).Error
 }
 
 // First retrieves the first record that matches the given conditions.
@@ -45,10 +43,8 @@ func (p *Postgres) Find(ctx context.Context, dest interface{}, conditions ...int
 //	    // Handle not found
 //	}
 func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...interface{}) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	return p.Client.WithContext(ctx).First(dest, conditions...).Error
+	db := p.DB().WithContext(ctx)
+	return db.First(dest, conditions...).Error
 }
 
 // Create inserts a new record into the database.
@@ -67,10 +63,8 @@ func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...in
 //	user := User{Name: "John", Email: "john@example.com"}
 //	err := db.Create(ctx, &user)
 func (p *Postgres) Create(ctx context.Context, value interface{}) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	return p.Client.WithContext(ctx).Create(value).Error
+	db := p.DB().WithContext(ctx)
+	return db.Create(value).Error
 }
 
 // Save updates the database record if the primary key exists,
@@ -89,10 +83,8 @@ func (p *Postgres) Create(ctx context.Context, value interface{}) error {
 //	user.Name = "Updated Name"
 //	err := db.Save(ctx, &user)
 func (p *Postgres) Save(ctx context.Context, value interface{}) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	return p.Client.WithContext(ctx).Save(value).Error
+	db := p.DB().WithContext(ctx)
+	return db.Save(value).Error
 }
 
 // Update updates records that match the given model's non-zero fields or primary key.
@@ -123,10 +115,8 @@ func (p *Postgres) Save(ctx context.Context, value interface{}) error {
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	result := p.Client.WithContext(ctx).Model(model).Updates(attrs)
+	db := p.DB().WithContext(ctx)
+	result := db.Model(model).Updates(attrs)
 
 	return result.RowsAffected, result.Error
 }
@@ -154,10 +144,8 @@ func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interfac
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	result := p.Client.WithContext(ctx).Model(model).Update(columnName, value)
+	db := p.DB().WithContext(ctx)
+	result := db.Model(model).Update(columnName, value)
 
 	return result.RowsAffected, result.Error
 }
@@ -186,10 +174,8 @@ func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnNa
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	result := p.Client.WithContext(ctx).Model(model).Updates(columnValues)
+	db := p.DB().WithContext(ctx)
+	result := db.Model(model).Updates(columnValues)
 
 	return result.RowsAffected, result.Error
 }
@@ -219,10 +205,8 @@ func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnV
 //	user := User{ID: 1}
 //	rowsAffected, err := db.Delete(ctx, &user)
 func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	result := p.Client.WithContext(ctx).Delete(value, conditions...)
+	db := p.DB().WithContext(ctx)
+	result := db.Delete(value, conditions...)
 
 	return result.RowsAffected, result.Error
 }
@@ -249,10 +233,8 @@ func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...
 //	}
 //	fmt.Printf("Updated %d users\n", rowsAffected)
 func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	result := p.Client.WithContext(ctx).Exec(sql, values...)
+	db := p.DB().WithContext(ctx)
+	result := db.Exec(sql, values...)
 
 	return result.RowsAffected, result.Error
 }
@@ -274,10 +256,11 @@ func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) 
 //	var count int64
 //	err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	return p.Client.WithContext(ctx).Model(model).Where(conditions[0], conditions[1:]...).Count(count).Error
+	db := p.DB().WithContext(ctx).Model(model)
+	if len(conditions) == 0 {
+		return db.Count(count).Error
+	}
+	return db.Where(conditions[0], conditions[1:]...).Count(count).Error
 }
 
 // UpdateWhere updates records that match the specified WHERE condition.
@@ -306,10 +289,8 @@ func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, c
 //	}
 //	fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	result := p.Client.WithContext(ctx).Model(model).Where(condition, args...).Updates(attrs)
+	db := p.DB().WithContext(ctx)
+	result := db.Model(model).Where(condition, args...).Updates(attrs)
 
 	return result.RowsAffected, result.Error
 }

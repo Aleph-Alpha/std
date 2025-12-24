@@ -6,166 +6,66 @@
 import "github.com/Aleph-Alpha/std/v1/postgres"
 ```
 
-Package postgres provides functionality for interacting with PostgreSQL databases.
+Package postgres provides a PostgreSQL client built on top of GORM.
 
-The postgres package offers a robust interface for working with PostgreSQL databases, built on top of the standard database/sql package. It includes connection management, query execution, transaction handling, and migration tools.
+The package exposes a small, database\-agnostic interface \(\`Client\`\) plus a fluent query builder \(\`QueryBuilder\`\). The concrete implementation \(\`\*Postgres\`\) wraps a \`\*gorm.DB\` and adds:
 
-Core Features:
+- Connection establishment \+ pool configuration
+- Periodic health checks and automatic reconnection \(via \`MonitorConnection\` \+ \`RetryConnection\`\)
+- Standardized CRUD and query\-builder helpers
+- Optional error normalization \(\`TranslateError\`\)
 
-- Connection pooling and management
-- Parameterized query execution
-- Transaction support with automatic rollback on errors
-- Schema migration tools
-- Row scanning utilities
-- Basic CRUD operations
+### Concurrency model
 
-Basic Usage:
+The active \`\*gorm.DB\` connection pointer is stored in an \`atomic.Pointer\`. Calls that need a DB snapshot simply load the pointer and run the operation without holding any package\-level locks. Reconnection swaps the pointer atomically.
+
+Basic usage
 
 ```
-import (
-	"github.com/Aleph-Alpha/std/v1/postgres"
-	"github.com/Aleph-Alpha/std/v1/logger"
-)
-
-// Create a logger
-log, _ := logger.NewLogger(logger.Config{Level: "info"})
-
-// Create a new database connection
-db, err := postgres.New(postgres.Config{
-	Host:     "localhost",
-	Port:     5432,
-	Username: "postgres",
-	Password: "password",
-	Database: "mydb",
-}, log)
-if err != nil {
-	log.Fatal("Failed to connect to database", err, nil)
+cfg := postgres.Config{
+    Connection: postgres.Connection{
+        Host:     "localhost",
+        Port:     "5432",
+        User:     "postgres",
+        Password: "password",
+        DbName:   "mydb",
+        SSLMode:  "disable",
+    },
 }
-defer db.Close()
 
-// Execute a query
-rows, err := db.Query(context.Background(), "SELECT id, name FROM users WHERE age > $1", 18)
+pg, err := postgres.NewPostgres(cfg)
 if err != nil {
-	log.Error("Query failed", err, nil)
+    // handle
 }
-defer rows.Close()
+defer pg.GracefulShutdown()
 
-// Scan the results
 var users []User
-for rows.Next() {
-	var user User
-	if err := rows.Scan(&user.ID, &user.Name); err != nil {
-		log.Error("Scan failed", err, nil)
-	}
-	users = append(users, user)
+if err := pg.Find(ctx, &users, "active = ?", true); err != nil {
+    // handle
 }
 ```
 
-Transaction Example:
+Transaction usage
 
 ```
-err = db.WithTransaction(context.Background(), func(tx postgres.Transaction) error {
-	// Execute multiple queries in a transaction
-	_, err := tx.Exec("UPDATE accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
-	if err != nil {
-		return err  // Transaction will be rolled back
-	}
-
-	_, err = tx.Exec("UPDATE accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
-	if err != nil {
-		return err  // Transaction will be rolled back
-	}
-
-	return nil  // Transaction will be committed
+err := pg.Transaction(ctx, func(tx postgres.Client) error {
+    if err := tx.Create(ctx, &User{Name: "Alice"}); err != nil {
+        return err
+    }
+    return nil
 })
 ```
 
-Basic Operations:
+### Fx integration
 
-```
-// Create a record
-id, err := db.Insert(ctx, "INSERT INTO users(name, email) VALUES($1, $2) RETURNING id", "John", "john@example.com")
-
-// Check if a record exists
-exists, err := db.Exists(ctx, "SELECT 1 FROM users WHERE email = $1", "john@example.com")
-
-// Get a single record
-var user User
-err = db.Get(ctx, &user, "SELECT id, name, email FROM users WHERE id = $1", id)
-```
-
-FX Module Integration:
-
-This package provides an fx module for easy integration:
+The package provides \`FXModule\` which constructs \`\*Postgres\` and also exposes it as the \`Client\` interface, plus lifecycle hooks for starting/stopping monitoring.
 
 ```
 app := fx.New(
-	logger.Module,
-	postgres.Module,
-	// ... other modules
+    postgres.FXModule,
+    fx.Provide(loadPostgresConfig),
 )
-app.Run()
 ```
-
-Error Handling:
-
-All methods in this package return GORM errors directly. This design provides:
-
-- Consistency: All methods behave the same way
-- Flexibility: Consumers can use errors.Is\(\) with GORM error types
-- Performance: No translation overhead unless needed
-- Transparency: Preserves the full error chain from GORM
-
-Basic error handling with GORM errors:
-
-```
-var user User
-err := db.First(ctx, &user, "email = ?", "user@example.com")
-if errors.Is(err, gorm.ErrRecordNotFound) {
-    // Handle not found
-}
-
-err = db.Query(ctx).Where("email = ?", "user@example.com").First(&user)
-if errors.Is(err, gorm.ErrRecordNotFound) {
-    // Handle not found
-}
-```
-
-For standardized error types, use TranslateError\(\):
-
-```
-err := db.First(ctx, &user, conditions)
-if err != nil {
-    err = db.TranslateError(err)
-    if errors.Is(err, postgres.ErrRecordNotFound) {
-        // Handle not found with standardized error
-    }
-}
-```
-
-Recommended pattern \- create a helper function for common error checks:
-
-```
-func isRecordNotFound(err error) bool {
-    return errors.Is(err, gorm.ErrRecordNotFound)
-}
-
-// Use consistently throughout your codebase
-if isRecordNotFound(err) {
-    // Handle not found
-}
-```
-
-Performance Considerations:
-
-- Connection pooling is automatically handled to optimize performance
-- Prepared statements are used internally to reduce parsing overhead
-- Consider using batch operations for multiple insertions
-- Query timeouts are recommended for all database operations
-
-Thread Safety:
-
-All methods on the DB interface are safe for concurrent use by multiple goroutines.
 
 Package postgres provides PostgreSQL database operations with an interface\-first design. The interfaces defined here \(Client, QueryBuilder\) can be implemented by other database packages \(like mariadb\) to provide a consistent API across different databases.
 
@@ -174,7 +74,6 @@ Package postgres provides PostgreSQL database operations with an interface\-firs
 - [Variables](<#variables>)
 - [func RegisterPostgresLifecycle\(params PostgresLifeCycleParams\)](<#RegisterPostgresLifecycle>)
 - [type Client](<#Client>)
-  - [func NewPostgres\(cfg Config\) \(Client, error\)](<#NewPostgres>)
   - [func ProvideClient\(pg \*Postgres\) Client](<#ProvideClient>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
@@ -185,6 +84,7 @@ Package postgres provides PostgreSQL database operations with an interface\-firs
 - [type MigrationHistoryRecord](<#MigrationHistoryRecord>)
 - [type MigrationType](<#MigrationType>)
 - [type Postgres](<#Postgres>)
+  - [func NewPostgres\(cfg Config\) \(\*Postgres, error\)](<#NewPostgres>)
   - [func NewPostgresClientWithDI\(params PostgresParams\) \(\*Postgres, error\)](<#NewPostgresClientWithDI>)
   - [func \(p \*Postgres\) AutoMigrate\(models ...interface\{\}\) error](<#Postgres.AutoMigrate>)
   - [func \(p \*Postgres\) Count\(ctx context.Context, model interface\{\}, count \*int64, conditions ...interface\{\}\) error](<#Postgres.Count>)
@@ -377,7 +277,15 @@ var (
 
 <a name="FXModule"></a>FXModule is an fx module that provides the Postgres database component. It registers the Postgres constructor for dependency injection and sets up lifecycle hooks to properly initialize and shut down the database connection.
 
-This module provides Client interface, not \*Postgres concrete type.
+This module provides:
+
+- \*Postgres \(concrete type\) \- for direct use and lifecycle management
+- Client \(interface\) \- for consumers who want database abstraction
+
+Consumers can inject either:
+
+- \*Postgres for full access to all methods
+- Client for interface\-based programming
 
 ```go
 var FXModule = fx.Module("postgres",
@@ -393,7 +301,7 @@ var FXModule = fx.Module("postgres",
 ```
 
 <a name="RegisterPostgresLifecycle"></a>
-## func [RegisterPostgresLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L102>)
+## func [RegisterPostgresLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L103>)
 
 ```go
 func RegisterPostgresLifecycle(params PostgresLifeCycleParams)
@@ -450,19 +358,8 @@ type Client interface {
 }
 ```
 
-<a name="NewPostgres"></a>
-### func [NewPostgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L35>)
-
-```go
-func NewPostgres(cfg Config) (Client, error)
-```
-
-NewPostgres creates a new Postgres instance with the provided configuration and Logger. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it logs a fatal error and terminates.
-
-Returns Client interface, not \*Postgres concrete type.
-
 <a name="ProvideClient"></a>
-### func [ProvideClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L29>)
+### func [ProvideClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L35>)
 
 ```go
 func ProvideClient(pg *Postgres) Client
@@ -522,18 +419,18 @@ ConnectionDetails holds configuration settings for the database connection pool.
 type ConnectionDetails struct {
     // MaxOpenConns controls the maximum number of open connections to the database.
     // Setting this appropriately helps prevent overwhelming the database with too many connections.
-    // Default is 0 (unlimited).
+    // If set to 0, the package default is used.
     MaxOpenConns int
 
     // MaxIdleConns controls the maximum number of connections in the idle connection pool.
     // A higher value can improve performance under a concurrent load but consumes more resources.
-    // Default is 2.
+    // If set to 0, the package default is used.
     MaxIdleConns int
 
     // ConnMaxLifetime is the maximum amount of time a connection may be reused.
     // Expired connections are closed and removed from the pool during connection acquisition.
     // This helps ensure database-enforced timeouts are respected.
-    // Default is 0 (unlimited).
+    // If set to 0, the package default is used.
     ConnMaxLifetime time.Duration
 }
 ```
@@ -566,7 +463,7 @@ const (
 ```
 
 <a name="Migration"></a>
-## type [Migration](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L42-L58>)
+## type [Migration](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L41-L57>)
 
 Migration represents a single database migration with all its metadata and content. Each migration contains the SQL to execute and information about its purpose and identity.
 
@@ -591,7 +488,7 @@ type Migration struct {
 ```
 
 <a name="MigrationDirection"></a>
-## type [MigrationDirection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L30>)
+## type [MigrationDirection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L29>)
 
 MigrationDirection specifies the direction of the migration, indicating whether it's applying a change or reverting one.
 
@@ -612,7 +509,7 @@ const (
 ```
 
 <a name="MigrationHistoryRecord"></a>
-## type [MigrationHistoryRecord](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L63-L87>)
+## type [MigrationHistoryRecord](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L62-L86>)
 
 MigrationHistoryRecord represents a record in the migration history table. It tracks when and how each migration was applied, enabling the system to determine which migrations have been run and providing an audit trail.
 
@@ -645,7 +542,7 @@ type MigrationHistoryRecord struct {
 ```
 
 <a name="MigrationType"></a>
-## type [MigrationType](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L16>)
+## type [MigrationType](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L15>)
 
 MigrationType defines the type of migration, categorizing the purpose of the change. This helps track and organize migrations based on their impact on the database.
 
@@ -668,19 +565,31 @@ const (
 ```
 
 <a name="Postgres"></a>
-## type [Postgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L18-L27>)
+## type [Postgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L20-L28>)
 
-Postgres is a thread\-safe wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations. It guards all database operations with a mutex to ensure thread safety and includes mechanisms for graceful shutdown and connection health monitoring.
+Postgres is a wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations.
+
+Concurrency: the active \`\*gorm.DB\` pointer is stored in an atomic pointer and can be swapped during reconnection without blocking readers.
 
 ```go
 type Postgres struct {
-    Client *gorm.DB
     // contains filtered or unexported fields
 }
 ```
 
+<a name="NewPostgres"></a>
+### func [NewPostgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L36>)
+
+```go
+func NewPostgres(cfg Config) (*Postgres, error)
+```
+
+NewPostgres creates a new Postgres instance with the provided configuration and Logger. It establishes the initial database connection and sets up the internal state for connection monitoring and recovery. If the initial connection fails, it logs a fatal error and terminates.
+
+Returns \*Postgres concrete type \(following Go best practice: "accept interfaces, return structs"\).
+
 <a name="NewPostgresClientWithDI"></a>
-### func [NewPostgresClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L71>)
+### func [NewPostgresClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L77>)
 
 ```go
 func NewPostgresClientWithDI(params PostgresParams) (*Postgres, error)
@@ -694,7 +603,7 @@ Parameters:
 
 Returns:
 
-- \*Postgres: A fully initialized Postgres Client \(concrete type for lifecycle management\). To use the interface, inject Client instead.
+- \*Postgres: A fully initialized Postgres Client \(concrete type\). The FX module also provides this as Client interface for consumers who want abstraction.
 
 Example usage with fx:
 
@@ -712,7 +621,7 @@ app := fx.New(
 This function delegates to the standard NewPostgres function, maintaining the same initialization logic while enabling seamless integration with dependency injection.
 
 <a name="Postgres.AutoMigrate"></a>
-### func \(\*Postgres\) [AutoMigrate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L99>)
+### func \(\*Postgres\) [AutoMigrate](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L98>)
 
 ```go
 func (p *Postgres) AutoMigrate(models ...interface{}) error
@@ -729,7 +638,7 @@ Returns a GORM error if any part of the migration process fails.
 This method is useful during development or for simple applications, but for production systems, explicit migrations are recommended.
 
 <a name="Postgres.Count"></a>
-### func \(\*Postgres\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L276>)
+### func \(\*Postgres\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L258>)
 
 ```go
 func (p *Postgres) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error
@@ -754,7 +663,7 @@ err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 ```
 
 <a name="Postgres.Create"></a>
-### func \(\*Postgres\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L69>)
+### func \(\*Postgres\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L65>)
 
 ```go
 func (p *Postgres) Create(ctx context.Context, value interface{}) error
@@ -777,7 +686,7 @@ err := db.Create(ctx, &user)
 ```
 
 <a name="Postgres.CreateMigration"></a>
-### func \(\*Postgres\) [CreateMigration](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L454>)
+### func \(\*Postgres\) [CreateMigration](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L449>)
 
 ```go
 func (p *Postgres) CreateMigration(migrationsDir, name string, migrationType MigrationType) (string, error)
@@ -809,12 +718,12 @@ if err == nil {
 func (p *Postgres) DB() *gorm.DB
 ```
 
-DB returns the underlying GORM DB Client instance. This method provides direct access to the database connection while maintaining thread safety through a read lock.
+DB returns the underlying GORM DB Client instance. This method provides direct access to the database connection while maintaining thread safety through an atomic load.
 
 Use this method when you need to perform operations not covered by the wrapper methods or when you need to access specific GORM functionality. Note that direct usage bypasses some of the safety mechanisms, so use it with care.
 
 <a name="Postgres.Delete"></a>
-### func \(\*Postgres\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L221>)
+### func \(\*Postgres\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L207>)
 
 ```go
 func (p *Postgres) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error)
@@ -849,7 +758,7 @@ rowsAffected, err := db.Delete(ctx, &user)
 ```
 
 <a name="Postgres.Exec"></a>
-### func \(\*Postgres\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L251>)
+### func \(\*Postgres\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L235>)
 
 ```go
 func (p *Postgres) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error)
@@ -904,7 +813,7 @@ err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 ```
 
 <a name="Postgres.First"></a>
-### func \(\*Postgres\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L47>)
+### func \(\*Postgres\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L45>)
 
 ```go
 func (p *Postgres) First(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -940,7 +849,7 @@ func (p *Postgres) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="Postgres.GetMigrationStatus"></a>
-### func \(\*Postgres\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L388>)
+### func \(\*Postgres\) [GetMigrationStatus](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L384>)
 
 ```go
 func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string) ([]map[string]interface{}, error)
@@ -967,7 +876,7 @@ if err == nil {
 ```
 
 <a name="Postgres.GracefulShutdown"></a>
-### func \(\*Postgres\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L145>)
+### func \(\*Postgres\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L146>)
 
 ```go
 func (p *Postgres) GracefulShutdown() error
@@ -1003,7 +912,7 @@ func (p *Postgres) IsTemporary(err error) bool
 IsTemporary returns true if the error is likely temporary and might resolve itself
 
 <a name="Postgres.MigrateDown"></a>
-### func \(\*Postgres\) [MigrateDown](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L251>)
+### func \(\*Postgres\) [MigrateDown](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L248>)
 
 ```go
 func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error
@@ -1025,7 +934,7 @@ err := db.MigrateDown(ctx, "./migrations")
 ```
 
 <a name="Postgres.MigrateUp"></a>
-### func \(\*Postgres\) [MigrateUp](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L152>)
+### func \(\*Postgres\) [MigrateUp](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/migrations.go#L150>)
 
 ```go
 func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error
@@ -1047,7 +956,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="Postgres.MonitorConnection"></a>
-### func \(\*Postgres\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L138>)
+### func \(\*Postgres\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L151>)
 
 ```go
 func (p *Postgres) MonitorConnection(ctx context.Context)
@@ -1064,7 +973,7 @@ The function respects context cancellation and shutdown signals, ensuring proper
 func (p *Postgres) Query(ctx context.Context) QueryBuilder
 ```
 
-Query provides a flexible way to build complex queries. It returns a QueryBuilder interface which can be used to chain query methods in a fluent interface. The method acquires a read lock on the database connection that will be automatically released when a terminal method is called or Done\(\) is invoked.
+Query provides a flexible way to build complex queries. It returns a QueryBuilder interface which can be used to chain query methods in a fluent interface. The builder snapshots the current \`\*gorm.DB\` connection and does not hold any package\-level locks while the chain is being built or executed.
 
 Parameters:
 
@@ -1089,7 +998,7 @@ if err != nil {
 ```
 
 <a name="Postgres.RetryConnection"></a>
-### func \(\*Postgres\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L96>)
+### func \(\*Postgres\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L111>)
 
 ```go
 func (p *Postgres) RetryConnection(ctx context.Context)
@@ -1100,7 +1009,7 @@ RetryConnection continuously attempts to reconnect to the PostgresSQL database w
 It implements two nested loops: \- The outer loop waits for retry signals \- The inner loop attempts reconnection until successful
 
 <a name="Postgres.Save"></a>
-### func \(\*Postgres\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L91>)
+### func \(\*Postgres\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L85>)
 
 ```go
 func (p *Postgres) Save(ctx context.Context, value interface{}) error
@@ -1123,7 +1032,7 @@ err := db.Save(ctx, &user)
 ```
 
 <a name="Postgres.Transaction"></a>
-### func \(\*Postgres\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/transactions.go#L41>)
+### func \(\*Postgres\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/transactions.go#L42>)
 
 ```go
 func (p *Postgres) Transaction(ctx context.Context, fn func(tx Client) error) error
@@ -1158,7 +1067,7 @@ TranslateError converts GORM/database\-specific errors into standardized applica
 It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="Postgres.Update"></a>
-### func \(\*Postgres\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L125>)
+### func \(\*Postgres\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L117>)
 
 ```go
 func (p *Postgres) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error)
@@ -1194,7 +1103,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumn"></a>
-### func \(\*Postgres\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L156>)
+### func \(\*Postgres\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L146>)
 
 ```go
 func (p *Postgres) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error)
@@ -1226,7 +1135,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateColumns"></a>
-### func \(\*Postgres\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L188>)
+### func \(\*Postgres\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L176>)
 
 ```go
 func (p *Postgres) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error)
@@ -1260,7 +1169,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="Postgres.UpdateWhere"></a>
-### func \(\*Postgres\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L308>)
+### func \(\*Postgres\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/basic_ops.go#L291>)
 
 ```go
 func (p *Postgres) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error)
@@ -1296,7 +1205,7 @@ fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="PostgresLifeCycleParams"></a>
-## type [PostgresLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L87-L92>)
+## type [PostgresLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L88-L93>)
 
 PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management. This struct combines all the components required to properly manage the lifecycle of a Postgres Client within an fx application, including startup, monitoring, and graceful shutdown.
 
@@ -1312,7 +1221,7 @@ type PostgresLifeCycleParams struct {
 ```
 
 <a name="PostgresParams"></a>
-## type [PostgresParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L39-L43>)
+## type [PostgresParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/fx_module.go#L45-L49>)
 
 PostgresParams groups the dependencies needed to create a Postgres Client via dependency injection. This struct is designed to work with Uber's fx dependency injection framework and provides the necessary parameters for initializing a Postgres database connection.
 
@@ -1396,7 +1305,7 @@ type QueryBuilder interface {
     FirstOrCreate(dest interface{}, conds ...interface{}) error
 
     // Utility methods
-    Done()                // Release resources (like read locks)
+    Done()                // Finalize builder (currently a no-op)
     ToSubquery() *gorm.DB // Convert to GORM subquery
 }
 ```

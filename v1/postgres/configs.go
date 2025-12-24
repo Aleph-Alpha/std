@@ -41,17 +41,17 @@ type Connection struct {
 type ConnectionDetails struct {
 	// MaxOpenConns controls the maximum number of open connections to the database.
 	// Setting this appropriately helps prevent overwhelming the database with too many connections.
-	// Default is 0 (unlimited).
+	// If set to 0, the package default is used.
 	MaxOpenConns int
 
 	// MaxIdleConns controls the maximum number of connections in the idle connection pool.
 	// A higher value can improve performance under a concurrent load but consumes more resources.
-	// Default is 2.
+	// If set to 0, the package default is used.
 	MaxIdleConns int
 
 	// ConnMaxLifetime is the maximum amount of time a connection may be reused.
 	// Expired connections are closed and removed from the pool during connection acquisition.
 	// This helps ensure database-enforced timeouts are respected.
-	// Default is 0 (unlimited).
+	// If set to 0, the package default is used.
 	ConnMaxLifetime time.Duration
 }
