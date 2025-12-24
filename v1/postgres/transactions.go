@@ -12,17 +12,18 @@ import (
 // It enables transaction-scoped operations while maintaining the connection monitoring
 // and safety features of the Postgres wrapper.
 func (p *Postgres) cloneWithTx(tx *gorm.DB) *Postgres {
-	return &Postgres{
-		Client:          tx,
-		cfg:             p.cfg,
-		mu:              p.mu, // shared mutex is fine
-		shutdownSignal:  p.shutdownSignal,
-		retryChanSignal: p.retryChanSignal,
+	// This clone is only intended for transaction-scoped CRUD/query operations.
+	// Do not share lifecycle channels with the parent to avoid accidental shutdown
+	// if a consumer calls GracefulShutdown() on the tx client.
+	pg := &Postgres{
+		cfg: p.cfg,
 	}
+	pg.client.Store(tx)
+	return pg
 }
 
 // Transaction executes the given function within a database transaction.
-// It creates a transaction-specific Postgres instance and passes it to the provided function.
+// It creates a transaction-specific Postgres instance and passes it as Client interface.
 // If the function returns an error, the transaction is rolled back; otherwise, it's committed.
 //
 // This method provides a clean way to execute multiple database operations as a single
@@ -32,18 +33,18 @@ func (p *Postgres) cloneWithTx(tx *gorm.DB) *Postgres {
 //
 // Example usage:
 //
-//	err := pg.Transaction(ctx, func(txPg *Postgres) error {
-//		if err := txPg.Create(ctx, user); err != nil {
+//	err := pg.Transaction(ctx, func(tx Client) error {
+//		if err := tx.Create(ctx, user); err != nil {
 //			return err
 //		}
-//		return txPg.Create(ctx, userProfile)
+//		return tx.Create(ctx, userProfile)
 //	})
-func (p *Postgres) Transaction(ctx context.Context, fn func(pg *Postgres) error) error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	return p.Client.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		pgWithTx := p.cloneWithTx(tx)
-		return fn(pgWithTx)
+func (p *Postgres) Transaction(ctx context.Context, fn func(tx Client) error) error {
+	// Snapshot the current connection; do not hold any package-level locks for the whole
+	// transaction, which can be long-running.
+	db := p.DB().WithContext(ctx)
+	return db.Transaction(func(txDB *gorm.DB) error {
+		pgWithTx := p.cloneWithTx(txDB)
+		return fn(pgWithTx) // Pass as Client interface
 	})
 }

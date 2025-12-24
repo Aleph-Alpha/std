@@ -232,8 +232,8 @@ func TestMariaDBWithFXModule(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check if mariadb was populated
-	if mariadb == nil || mariadb.Client == nil {
-		t.Fatal("Failed to initialize MariaDB Client - connection likely failed")
+	if mariadb == nil || mariadb.DB() == nil {
+		t.Fatal("Failed to initialize MariaDB client - connection likely failed")
 	}
 
 	// Verify the connection is working using the DB() method
@@ -1787,7 +1787,7 @@ func testBasicTransactionCommit(ctx context.Context, mariadb *MariaDB) func(t *t
 		transferAmount := 100.00
 
 		// Perform transfer in a transaction
-		err = mariadb.Transaction(ctx, func(tx *MariaDB) error {
+		err = mariadb.Transaction(ctx, func(tx Client) error {
 			// Update Alice's account (subtract)
 			aliceAccount.Balance -= transferAmount
 			err := tx.Save(ctx, &aliceAccount)
@@ -1847,7 +1847,7 @@ func testTransactionRollback(ctx context.Context, mariadb *MariaDB) func(t *test
 		transferAmount := 200.00
 
 		// Perform transfer in a transaction, but return an error to cause rollback
-		err = mariadb.Transaction(ctx, func(tx *MariaDB) error {
+		err = mariadb.Transaction(ctx, func(tx Client) error {
 			// Update Charlie's account (subtract)
 			charlieAccount.Balance -= transferAmount
 			err := tx.Save(ctx, &charlieAccount)

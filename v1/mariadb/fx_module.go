@@ -11,12 +11,30 @@ import (
 // It registers the MariaDB constructor for dependency injection
 // and sets up lifecycle hooks to properly initialize and shut down
 // the database connection.
+//
+// This module provides:
+//   - *MariaDB (concrete type) - for direct use and lifecycle management
+//   - Client (interface) - for consumers who want database abstraction
+//
+// Consumers can inject either:
+//   - *MariaDB for full access to all methods
+//   - Client for interface-based programming
 var FXModule = fx.Module("mariadb",
 	fx.Provide(
-		NewMariaDBClientWithDI,
+		NewMariaDBClientWithDI, // Returns *MariaDB for internal lifecycle
+		fx.Annotate(
+			ProvideClient,      // Returns Client interface
+			fx.As(new(Client)), // Expose as Client interface
+		),
 	),
 	fx.Invoke(RegisterMariaDBLifecycle),
 )
+
+// ProvideClient wraps the concrete *MariaDB and returns it as Client interface.
+// This enables applications to depend on the interface rather than concrete type.
+func ProvideClient(db *MariaDB) Client {
+	return db
+}
 
 // MariaDBParams groups the dependencies needed to create a MariaDB Client via dependency injection.
 // This struct is designed to work with Uber's fx dependency injection framework and provides
@@ -40,7 +58,8 @@ type MariaDBParams struct {
 //     automatic injection of these dependencies.
 //
 // Returns:
-//   - *MariaDB: A fully initialized MariaDB Client ready for use.
+//   - *MariaDB: A fully initialized MariaDB Client (concrete type).
+//     The FX module also provides this as Client interface for consumers who want abstraction.
 //
 // Example usage with fx:
 //
@@ -125,23 +144,30 @@ func RegisterMariaDBLifecycle(params MariaDBLifeCycleParams) {
 }
 
 func (m *MariaDB) GracefulShutdown() error {
-	m.closeShutdownOnce.Do(func() {
-		close(m.shutdownSignal)
-	})
-
-	m.closeRetryChanOnce.Do(func() {
-		close(m.retryChanSignal)
-	})
-
-	m.mu.Lock()
-	// Close the database connection
-	sqlDB, err := m.DB().DB()
-	if err == nil {
-		err := sqlDB.Close()
-		if err != nil {
-			return err
-		}
+	if m.shutdownSignal != nil {
+		m.closeShutdownOnce.Do(func() {
+			close(m.shutdownSignal)
+		})
 	}
-	m.mu.Unlock()
+
+	if m.retryChanSignal != nil {
+		m.closeRetryChanOnce.Do(func() {
+			close(m.retryChanSignal)
+		})
+	}
+
+	// Snapshot the connection; do not hold any package-level lock while closing.
+	dbConn := m.DB()
+	if dbConn == nil {
+		return nil
+	}
+
+	sqlDB, err := dbConn.DB()
+	if err != nil {
+		return nil
+	}
+	if err := sqlDB.Close(); err != nil {
+		return err
+	}
 	return nil
 }

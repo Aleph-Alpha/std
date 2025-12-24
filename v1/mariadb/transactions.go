@@ -12,17 +12,17 @@ import (
 // It enables transaction-scoped operations while maintaining the connection monitoring
 // and safety features of the MariaDB wrapper.
 func (m *MariaDB) cloneWithTx(tx *gorm.DB) *MariaDB {
-	return &MariaDB{
-		Client:          tx,
-		cfg:             m.cfg,
-		mu:              m.mu, // shared mutex is fine
-		shutdownSignal:  m.shutdownSignal,
-		retryChanSignal: m.retryChanSignal,
+	db := &MariaDB{
+		cfg: m.cfg,
 	}
+	// Avoid sharing lifecycle channels with the parent; tx clients should not be able
+	// to shut down monitoring goroutines.
+	db.client.Store(tx)
+	return db
 }
 
 // Transaction executes the given function within a database transaction.
-// It creates a transaction-specific MariaDB instance and passes it to the provided function.
+// It creates a transaction-specific MariaDB instance and passes it as Client interface.
 // If the function returns an error, the transaction is rolled back; otherwise, it's committed.
 //
 // This method provides a clean way to execute multiple database operations as a single
@@ -32,18 +32,16 @@ func (m *MariaDB) cloneWithTx(tx *gorm.DB) *MariaDB {
 //
 // Example usage:
 //
-//	err := db.Transaction(ctx, func(txDB *MariaDB) error {
-//		if err := txDB.Create(ctx, user); err != nil {
+//	err := db.Transaction(ctx, func(tx Client) error {
+//		if err := tx.Create(ctx, user); err != nil {
 //			return err
 //		}
-//		return txDB.Create(ctx, userProfile)
+//		return tx.Create(ctx, userProfile)
 //	})
-func (m *MariaDB) Transaction(ctx context.Context, fn func(db *MariaDB) error) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.Client.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		dbWithTx := m.cloneWithTx(tx)
-		return fn(dbWithTx)
+func (m *MariaDB) Transaction(ctx context.Context, fn func(tx Client) error) error {
+	db := m.DB().WithContext(ctx)
+	return db.Transaction(func(txDB *gorm.DB) error {
+		dbWithTx := m.cloneWithTx(txDB)
+		return fn(dbWithTx) // Pass as Client interface
 	})
 }

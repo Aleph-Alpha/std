@@ -33,7 +33,7 @@ type RowsScanner interface {
 // QueryRow executes a query expected to return a single row and returns a RowScanner for it.
 // This method is optimized for queries that return exactly one row of data and provides
 // a simplified interface for scanning the values from that row.
-func (qb *QueryBuilder) QueryRow() RowScanner {
+func (qb *mariadbQueryBuilder) QueryRow() RowScanner {
 	defer qb.release()
 	return qb.db.Row()
 }
@@ -43,7 +43,7 @@ func (qb *QueryBuilder) QueryRow() RowScanner {
 // returned by a query, allowing for efficient traversal of large result sets.
 //
 // Returns a RowsScanner and a GORM error if the query fails.
-func (qb *QueryBuilder) QueryRows() (RowsScanner, error) {
+func (qb *mariadbQueryBuilder) QueryRows() (RowsScanner, error) {
 	defer qb.release()
 	return qb.db.Rows()
 }
@@ -54,7 +54,7 @@ func (qb *QueryBuilder) QueryRows() (RowsScanner, error) {
 // It's useful when you need to map a row to a predefined data structure.
 //
 // Returns a GORM error if the scan fails or nil on success.
-func (qb *QueryBuilder) ScanRow(dest interface{}) error {
+func (qb *mariadbQueryBuilder) ScanRow(dest interface{}) error {
 	defer qb.release()
 	return qb.db.Scan(dest).Error
 }
@@ -69,7 +69,7 @@ func (qb *QueryBuilder) ScanRow(dest interface{}) error {
 //   - mapFn: A function that defines how to map rows from the database to your slice items
 //
 // Returns a GORM error if the mapping fails or nil on success.
-func (qb *QueryBuilder) MapRows(destSlice interface{}, mapFn func(*gorm.DB) error) error {
+func (qb *mariadbQueryBuilder) MapRows(destSlice interface{}, mapFn func(*gorm.DB) error) error {
 	defer qb.release()
 	return mapFn(qb.db)
 }

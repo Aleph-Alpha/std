@@ -5,20 +5,21 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-// Postgres is a thread-safe wrapper around gorm.DB that provides connection monitoring,
+// Postgres is a wrapper around gorm.DB that provides connection monitoring,
 // automatic reconnection, and standardized database operations.
-// It guards all database operations with a mutex to ensure thread safety
-// and includes mechanisms for graceful shutdown and connection health monitoring.
+//
+// Concurrency: the active `*gorm.DB` pointer is stored in an atomic pointer and can be
+// swapped during reconnection without blocking readers.
 type Postgres struct {
-	Client          *gorm.DB
 	cfg             Config
-	mu              *sync.RWMutex
+	client          atomic.Pointer[gorm.DB]
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
 
@@ -30,19 +31,21 @@ type Postgres struct {
 // It establishes the initial database connection and sets up the internal state
 // for connection monitoring and recovery. If the initial connection fails,
 // it logs a fatal error and terminates.
+//
+// Returns *Postgres concrete type (following Go best practice: "accept interfaces, return structs").
 func NewPostgres(cfg Config) (*Postgres, error) {
 	conn, err := connectToPostgres(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error in connecting to postgres after all retries: %w", err)
 	}
 
-	return &Postgres{
-		Client:          conn,
+	pg := &Postgres{
 		cfg:             cfg,
-		mu:              &sync.RWMutex{},
 		shutdownSignal:  make(chan struct{}),
 		retryChanSignal: make(chan error, 1),
-	}, nil
+	}
+	pg.client.Store(conn)
+	return pg, nil
 }
 
 // connectToPostgres establishes a connection to the PostgresSQL database using the provided
@@ -73,10 +76,24 @@ func connectToPostgres(postgresConfig Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to get PostgresSQL database instance: %w", err)
 	}
 
-	// Set connection pool parameters
-	databaseInstance.SetMaxOpenConns(50)
-	databaseInstance.SetMaxIdleConns(25)
-	databaseInstance.SetConnMaxLifetime(1 * time.Minute)
+	// Set connection pool parameters.
+	// If config fields are not set (zero), apply package defaults to preserve prior behavior.
+	maxOpen := postgresConfig.ConnectionDetails.MaxOpenConns
+	if maxOpen == 0 {
+		maxOpen = 50
+	}
+	maxIdle := postgresConfig.ConnectionDetails.MaxIdleConns
+	if maxIdle == 0 {
+		maxIdle = 25
+	}
+	maxLifetime := postgresConfig.ConnectionDetails.ConnMaxLifetime
+	if maxLifetime == 0 {
+		maxLifetime = 1 * time.Minute
+	}
+
+	databaseInstance.SetMaxOpenConns(maxOpen)
+	databaseInstance.SetMaxIdleConns(maxIdle)
+	databaseInstance.SetConnMaxLifetime(maxLifetime)
 
 	log.Println("INFO: Successfully connected to PostgresSQL database")
 
@@ -115,9 +132,7 @@ outerLoop:
 						time.Sleep(time.Second)
 						continue innerLoop
 					}
-					p.mu.Lock()
-					p.Client = newConn
-					p.mu.Unlock()
+					p.client.Store(newConn)
 					log.Println("INFO: Successfully reconnected to PostgresSQL database")
 					continue outerLoop
 				}
@@ -161,19 +176,18 @@ func (p *Postgres) MonitorConnection(ctx context.Context) {
 }
 
 // healthCheck performs a health check on the Postgres database connection.
-// It acquires a read lock to safely access the Client, then attempts to ping
-// the database with a timeout of 5 seconds to verify connectivity.
+// It snapshots the current *gorm.DB, then attempts to ping the database with a
+// timeout of 5 seconds to verify connectivity.
 //
 // It returns nil if the database is healthy, or an error with details about the issue.
 func (p *Postgres) healthCheck() error {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	if p.Client == nil {
+	// Snapshot the current connection; do not hold any package-level lock while pinging.
+	dbConn := p.DB()
+	if dbConn == nil {
 		return fmt.Errorf("database Client is not initialized")
 	}
 
-	db, err := p.Client.DB()
+	db, err := dbConn.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get database instance during health check: %w", err)
 	}

@@ -11,12 +11,30 @@ import (
 // It registers the Postgres constructor for dependency injection
 // and sets up lifecycle hooks to properly initialize and shut down
 // the database connection.
+//
+// This module provides:
+//   - *Postgres (concrete type) - for direct use and lifecycle management
+//   - Client (interface) - for consumers who want database abstraction
+//
+// Consumers can inject either:
+//   - *Postgres for full access to all methods
+//   - Client for interface-based programming
 var FXModule = fx.Module("postgres",
 	fx.Provide(
-		NewPostgresClientWithDI,
+		NewPostgresClientWithDI, // Returns *Postgres for internal lifecycle
+		fx.Annotate(
+			ProvideClient,      // Returns Client interface
+			fx.As(new(Client)), // Expose as Client interface
+		),
 	),
 	fx.Invoke(RegisterPostgresLifecycle),
 )
+
+// ProvideClient wraps the concrete *Postgres and returns it as Client interface.
+// This enables applications to depend on the interface rather than concrete type.
+func ProvideClient(pg *Postgres) Client {
+	return pg
+}
 
 // PostgresParams groups the dependencies needed to create a Postgres Client via dependency injection.
 // This struct is designed to work with Uber's fx dependency injection framework and provides
@@ -40,7 +58,8 @@ type PostgresParams struct {
 //     automatic injection of these dependencies.
 //
 // Returns:
-//   - *Postgres: A fully initialized Postgres Client ready for use.
+//   - *Postgres: A fully initialized Postgres Client (concrete type).
+//     The FX module also provides this as Client interface for consumers who want abstraction.
 //
 // Example usage with fx:
 //
@@ -49,9 +68,6 @@ type PostgresParams struct {
 //	    fx.Provide(
 //	        func() postgres.Config {
 //	            return loadPostgresConfig() // Your config loading function
-//	        },
-//	        func() postgres.Logger {
-//	            return initLogger() // Your logger initialization
 //	        },
 //	    ),
 //	)
@@ -128,23 +144,30 @@ func RegisterPostgresLifecycle(params PostgresLifeCycleParams) {
 }
 
 func (p *Postgres) GracefulShutdown() error {
-	p.closeShutdownOnce.Do(func() {
-		close(p.shutdownSignal)
-	})
-
-	p.closeRetryChanOnce.Do(func() {
-		close(p.retryChanSignal)
-	})
-
-	p.mu.Lock()
-	// Close the database connection
-	sqlDB, err := p.DB().DB()
-	if err == nil {
-		err := sqlDB.Close()
-		if err != nil {
-			return err
-		}
+	if p.shutdownSignal != nil {
+		p.closeShutdownOnce.Do(func() {
+			close(p.shutdownSignal)
+		})
 	}
-	p.mu.Unlock()
+
+	if p.retryChanSignal != nil {
+		p.closeRetryChanOnce.Do(func() {
+			close(p.retryChanSignal)
+		})
+	}
+
+	// Snapshot the connection; do not hold any package-level lock while closing.
+	dbConn := p.DB()
+	if dbConn == nil {
+		return nil
+	}
+
+	sqlDB, err := dbConn.DB()
+	if err != nil {
+		return nil
+	}
+	if err := sqlDB.Close(); err != nil {
+		return err
+	}
 	return nil
 }

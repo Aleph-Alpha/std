@@ -237,8 +237,8 @@ func TestPostgresWithFXModule(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check if postgres was populated
-	if postgres == nil || postgres.Client == nil {
-		t.Fatal("Failed to initialize Postgres Client - connection likely failed")
+	if postgres == nil || postgres.DB() == nil {
+		t.Fatal("Failed to initialize Postgres client - connection likely failed")
 	}
 
 	// Verify the connection is working using the DB() method
@@ -2435,7 +2435,7 @@ func testBasicTransactionCommit(ctx context.Context, postgres *Postgres) func(t 
 		transferAmount := 100.00
 
 		// Perform transfer in a transaction
-		err = postgres.Transaction(ctx, func(tx *Postgres) error {
+		err = postgres.Transaction(ctx, func(tx Client) error {
 			// Update Alice's account (subtract)
 			aliceAccount.Balance -= transferAmount
 			err := tx.Save(ctx, &aliceAccount)
@@ -2495,7 +2495,7 @@ func testTransactionRollback(ctx context.Context, postgres *Postgres) func(t *te
 		transferAmount := 200.00
 
 		// Perform transfer in a transaction, but return an error to cause rollback
-		err = postgres.Transaction(ctx, func(tx *Postgres) error {
+		err = postgres.Transaction(ctx, func(tx Client) error {
 			// Update Charlie's account (subtract)
 			charlieAccount.Balance -= transferAmount
 			err := tx.Save(ctx, &charlieAccount)

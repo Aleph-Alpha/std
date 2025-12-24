@@ -8,14 +8,14 @@ import (
 )
 
 // Query provides a flexible way to build complex queries.
-// It returns a QueryBuilder which can be used to chain query methods in a fluent interface.
-// The method acquires a read lock on the database connection that will be automatically
-// released when a terminal method is called or Done() is invoked.
+// It returns a QueryBuilder interface which can be used to chain query methods in a fluent interface.
+// The builder snapshots the current `*gorm.DB` connection and does not hold any package-level
+// locks while the chain is being built or executed.
 //
 // Parameters:
 //   - ctx: Context for the database operation
 //
-// Returns a QueryBuilder instance that can be used to construct the query.
+// Returns a QueryBuilder interface instance that can be used to construct the query.
 //
 // Note: QueryBuilder methods return GORM errors directly. Use Postgres.TranslateError()
 // to convert them to standardized error types if needed.
@@ -31,26 +31,31 @@ import (
 //	if err != nil {
 //	    err = db.TranslateError(err) // Optional: translate to standardized error
 //	}
-func (p *Postgres) Query(ctx context.Context) *QueryBuilder {
-	p.mu.RLock() // Will be released when Done() is called
-	return &QueryBuilder{
-		db:      p.Client.WithContext(ctx),
-		release: p.mu.RUnlock,
+func (p *Postgres) Query(ctx context.Context) QueryBuilder {
+	// Important: do NOT hold any package-level lock across the whole query-builder chain.
+	// Long-held locks can stall reconnect/migrations and reduce throughput if terminal ops
+	// are delayed or forgotten.
+	db := p.DB().WithContext(ctx) // snapshot current connection under an atomic load
+	return &postgresQueryBuilder{
+		db:      db,
+		release: func() {}, // no-op; kept to preserve the builder structure
 	}
 }
 
-// QueryBuilder provides a fluent interface for building complex database queries.
+// postgresQueryBuilder provides a fluent interface for building complex database queries.
 // It wraps GORM's query building capabilities with thread-safety and automatic resource cleanup.
 // The builder maintains a chain of query modifiers that are applied when a terminal method is called.
 //
 // Note: All terminal methods (First, Find, Create, etc.) return GORM errors directly.
 // This preserves the error chain and allows consumers to use errors.Is() with GORM error types.
 // Use Postgres.TranslateError() to convert errors to standardized types if needed.
-type QueryBuilder struct {
+//
+// This type is unexported - users interact with it through the QueryBuilder interface.
+type postgresQueryBuilder struct {
 	// db is the underlying GORM DB instance that handles the actual query execution
 	db *gorm.DB
 
-	// release is the function to call to release the mutex lock when done with the query
+	// release finalizes the builder (currently a no-op).
 	release func()
 }
 
@@ -67,7 +72,7 @@ type QueryBuilder struct {
 //
 //	qb.Select("id, name, email")
 //	qb.Select("COUNT(*) as user_count")
-func (qb *QueryBuilder) Select(query interface{}, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Select(query interface{}, args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Select(query, args...)
 	return qb
 }
@@ -85,7 +90,7 @@ func (qb *QueryBuilder) Select(query interface{}, args ...interface{}) *QueryBui
 //
 //	qb.Where("age > ?", 18)
 //	qb.Where("status = ?", "active")
-func (qb *QueryBuilder) Where(query interface{}, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Where(query interface{}, args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Where(query, args...)
 	return qb
 }
@@ -102,7 +107,7 @@ func (qb *QueryBuilder) Where(query interface{}, args ...interface{}) *QueryBuil
 // Example:
 //
 //	qb.Where("status = ?", "active").Or("status = ?", "pending")
-func (qb *QueryBuilder) Or(query interface{}, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Or(query interface{}, args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Or(query, args...)
 	return qb
 }
@@ -119,7 +124,7 @@ func (qb *QueryBuilder) Or(query interface{}, args ...interface{}) *QueryBuilder
 // Example:
 //
 //	qb.Not("status = ?", "deleted")
-func (qb *QueryBuilder) Not(query interface{}, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Not(query interface{}, args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Not(query, args...)
 	return qb
 }
@@ -136,7 +141,7 @@ func (qb *QueryBuilder) Not(query interface{}, args ...interface{}) *QueryBuilde
 // Example:
 //
 //	qb.Joins("JOIN orders ON orders.user_id = users.id")
-func (qb *QueryBuilder) Joins(query string, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Joins(query string, args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Joins(query, args...)
 	return qb
 }
@@ -153,7 +158,7 @@ func (qb *QueryBuilder) Joins(query string, args ...interface{}) *QueryBuilder {
 // Example:
 //
 //	qb.LeftJoin("orders ON orders.user_id = users.id")
-func (qb *QueryBuilder) LeftJoin(query string, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) LeftJoin(query string, args ...interface{}) QueryBuilder {
 	joinClause := "LEFT JOIN " + query
 	qb.db = qb.db.Joins(joinClause, args...)
 	return qb
@@ -171,7 +176,7 @@ func (qb *QueryBuilder) LeftJoin(query string, args ...interface{}) *QueryBuilde
 // Example:
 //
 //	qb.RightJoin("orders ON orders.user_id = users.id")
-func (qb *QueryBuilder) RightJoin(query string, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) RightJoin(query string, args ...interface{}) QueryBuilder {
 	joinClause := "RIGHT JOIN " + query
 	qb.db = qb.db.Joins(joinClause, args...)
 	return qb
@@ -190,7 +195,7 @@ func (qb *QueryBuilder) RightJoin(query string, args ...interface{}) *QueryBuild
 //
 //	qb.Preload("Orders")
 //	qb.Preload("Orders", "state = ?", "paid")
-func (qb *QueryBuilder) Preload(query string, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Preload(query string, args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Preload(query, args...)
 	return qb
 }
@@ -207,7 +212,7 @@ func (qb *QueryBuilder) Preload(query string, args ...interface{}) *QueryBuilder
 //
 //	qb.Group("status")
 //	qb.Group("department, location")
-func (qb *QueryBuilder) Group(query string) *QueryBuilder {
+func (qb *postgresQueryBuilder) Group(query string) QueryBuilder {
 	qb.db = qb.db.Group(query)
 	return qb
 }
@@ -224,7 +229,7 @@ func (qb *QueryBuilder) Group(query string) *QueryBuilder {
 // Example:
 //
 //	qb.Group("department").Having("COUNT(*) > ?", 3)
-func (qb *QueryBuilder) Having(query interface{}, args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Having(query interface{}, args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Having(query, args...)
 	return qb
 }
@@ -241,7 +246,7 @@ func (qb *QueryBuilder) Having(query interface{}, args ...interface{}) *QueryBui
 //
 //	qb.Order("created_at DESC")
 //	qb.Order("age ASC, name DESC")
-func (qb *QueryBuilder) Order(value interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Order(value interface{}) QueryBuilder {
 	qb.db = qb.db.Order(value)
 	return qb
 }
@@ -256,7 +261,7 @@ func (qb *QueryBuilder) Order(value interface{}) *QueryBuilder {
 // Example:
 //
 //	qb.Limit(10) // Return at most 10 records
-func (qb *QueryBuilder) Limit(limit int) *QueryBuilder {
+func (qb *postgresQueryBuilder) Limit(limit int) QueryBuilder {
 	qb.db = qb.db.Limit(limit)
 	return qb
 }
@@ -272,7 +277,7 @@ func (qb *QueryBuilder) Limit(limit int) *QueryBuilder {
 // Example:
 //
 //	qb.Offset(20).Limit(10) // Skip 20 records and return the next 10
-func (qb *QueryBuilder) Offset(offset int) *QueryBuilder {
+func (qb *postgresQueryBuilder) Offset(offset int) QueryBuilder {
 	qb.db = qb.db.Offset(offset)
 	return qb
 }
@@ -289,7 +294,7 @@ func (qb *QueryBuilder) Offset(offset int) *QueryBuilder {
 // Example:
 //
 //	qb.Raw("SELECT * FROM users WHERE created_at > ?", time.Now().AddDate(0, -1, 0))
-func (qb *QueryBuilder) Raw(sql string, values ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Raw(sql string, values ...interface{}) QueryBuilder {
 	qb.db = qb.db.Raw(sql, values...)
 	return qb
 }
@@ -305,13 +310,13 @@ func (qb *QueryBuilder) Raw(sql string, values ...interface{}) *QueryBuilder {
 // Example:
 //
 //	qb.Model(&User{}).Where("active = ?", true).Count(&count)
-func (qb *QueryBuilder) Model(value interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Model(value interface{}) QueryBuilder {
 	qb.db = qb.db.Model(value)
 	return qb
 }
 
 // Scan scans the result into the destination struct or slice.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to the struct or slice where results will be stored
@@ -323,13 +328,13 @@ func (qb *QueryBuilder) Model(value interface{}) *QueryBuilder {
 //
 //	var result struct{ Count int }
 //	err := qb.Raw("SELECT COUNT(*) as count FROM users").Scan(&result)
-func (qb *QueryBuilder) Scan(dest interface{}) error {
+func (qb *postgresQueryBuilder) Scan(dest interface{}) error {
 	defer qb.release()
 	return qb.db.Scan(dest).Error
 }
 
 // Find finds records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to a slice where results will be stored
@@ -341,13 +346,13 @@ func (qb *QueryBuilder) Scan(dest interface{}) error {
 //
 //	var users []User
 //	err := qb.Where("active = ?", true).Find(&users)
-func (qb *QueryBuilder) Find(dest interface{}) error {
+func (qb *postgresQueryBuilder) Find(dest interface{}) error {
 	defer qb.release()
 	return qb.db.Find(dest).Error
 }
 
 // First finds the first record that matches the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to a struct where the result will be stored
@@ -362,13 +367,13 @@ func (qb *QueryBuilder) Find(dest interface{}) error {
 //	if err != nil {
 //	    err = db.TranslateError(err) // Optional: convert to standardized error
 //	}
-func (qb *QueryBuilder) First(dest interface{}) error {
+func (qb *postgresQueryBuilder) First(dest interface{}) error {
 	defer qb.release()
 	return qb.db.First(dest).Error
 }
 
 // Last finds the last record that matches the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - dest: Pointer to a struct where the result will be stored
@@ -380,13 +385,13 @@ func (qb *QueryBuilder) First(dest interface{}) error {
 //
 //	var user User
 //	err := qb.Where("department = ?", "Engineering").Order("joined_at ASC").Last(&user)
-func (qb *QueryBuilder) Last(dest interface{}) error {
+func (qb *postgresQueryBuilder) Last(dest interface{}) error {
 	defer qb.release()
 	return qb.db.Last(dest).Error
 }
 
 // Count counts records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - count: Pointer to an int64 where the count will be stored
@@ -397,13 +402,13 @@ func (qb *QueryBuilder) Last(dest interface{}) error {
 //
 //	var count int64
 //	err := qb.Where("active = ?", true).Count(&count)
-func (qb *QueryBuilder) Count(count *int64) error {
+func (qb *postgresQueryBuilder) Count(count *int64) error {
 	defer qb.release()
 	return qb.db.Count(count).Error
 }
 
 // Updates updates records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - values: Map or struct with the fields to update
@@ -419,7 +424,7 @@ func (qb *QueryBuilder) Count(count *int64) error {
 //	    return err
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
-func (qb *QueryBuilder) Updates(values interface{}) (int64, error) {
+func (qb *postgresQueryBuilder) Updates(values interface{}) (int64, error) {
 	defer qb.release()
 
 	result := qb.db.Updates(values)
@@ -428,7 +433,7 @@ func (qb *QueryBuilder) Updates(values interface{}) (int64, error) {
 }
 
 // Delete deletes records that match the query conditions.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - value: Model value or pointer to specify what to delete
@@ -444,7 +449,7 @@ func (qb *QueryBuilder) Updates(values interface{}) (int64, error) {
 //	    return err
 //	}
 //	fmt.Printf("Deleted %d rows\n", rowsAffected)
-func (qb *QueryBuilder) Delete(value interface{}) (int64, error) {
+func (qb *postgresQueryBuilder) Delete(value interface{}) (int64, error) {
 	defer qb.release()
 
 	result := qb.db.Delete(value)
@@ -453,7 +458,7 @@ func (qb *QueryBuilder) Delete(value interface{}) (int64, error) {
 }
 
 // Pluck queries a single column and scans the results into a slice.
-// This is a terminal method that executes the query and releases the mutex lock.
+// This is a terminal method that executes the query and finalizes the builder.
 //
 // Parameters:
 //   - column: Name of the column to query
@@ -471,7 +476,7 @@ func (qb *QueryBuilder) Delete(value interface{}) (int64, error) {
 //	    return err
 //	}
 //	fmt.Printf("Found %d email addresses\n", rowsFound)
-func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error) {
+func (qb *postgresQueryBuilder) Pluck(column string, dest interface{}) (int64, error) {
 	defer qb.release()
 
 	result := qb.db.Pluck(column, dest)
@@ -491,7 +496,7 @@ func (qb *QueryBuilder) Pluck(column string, dest interface{}) (int64, error) {
 //
 //	qb.Distinct("department").Find(&departments)
 //	qb.Distinct().Where("age > ?", 18).Find(&users) // SELECT DISTINCT * FROM users WHERE age > 18
-func (qb *QueryBuilder) Distinct(args ...interface{}) *QueryBuilder {
+func (qb *postgresQueryBuilder) Distinct(args ...interface{}) QueryBuilder {
 	qb.db = qb.db.Distinct(args...)
 	return qb
 }
@@ -509,7 +514,7 @@ func (qb *QueryBuilder) Distinct(args ...interface{}) *QueryBuilder {
 //	qb.Table("users_archive").Where("deleted_at IS NOT NULL").Find(&users)
 //	qb.Table("custom_table_name").Count(&count)
 //	qb.Table("user_stats").Select("department, COUNT(*) as count").Group("department").Scan(&stats)
-func (qb *QueryBuilder) Table(name string) *QueryBuilder {
+func (qb *postgresQueryBuilder) Table(name string) QueryBuilder {
 	qb.db = qb.db.Table(name)
 	return qb
 }
@@ -525,7 +530,7 @@ func (qb *QueryBuilder) Table(name string) *QueryBuilder {
 //	qb.Unscoped().Where("name = ?", "John").Find(&users) // Includes soft-deleted records
 //	qb.Unscoped().Delete(&user) // Permanently deletes the record
 //	qb.Unscoped().Count(&count) // Counts all records including soft-deleted
-func (qb *QueryBuilder) Unscoped() *QueryBuilder {
+func (qb *postgresQueryBuilder) Unscoped() QueryBuilder {
 	qb.db = qb.db.Unscoped()
 	return qb
 }
@@ -551,7 +556,7 @@ func (qb *QueryBuilder) Unscoped() *QueryBuilder {
 //	// Use scopes
 //	qb.Scopes(ActiveUsers, AdultUsers).Find(&users)
 //	qb.Scopes(ActiveUsers).Count(&count)
-func (qb *QueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) *QueryBuilder {
+func (qb *postgresQueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) QueryBuilder {
 	qb.db = qb.db.Scopes(funcs...)
 	return qb
 }
@@ -566,7 +571,7 @@ func (qb *QueryBuilder) Scopes(funcs ...func(*gorm.DB) *gorm.DB) *QueryBuilder {
 //
 //	qb.Where("id = ?", userID).ForUpdate().First(&user) // Locks the row for update
 //	qb.ForUpdate().Where("status = ?", "pending").Find(&orders) // Locks all matching rows
-func (qb *QueryBuilder) ForUpdate() *QueryBuilder {
+func (qb *postgresQueryBuilder) ForUpdate() QueryBuilder {
 	qb.db = qb.db.Clauses(clause.Locking{Strength: "UPDATE"})
 	return qb
 }
@@ -581,7 +586,7 @@ func (qb *QueryBuilder) ForUpdate() *QueryBuilder {
 //
 //	qb.Where("id = ?", userID).ForShare().First(&user) // Shared lock for reading
 //	qb.ForShare().Where("status = ?", "active").Find(&users) // Prevents updates but allows reads
-func (qb *QueryBuilder) ForShare() *QueryBuilder {
+func (qb *postgresQueryBuilder) ForShare() QueryBuilder {
 	qb.db = qb.db.Clauses(clause.Locking{Strength: "SHARE"})
 	return qb
 }
@@ -596,7 +601,7 @@ func (qb *QueryBuilder) ForShare() *QueryBuilder {
 //
 //	qb.Where("status = ?", "pending").ForUpdateSkipLocked().Limit(10).Find(&jobs)
 //	qb.ForUpdateSkipLocked().Where("processed = ?", false).First(&task)
-func (qb *QueryBuilder) ForUpdateSkipLocked() *QueryBuilder {
+func (qb *postgresQueryBuilder) ForUpdateSkipLocked() QueryBuilder {
 	qb.db = qb.db.Clauses(clause.Locking{
 		Strength: "UPDATE",
 		Options:  "SKIP LOCKED",
@@ -612,7 +617,7 @@ func (qb *QueryBuilder) ForUpdateSkipLocked() *QueryBuilder {
 // Example:
 //
 //	qb.Where("category = ?", "news").ForShareSkipLocked().Find(&articles)
-func (qb *QueryBuilder) ForShareSkipLocked() *QueryBuilder {
+func (qb *postgresQueryBuilder) ForShareSkipLocked() QueryBuilder {
 	qb.db = qb.db.Clauses(clause.Locking{
 		Strength: "SHARE",
 		Options:  "SKIP LOCKED",
@@ -629,7 +634,7 @@ func (qb *QueryBuilder) ForShareSkipLocked() *QueryBuilder {
 // Example:
 //
 //	qb.Where("id = ?", accountID).ForUpdateNoWait().First(&account)
-func (qb *QueryBuilder) ForUpdateNoWait() *QueryBuilder {
+func (qb *postgresQueryBuilder) ForUpdateNoWait() QueryBuilder {
 	qb.db = qb.db.Clauses(clause.Locking{
 		Strength: "UPDATE",
 		Options:  "NOWAIT",
@@ -646,7 +651,7 @@ func (qb *QueryBuilder) ForUpdateNoWait() *QueryBuilder {
 // Example:
 //
 //	qb.Where("id = ?", userID).ForNoKeyUpdate().First(&user) // PostgreSQL only
-func (qb *QueryBuilder) ForNoKeyUpdate() *QueryBuilder {
+func (qb *postgresQueryBuilder) ForNoKeyUpdate() QueryBuilder {
 	qb.db = qb.db.Clauses(clause.Locking{Strength: "NO KEY UPDATE"})
 	return qb
 }
@@ -660,7 +665,7 @@ func (qb *QueryBuilder) ForNoKeyUpdate() *QueryBuilder {
 // Example:
 //
 //	qb.Where("id = ?", userID).ForKeyShare().First(&user) // PostgreSQL only
-func (qb *QueryBuilder) ForKeyShare() *QueryBuilder {
+func (qb *postgresQueryBuilder) ForKeyShare() QueryBuilder {
 	qb.db = qb.db.Clauses(clause.Locking{Strength: "KEY SHARE"})
 	return qb
 }
@@ -680,8 +685,10 @@ func (qb *QueryBuilder) ForKeyShare() *QueryBuilder {
 //	    Columns:   []clause.Column{{Name: "email"}},
 //	    DoUpdates: clause.AssignmentColumns([]string{"name", "updated_at"}),
 //	}).Create(&user)
-func (qb *QueryBuilder) OnConflict(onConflict clause.OnConflict) *QueryBuilder {
-	qb.db = qb.db.Clauses(onConflict)
+func (qb *postgresQueryBuilder) OnConflict(onConflict interface{}) QueryBuilder {
+	if oc, ok := onConflict.(clause.OnConflict); ok {
+		qb.db = qb.db.Clauses(oc)
+	}
 	return qb
 }
 
@@ -698,7 +705,7 @@ func (qb *QueryBuilder) OnConflict(onConflict clause.OnConflict) *QueryBuilder {
 //
 //	qb.Returning("id", "created_at").Create(&user)
 //	qb.Where("status = ?", "pending").Returning("*").Updates(map[string]interface{}{"status": "processed"})
-func (qb *QueryBuilder) Returning(columns ...string) *QueryBuilder {
+func (qb *postgresQueryBuilder) Returning(columns ...string) QueryBuilder {
 	var clauseColumns []clause.Column
 	for _, col := range columns {
 		if col == "*" {
@@ -728,13 +735,20 @@ func (qb *QueryBuilder) Returning(columns ...string) *QueryBuilder {
 //	qb.Clauses(clause.GroupBy{
 //	    Columns: []clause.Column{{Name: "department"}},
 //	}).Find(&users)
-func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder {
-	qb.db = qb.db.Clauses(conds...)
+func (qb *postgresQueryBuilder) Clauses(conds ...interface{}) QueryBuilder {
+	// Convert interface{} to clause.Expression
+	var clauseExprs []clause.Expression
+	for _, cond := range conds {
+		if expr, ok := cond.(clause.Expression); ok {
+			clauseExprs = append(clauseExprs, expr)
+		}
+	}
+	qb.db = qb.db.Clauses(clauseExprs...)
 	return qb
 }
 
 // Create inserts a new record into the database.
-// This is a terminal method that executes the operation and releases the mutex lock.
+// This is a terminal method that executes the operation and finalizes the builder.
 // It can be combined with OnConflict() for UPSERT operations, Returning() for PostgreSQL
 // RETURNING clause, and other query builder methods.
 //
@@ -760,7 +774,7 @@ func (qb *QueryBuilder) Clauses(conds ...clause.Expression) *QueryBuilder {
 //	if rowsAffected == 0 {
 //	    // Record already exists
 //	}
-func (qb *QueryBuilder) Create(value interface{}) (int64, error) {
+func (qb *postgresQueryBuilder) Create(value interface{}) (int64, error) {
 	defer qb.release()
 
 	result := qb.db.Create(value)
@@ -769,7 +783,7 @@ func (qb *QueryBuilder) Create(value interface{}) (int64, error) {
 }
 
 // CreateInBatches creates records in batches to avoid memory issues with large datasets.
-// This is a terminal method that executes the operation and releases the mutex lock.
+// This is a terminal method that executes the operation and finalizes the builder.
 //
 // Parameters:
 //   - value: Slice of records to create
@@ -787,7 +801,7 @@ func (qb *QueryBuilder) Create(value interface{}) (int64, error) {
 //	    return err
 //	}
 //	fmt.Printf("Created %d records\n", rowsAffected)
-func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error) {
+func (qb *postgresQueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error) {
 	defer qb.release()
 
 	result := qb.db.CreateInBatches(value, batchSize)
@@ -808,7 +822,7 @@ func (qb *QueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64
 //
 //	var user User
 //	err := qb.Where("email = ?", "user@example.com").FirstOrInit(&user)
-func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error {
+func (qb *postgresQueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error {
 	defer qb.release()
 	return qb.db.FirstOrInit(dest, conds...).Error
 }
@@ -826,14 +840,13 @@ func (qb *QueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) erro
 //
 //	var user User
 //	err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
-func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error {
+func (qb *postgresQueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error {
 	defer qb.release()
 	return qb.db.FirstOrCreate(dest, conds...).Error
 }
 
-// Done releases the mutex lock without executing the query.
-// This method should be called when you want to cancel a query building chain
-// without executing any terminal operation.
+// Done finalizes the builder without executing a terminal operation.
+// This exists mostly for symmetry and future-proofing; currently it is a no-op.
 //
 // Example:
 //
@@ -843,15 +856,15 @@ func (qb *QueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) er
 //	} else {
 //	    qb.Done() // Release the lock without executing
 //	}
-func (qb *QueryBuilder) Done() {
+func (qb *postgresQueryBuilder) Done() {
 	qb.release()
 }
 
-// ToSubquery returns the underlying GORM DB for use as a subquery and releases the lock.
+// ToSubquery returns the underlying GORM DB for use as a subquery and finalizes the builder.
 // This method is specifically designed for creating subqueries that can be passed to
 // Where(), Having(), or other clauses that accept subqueries.
 //
-// Important: This method releases the lock immediately, so the returned *gorm.DB should
+// Important: This method finalizes the builder immediately, so the returned *gorm.DB should
 // be used as a subquery argument right away.
 //
 // Returns:
@@ -883,7 +896,7 @@ func (qb *QueryBuilder) Done() {
 //	    Model(&Stage{}).
 //	    Where("stage_id NOT IN (?)", stageIDsWithFiles).
 //	    Find(&stages)
-func (qb *QueryBuilder) ToSubquery() *gorm.DB {
+func (qb *postgresQueryBuilder) ToSubquery() *gorm.DB {
 	defer qb.release()
 	return qb.db
 }

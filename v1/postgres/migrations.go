@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -97,16 +96,15 @@ type MigrationHistoryRecord struct {
 // This method is useful during development or for simple applications,
 // but for production systems, explicit migrations are recommended.
 func (p *Postgres) AutoMigrate(models ...interface{}) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	db := p.DB()
 
 	// Ensure the migration history table exists
-	if err := p.ensureMigrationHistoryTable(); err != nil {
+	if err := p.ensureMigrationHistoryTable(db); err != nil {
 		return fmt.Errorf("failed to ensure migration history table: %w", err)
 	}
 
 	// Execute GORM's AutoMigrate
-	if err := p.Client.AutoMigrate(models...); err != nil {
+	if err := db.AutoMigrate(models...); err != nil {
 		return err
 	}
 
@@ -121,7 +119,7 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 		Status:     "success",
 	}
 
-	if err := p.Client.Create(&record).Error; err != nil {
+	if err := db.Create(&record).Error; err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
 
@@ -131,8 +129,8 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 // ensureMigrationHistoryTable creates the migration history table if it doesn't exist.
 // This internal method is called before any migration operation to make sure
 // the system can track which migrations have been applied.
-func (p *Postgres) ensureMigrationHistoryTable() error {
-	return p.Client.AutoMigrate(&MigrationHistoryRecord{})
+func (p *Postgres) ensureMigrationHistoryTable(dbConn interface{ AutoMigrate(...interface{}) error }) error {
+	return dbConn.AutoMigrate(&MigrationHistoryRecord{})
 }
 
 // MigrateUp applies all pending migrations from the specified directory.
@@ -150,17 +148,16 @@ func (p *Postgres) ensureMigrationHistoryTable() error {
 //
 //	err := db.MigrateUp(ctx, "./migrations")
 func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	db := p.DB().WithContext(ctx)
 
 	// Ensure the migration history table exists
-	if err := p.ensureMigrationHistoryTable(); err != nil {
+	if err := p.ensureMigrationHistoryTable(db); err != nil {
 		return fmt.Errorf("failed to ensure migration history table: %w", err)
 	}
 
 	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
-	if err := p.Client.Find(&applied).Error; err != nil {
+	if err := db.Find(&applied).Error; err != nil {
 		return fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
@@ -191,7 +188,7 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 		var status, errorMsg string
 
 		// Start a transaction
-		tx := p.Client.WithContext(ctx).Begin()
+		tx := db.Begin()
 		if tx.Error != nil {
 			return fmt.Errorf("failed to start transaction: %w", tx.Error)
 		}
@@ -249,12 +246,11 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 //
 //	err := db.MigrateDown(ctx, "./migrations")
 func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	db := p.DB().WithContext(ctx)
 
 	// Get the last applied migration
 	var lastMigration MigrationHistoryRecord
-	if err := p.Client.Order("id DESC").First(&lastMigration).Error; err != nil {
+	if err := db.Order("id DESC").First(&lastMigration).Error; err != nil {
 		return fmt.Errorf("failed to get last migration: %w", err)
 	}
 
@@ -277,7 +273,7 @@ func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error 
 	}
 
 	// Start a transaction
-	tx := p.Client.WithContext(ctx).Begin()
+	tx := db.Begin()
 	if tx.Error != nil {
 		return fmt.Errorf("failed to start transaction: %w", tx.Error)
 	}
@@ -348,7 +344,7 @@ func (p *Postgres) loadMigrations(dir string, direction MigrationDirection) ([]M
 		name := strings.Join(nameParts[2:], "_")
 
 		// Read the SQL content
-		content, err := fs.ReadFile(nil, entry) // This should be adapted to your filesystem
+		content, err := os.ReadFile(entry)
 		if err != nil {
 			return nil, err
 		}
@@ -386,12 +382,11 @@ func (p *Postgres) loadMigrations(dir string, direction MigrationDirection) ([]M
 //	    }
 //	}
 func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string) ([]map[string]interface{}, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	db := p.DB().WithContext(ctx)
 
 	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
-	if err := p.Client.WithContext(ctx).Find(&applied).Error; err != nil {
+	if err := db.Find(&applied).Error; err != nil {
 		return nil, fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
