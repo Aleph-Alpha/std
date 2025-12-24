@@ -11,12 +11,24 @@ import (
 // It registers the Postgres constructor for dependency injection
 // and sets up lifecycle hooks to properly initialize and shut down
 // the database connection.
+//
+// This module provides Client interface, not *Postgres concrete type.
 var FXModule = fx.Module("postgres",
 	fx.Provide(
-		NewPostgresClientWithDI,
+		NewPostgresClientWithDI, // Returns *Postgres for internal lifecycle
+		fx.Annotate(
+			ProvideClient,      // Returns Client interface
+			fx.As(new(Client)), // Expose as Client interface
+		),
 	),
 	fx.Invoke(RegisterPostgresLifecycle),
 )
+
+// ProvideClient wraps the concrete *Postgres and returns it as Client interface.
+// This enables applications to depend on the interface rather than concrete type.
+func ProvideClient(pg *Postgres) Client {
+	return pg
+}
 
 // PostgresParams groups the dependencies needed to create a Postgres Client via dependency injection.
 // This struct is designed to work with Uber's fx dependency injection framework and provides
@@ -40,7 +52,8 @@ type PostgresParams struct {
 //     automatic injection of these dependencies.
 //
 // Returns:
-//   - *Postgres: A fully initialized Postgres Client ready for use.
+//   - *Postgres: A fully initialized Postgres Client (concrete type for lifecycle management).
+//     To use the interface, inject Client instead.
 //
 // Example usage with fx:
 //
@@ -50,16 +63,18 @@ type PostgresParams struct {
 //	        func() postgres.Config {
 //	            return loadPostgresConfig() // Your config loading function
 //	        },
-//	        func() postgres.Logger {
-//	            return initLogger() // Your logger initialization
-//	        },
 //	    ),
 //	)
 //
 // This function delegates to the standard NewPostgres function, maintaining the same
 // initialization logic while enabling seamless integration with dependency injection.
 func NewPostgresClientWithDI(params PostgresParams) (*Postgres, error) {
-	return NewPostgres(params.Config)
+	client, err := NewPostgres(params.Config)
+	if err != nil {
+		return nil, err
+	}
+	// Return concrete type for lifecycle management
+	return client.(*Postgres), nil
 }
 
 // PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management.

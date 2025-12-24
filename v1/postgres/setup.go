@@ -30,7 +30,9 @@ type Postgres struct {
 // It establishes the initial database connection and sets up the internal state
 // for connection monitoring and recovery. If the initial connection fails,
 // it logs a fatal error and terminates.
-func NewPostgres(cfg Config) (*Postgres, error) {
+//
+// Returns Client interface, not *Postgres concrete type.
+func NewPostgres(cfg Config) (Client, error) {
 	conn, err := connectToPostgres(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error in connecting to postgres after all retries: %w", err)
