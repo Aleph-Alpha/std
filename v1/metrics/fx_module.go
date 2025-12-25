@@ -13,11 +13,10 @@ import (
 // This module integrates the Prometheus metrics server into an Fx-based application
 // by providing the Metrics factory and registering its lifecycle hooks.
 //
-// The module:
-//  1. Provides the NewMetrics factory function to the dependency injection container,
-//     making the Metrics instance available to other components.
-//  2. Invokes RegisterMetricsLifecycle to manage startup and graceful shutdown
-//     of the Prometheus HTTP server.
+// The module provides:
+// 1. *Metrics (concrete type) for direct use
+// 2. MetricsCollector interface for dependency injection
+// 3. Lifecycle management for the Prometheus HTTP server
 //
 // Usage:
 //
@@ -35,9 +34,16 @@ import (
 //
 // Dependencies required by this module:
 // - A metrics.Config instance must be available in the dependency injection container
-// - A logger.Logger instance is optional but recommended for startup/shutdown logs
+// - A logger.LoggerClient instance is optional but recommended for startup/shutdown logs
 var FXModule = fx.Module("metrics",
-	fx.Provide(NewMetrics),              // Creates a *Metrics instance§
+	fx.Provide(
+		NewMetrics, // Provides *Metrics
+		// Also provide the MetricsCollector interface
+		fx.Annotate(
+			func(m *Metrics) MetricsCollector { return m },
+			fx.As(new(MetricsCollector)),
+		),
+	),
 	fx.Invoke(RegisterMetricsLifecycle), // Registers the lifecycle hooks
 )
 
