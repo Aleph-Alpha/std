@@ -9,40 +9,6 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// Message defines the interface for consumed messages from RabbitMQ.
-// This interface abstracts the underlying AMQP message structure and
-// provides methods for acknowledging or rejecting messages.
-type Message interface {
-	// AckMsg acknowledges the message, informing RabbitMQ that the message
-	// has been successfully processed and can be removed from the queue.
-	AckMsg() error
-
-	// NackMsg rejects the message. If requeue is true, the message will be
-	// returned to the queue for redelivery; otherwise, it will be discarded
-	// or sent to a dead-letter exchange if configured.
-	NackMsg(requeue bool) error
-
-	// Body returns the message payload as a byte slice.
-	Body() []byte
-
-	// Header returns the headers associated with the message.
-	// Message headers provide metadata about the message and can contain
-	// application-specific information set by the message publisher.
-	//
-	// Headers are a map of key-value pairs where the keys are strings
-	// and values can be of various types. Common uses for headers include:
-	//   - Message type identification
-	//   - Content format specification
-	//   - Routing information
-	//   - Tracing context propagation
-	//   - Custom application metadata
-	//
-	// For distributed tracing with OpenTelemetry, headers can carry trace
-	// context between services, enabling end-to-end tracing across
-	// message-based communication.
-	Header() map[string]interface{}
-}
-
 // ConsumerMessage implements the Message interface and wraps an AMQP delivery.
 // This struct provides access to the message content and acknowledgment methods.
 type ConsumerMessage struct {
@@ -66,7 +32,7 @@ type ConsumerMessage struct {
 //   - Context-aware cancellation
 //   - Graceful shutdown handling
 //   - Buffered output channel to improve throughput
-func (rb *Rabbit) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueName string) <-chan Message {
+func (rb *RabbitClient) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueName string) <-chan Message {
 	outChan := make(chan Message, 100)
 
 	wg.Add(1)
@@ -150,7 +116,7 @@ func (rb *Rabbit) consumeQueue(ctx context.Context, wg *sync.WaitGroup, queueNam
 //	        log.Printf("Failed to ack message: %v", err)
 //	    }
 //	}
-func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
+func (rb *RabbitClient) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
 	return rb.consumeQueue(ctx, wg, rb.cfg.Channel.QueueName)
 }
 
@@ -179,7 +145,7 @@ func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Messag
 //	    // Acknowledge after processing
 //	    msg.AckMsg()
 //	}
-func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
+func (rb *RabbitClient) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
 	return rb.consumeQueue(ctx, wg, "dlq-queue")
 }
 
@@ -238,7 +204,7 @@ func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Mes
 //	}
 //
 //	log.Println("Message published successfully with trace context")
-func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error {
+func (rb *RabbitClient) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error {
 	select {
 	case <-ctx.Done():
 		log.Printf("context error for publishing msg into rabbit: %v", ctx.Err())

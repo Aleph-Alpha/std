@@ -77,7 +77,7 @@ func TestRabbitMQConsumerContextCancellation(t *testing.T) {
 	}, 60*time.Second, 500*time.Millisecond, "RabbitMQ port not ready after restart")
 
 	// Initialize mock controller and logger
-	var client *Rabbit
+	var client *RabbitClient
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -187,7 +187,7 @@ func TestRabbitMQConsumeWithAck_WithReconnection(t *testing.T) {
 		return true
 	}, 60*time.Second, 500*time.Millisecond, "RabbitMQ port not ready after restart")
 
-	var client *Rabbit
+	var client *RabbitClient
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -336,7 +336,7 @@ func TestRabbitMQConsumeWithNackReQueue(t *testing.T) {
 		return true
 	}, 60*time.Second, 500*time.Millisecond, "RabbitMQ port not ready after restart")
 
-	var client *Rabbit
+	var client *RabbitClient
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -466,7 +466,7 @@ func TestRabbitMQConsumeWithAck(t *testing.T) {
 		return true
 	}, 60*time.Second, 500*time.Millisecond, "RabbitMQ port not ready after restart")
 
-	var client *Rabbit
+	var client *RabbitClient
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -581,7 +581,7 @@ func TestRabbitMQPublish(t *testing.T) {
 		return true
 	}, 60*time.Second, 500*time.Millisecond, "RabbitMQ port not ready after restart")
 
-	var client *Rabbit
+	var client *RabbitClient
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -685,7 +685,7 @@ func TestRabbitMQReconnectAfterDisconnect(t *testing.T) {
 		return true
 	}, 60*time.Second, 500*time.Millisecond, "RabbitMQ port not ready after restart")
 
-	var client *Rabbit
+	var client *RabbitClient
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -797,7 +797,7 @@ func TestRabbitMQDeadLetterQueue(t *testing.T) {
 		},
 	}
 
-	var client *Rabbit
+	var client *RabbitClient
 
 	app := fx.New(
 		FXModule,
@@ -968,7 +968,7 @@ func getFreePort() (string, error) {
 }
 
 func TestRabbit_TranslateError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -1081,7 +1081,7 @@ func TestRabbit_TranslateError(t *testing.T) {
 }
 
 func TestRabbit_TranslateAMQPError_ByReason(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -1259,7 +1259,7 @@ func TestRabbit_TranslateAMQPError_ByReason(t *testing.T) {
 }
 
 func TestRabbit_TranslateNetworkError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -1292,7 +1292,7 @@ func TestRabbit_TranslateNetworkError(t *testing.T) {
 }
 
 func TestRabbit_TranslateSyscallError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -1395,7 +1395,7 @@ func TestRabbit_TranslateSyscallError(t *testing.T) {
 }
 
 func TestRabbit_TranslateByErrorMessage(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -1854,7 +1854,7 @@ func TestRabbit_TranslateByErrorMessage(t *testing.T) {
 }
 
 func TestRabbit_GetErrorCategory(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -1947,7 +1947,7 @@ func TestRabbit_GetErrorCategory(t *testing.T) {
 }
 
 func TestRabbit_IsRetryableError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2035,7 +2035,7 @@ func TestRabbit_IsRetryableError(t *testing.T) {
 }
 
 func TestRabbit_IsTemporaryError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2098,7 +2098,7 @@ func TestRabbit_IsTemporaryError(t *testing.T) {
 }
 
 func TestRabbit_IsPermanentError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2181,7 +2181,7 @@ func TestRabbit_IsPermanentError(t *testing.T) {
 }
 
 func TestRabbit_IsConnectionError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2224,7 +2224,7 @@ func TestRabbit_IsConnectionError(t *testing.T) {
 }
 
 func TestRabbit_IsChannelError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2267,7 +2267,7 @@ func TestRabbit_IsChannelError(t *testing.T) {
 }
 
 func TestRabbit_IsAuthenticationError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2315,7 +2315,7 @@ func TestRabbit_IsAuthenticationError(t *testing.T) {
 }
 
 func TestRabbit_IsResourceError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2378,7 +2378,7 @@ func TestRabbit_IsResourceError(t *testing.T) {
 }
 
 func TestRabbit_IsAlarmError(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	tests := []struct {
 		name     string
@@ -2465,7 +2465,7 @@ func (e *genericNetError) Temporary() bool { return false }
 
 // Integration tests
 func TestRabbit_ErrorTranslation_Integration(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	// Test a complex scenario with AMQP error
 	amqpErr := &amqp.Error{
@@ -2491,7 +2491,7 @@ func TestRabbit_ErrorTranslation_Integration(t *testing.T) {
 
 // Benchmark tests
 func BenchmarkRabbit_TranslateError_AMQPError(b *testing.B) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 	amqpErr := &amqp.Error{Code: amqp.AccessRefused, Reason: "access refused"}
 
 	b.ResetTimer()
@@ -2501,7 +2501,7 @@ func BenchmarkRabbit_TranslateError_AMQPError(b *testing.B) {
 }
 
 func BenchmarkRabbit_TranslateError_StringMatch(b *testing.B) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 	err := errors.New("connection refused")
 
 	b.ResetTimer()
@@ -2511,7 +2511,7 @@ func BenchmarkRabbit_TranslateError_StringMatch(b *testing.B) {
 }
 
 func BenchmarkRabbit_TranslateError_SyscallError(b *testing.B) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 	err := syscall.ECONNREFUSED
 
 	b.ResetTimer()
@@ -2521,7 +2521,7 @@ func BenchmarkRabbit_TranslateError_SyscallError(b *testing.B) {
 }
 
 func BenchmarkRabbit_TranslateError_NetworkError(b *testing.B) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 	err := &timeoutError{timeout: true}
 
 	b.ResetTimer()
@@ -2532,7 +2532,7 @@ func BenchmarkRabbit_TranslateError_NetworkError(b *testing.B) {
 
 // Test error wrapping scenarios
 func TestRabbit_TranslateError_WrappedErrors(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	// Test wrapped AMQP error
 	amqpErr := &amqp.Error{Code: amqp.AccessRefused, Reason: "access refused"}
@@ -2552,7 +2552,7 @@ func TestRabbit_TranslateError_WrappedErrors(t *testing.T) {
 
 // Test edge cases
 func TestRabbit_TranslateError_EdgeCases(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	// Test with empty error message
 	emptyErr := errors.New("")
@@ -2572,7 +2572,7 @@ func TestRabbit_TranslateError_EdgeCases(t *testing.T) {
 
 // Test multiple error types in one error message
 func TestRabbit_TranslateError_MultiplePatterns(t *testing.T) {
-	r := &Rabbit{}
+	r := &RabbitClient{}
 
 	// Test error message with multiple patterns - should match the first one found
 	multiErr := errors.New("connection refused due to authentication failed")

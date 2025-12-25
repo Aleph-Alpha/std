@@ -4,6 +4,15 @@
 // message queues, providing connection management, message publishing, and
 // consuming capabilities with a focus on reliability and ease of use.
 //
+// # Architecture
+//
+// This package follows the "accept interfaces, return structs" design pattern:
+//   - Client interface: Defines the contract for RabbitMQ operations
+//   - RabbitClient struct: Concrete implementation of the Client interface
+//   - Message interface: Defines the contract for consumed messages
+//   - NewClient constructor: Returns *RabbitClient (concrete type)
+//   - FX module: Provides both *RabbitClient and Client interface for dependency injection
+//
 // Core Features:
 //   - Robust connection management with automatic reconnection
 //   - Simple publishing interface with error handling
@@ -12,18 +21,18 @@
 //   - Integration with the Logger package for structured logging
 //   - Distributed tracing support via message headers
 //
-// Basic Usage:
+// # Direct Usage (Without FX)
+//
+// For simple applications or tests, create a client directly:
 //
 //	import (
 //		"github.com/Aleph-Alpha/std/v1/rabbit"
-//		"github.com/Aleph-Alpha/std/v1/logger"
 //		"context"
 //		"sync"
 //	)
 //
-//
-//	// Create a new RabbitMQ client
-//	client, err := rabbit.New(rabbit.Config{
+//	// Create a new RabbitMQ client (returns concrete *RabbitClient)
+//	client, err := rabbit.NewClient(rabbit.Config{
 //		Connection: rabbit.ConnectionConfig{
 //			URI: "amqp://guest:guest@localhost:5672/",
 //		},
@@ -32,21 +41,73 @@
 //			ExchangeType: "topic",
 //			RoutingKey:   "user.created",
 //			QueueName:    "user-events",
-//			ContentType:  "application/json",
 //		},
-//	}, log)
+//	})
 //	if err != nil {
-//		log.Fatal("Failed to connect to RabbitMQ", err, nil)
+//		return err
 //	}
-//	defer client.Close()
+//	defer client.GracefulShutdown()
 //
 //	// Publish a message
 //	ctx := context.Background()
 //	message := []byte(`{"id": "123", "name": "John"}`)
-//	err = client.Publish(ctx, message, nil)
-//	if err != nil {
-//		log.Error("Failed to publish message", err, nil)
+//	err = client.Publish(ctx, message)
+//
+// # FX Module Integration
+//
+// For production applications using Uber's fx, use the FXModule which provides
+// both the concrete type and interface:
+//
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/rabbit"
+//		"github.com/Aleph-Alpha/std/v1/logger"
+//		"go.uber.org/fx"
+//	)
+//
+//	app := fx.New(
+//		logger.FXModule, // Optional: provides std logger
+//		rabbit.FXModule, // Provides *RabbitClient and rabbit.Client interface
+//		fx.Provide(func() rabbit.Config {
+//			return rabbit.Config{
+//				Connection: rabbit.ConnectionConfig{
+//					URI: "amqp://guest:guest@localhost:5672/",
+//				},
+//				Channel: rabbit.ChannelConfig{
+//					ExchangeName: "events",
+//					QueueName:    "user-events",
+//				},
+//			}
+//		}),
+//		fx.Invoke(func(client *rabbit.RabbitClient) {
+//			// Use concrete type directly
+//			ctx := context.Background()
+//			client.Publish(ctx, []byte("message"))
+//		}),
+//		// ... other modules
+//	)
+//	app.Run()
+//
+// # Type Aliases in Consumer Code
+//
+// To simplify your code and make it message-broker-agnostic, use type aliases:
+//
+//	package myapp
+//
+//	import stdRabbit "github.com/Aleph-Alpha/std/v1/rabbit"
+//
+//	// Use type alias to reference std's interface
+//	type RabbitClient = stdRabbit.Client
+//	type RabbitMessage = stdRabbit.Message
+//
+//	// Now use RabbitClient throughout your codebase
+//	func MyFunction(client RabbitClient) {
+//		client.Publish(ctx, []byte("message"))
 //	}
+//
+// This eliminates the need for adapters and allows you to switch implementations
+// by only changing the alias definition.
+//
+// # Message Consumption
 //
 //	// Consume messages
 //	wg := &sync.WaitGroup{}
@@ -55,11 +116,10 @@
 //
 //	msgChan := client.Consume(ctx, wg)
 //	for msg := range msgChan {
+//		// Process the message
 //		log.Info("Received message", nil, map[string]interface{}{
 //			"body": string(msg.Body()),
 //		})
-//
-//		// Process the message
 //
 //		// Acknowledge the message
 //		if err := msg.AckMsg(); err != nil {
@@ -67,7 +127,7 @@
 //		}
 //	}
 //
-// Distributed Tracing with Message Headers:
+// # Distributed Tracing with Message Headers
 //
 // This package supports distributed tracing by allowing you to propagate trace context
 // through message headers, enabling end-to-end visibility across services.

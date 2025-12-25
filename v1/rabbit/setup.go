@@ -15,7 +15,7 @@ import (
 // Rabbit represents a client for interacting with RabbitMQ.
 // It manages connections, channels, and provides methods for publishing
 // and consuming messages with automatic reconnection capabilities.
-type Rabbit struct {
+type RabbitClient struct {
 	// cfg stores the configuration for this RabbitMQ client
 	cfg Config
 
@@ -43,14 +43,17 @@ type Rabbit struct {
 //   - cfg: Configuration for connecting to RabbitMQ and setting up channels
 //   - logger: Logger implementation for recording events and errors
 //
-// Returns a new Rabbit client instance that is ready to use.
-// If connection fails after all retries or channel setup fails, it will log a fatal error.
+// Returns a new RabbitClient instance that is ready to use.
+// If connection fails after all retries or channel setup fails, it will return an error.
 //
 // Example:
 //
-//	client := rabbit.NewClient(config, myLogger)
-//	defer client.Close()
-func NewClient(config Config) (*Rabbit, error) {
+//	client, err := rabbit.NewClient(config)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	defer client.GracefulShutdown()
+func NewClient(config Config) (*RabbitClient, error) {
 	con, err := newConnection(config)
 	if err != nil {
 		log.Printf("ERROR: error in connecting to rabbit after all retries: %v", err)
@@ -63,7 +66,7 @@ func NewClient(config Config) (*Rabbit, error) {
 		return nil, err
 	}
 
-	return &Rabbit{
+	return &RabbitClient{
 		cfg:            config,
 		conn:           con,
 		Channel:        ch,
@@ -226,7 +229,7 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 //   - Continue monitoring until the shutdownSignal is received
 //
 // This provides resilience against network issues and RabbitMQ server restarts.
-func (rb *Rabbit) RetryConnection(cfg Config) {
+func (rb *RabbitClient) RetryConnection(cfg Config) {
 	defer rb.closeShutdownOnce.Do(func() {
 		close(rb.shutdownSignal)
 	})
