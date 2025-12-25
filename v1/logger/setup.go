@@ -8,10 +8,12 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Logger is a wrapper around Uber's Zap logger.
+// LoggerClient is a wrapper around Uber's Zap logger.
 // It provides a simplified interface to the underlying Zap logger,
 // with additional functionality specific to the application's needs.
-type Logger struct {
+//
+// LoggerClient implements the Logger interface.
+type LoggerClient struct {
 	// Zap is the underlying zap.Logger instance
 	// This is exposed to allow direct access to Zap-specific functionality
 	// when needed, but most logging should go through the wrapper methods.
@@ -31,7 +33,7 @@ type Logger struct {
 //   - cfg: Configuration for the logger, including log level, caller skip, and tracing options
 //
 // Returns:
-//   - *Logger: A configured logger instance ready for use
+//   - *LoggerClient: A configured logger instance ready for use
 //
 // The logger is configured with:
 //   - JSON encoding for structured logging
@@ -62,7 +64,7 @@ type Logger struct {
 //	    CallerSkip:  2, // skip service wrapper + std wrapper
 //	}
 //	log := logger.NewLoggerClient(loggerConfig)
-func NewLoggerClient(cfg Config) *Logger {
+func NewLoggerClient(cfg Config) *LoggerClient {
 
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "timestamp"
@@ -116,7 +118,7 @@ func NewLoggerClient(cfg Config) *Logger {
 		log.Fatal(err)
 	}
 
-	return &Logger{
+	return &LoggerClient{
 		Zap:            logger,
 		tracingEnabled: cfg.EnableTracing,
 	}

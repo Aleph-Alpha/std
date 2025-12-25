@@ -10,10 +10,10 @@ import (
 // This module integrates the logger into an Fx-based application by providing
 // the logger factory and registering its lifecycle hooks.
 //
-// The module:
-//  1. Provides the NewLoggerClient factory function to the dependency injection container,
-//     making the logger available to other components
-//  2. Invokes RegisterLoggerLifecycle to set up proper cleanup during application shutdown
+// The module provides:
+// 1. *LoggerClient (concrete type) for direct use
+// 2. Logger interface for dependency injection
+// 3. Lifecycle management for proper cleanup
 //
 // Usage:
 //
@@ -26,7 +26,12 @@ import (
 // - A logger.Config instance must be available in the dependency injection container
 var FXModule = fx.Module("logger",
 	fx.Provide(
-		NewLoggerClient,
+		NewLoggerClient, // Provides *LoggerClient
+		// Also provide the Logger interface
+		fx.Annotate(
+			func(l *LoggerClient) Logger { return l },
+			fx.As(new(Logger)),
+		),
 	),
 	fx.Invoke(RegisterLoggerLifecycle),
 )
@@ -48,7 +53,7 @@ var FXModule = fx.Module("logger",
 //
 // Note: This function is automatically invoked by the FXModule and does not need
 // to be called directly in application code.
-func RegisterLoggerLifecycle(lc fx.Lifecycle, client *Logger) {
+func RegisterLoggerLifecycle(lc fx.Lifecycle, client *LoggerClient) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			return client.Zap.Sync() // flushes any buffered logs
