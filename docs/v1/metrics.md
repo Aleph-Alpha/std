@@ -8,143 +8,587 @@ import "github.com/Aleph-Alpha/std/v1/metrics"
 
 Package metrics provides Prometheus\-based monitoring and metrics collection functionality for Go applications.
 
-The metrics package is designed to provide a standardized observability approach with features such as configurable HTTP endpoints for metrics exposure, automatic runtime instrumentation, and integration with the Fx dependency injection framework for easy incorporation into Aleph Alpha services.
+The metrics package is designed to provide a standardized observability approach with dual HTTP endpoints for system\-level and application\-level metrics, full control over metric definitions, and integration with the Fx dependency injection framework for easy incorporation into Aleph Alpha services.
 
-Core Features:
+### Architecture
 
-- Exposes a configurable /metrics endpoint for Prometheus scraping
+This package follows the "accept interfaces, return structs" design pattern:
+
+- MetricsCollector interface: Defines the contract for metrics operations
+- Metrics struct: Concrete implementation of the MetricsCollector interface
+- NewMetrics constructor: Returns \*Metrics \(concrete type\)
+- FX module: Provides both \*Metrics and MetricsCollector interface for dependency injection
+
+### Dual Endpoint Design
+
+The package provides two separate Prometheus endpoints:
+
+1. System Metrics Endpoint \(default: :9090\)
+
+- Go runtime metrics \(goroutines, memory, GC stats\)
+- Process metrics \(CPU, file descriptors, memory\)
+- Build info metrics
+- Automatically registered, no user action required
+
+2. Application Metrics Endpoint \(default: :9091\)
+
+- User\-defined custom metrics only
+- Full control over metric names, types, and labels
+- No default metrics \- clean slate for application observability
+
+This separation allows:
+
+- Different scrape configurations \(e.g., system metrics every 15s, app metrics every 5s\)
+- Different access controls \(e.g., system metrics internal\-only\)
+- Cleaner organization and cardinality management
+
+### Core Features
+
+- Two configurable /metrics endpoints for Prometheus scraping
 - Integration with go.uber.org/fx for automatic lifecycle management
-- Automatic registration of Go runtime and process\-level metrics
-- Support for custom metric registration \(counters, gauges, histograms\)
-- Optional namespace and service name labelling for multi\-service observability
+- Support for all Prometheus metric types \(Counter, Gauge, Histogram, Summary\)
+- User\-defined metrics with custom labels
+- Automatic service label wrapping for multi\-service observability
 - Graceful startup and shutdown via Fx lifecycle hooks
 
-Basic Usage:
+### Direct Usage \\\(Without FX\\\)
+
+For simple applications or tests, create metrics directly:
 
 ```
 import "github.com/Aleph-Alpha/std/v1/metrics"
 
-// Create a new metrics server manually
+// Create metrics servers (returns concrete *Metrics)
 cfg := metrics.Config{
-	Address:                ":9090",
-	EnableDefaultCollectors: true,
-	ServiceName:             "search-store",
-	Namespace:               "pharia_data",
+	SystemMetricsAddress:      ":9090",
+	ApplicationMetricsAddress: ":9091",
+	ServiceName:               "search-store",
 }
 
 m := metrics.NewMetrics(cfg)
-go m.Server.ListenAndServe()
 
-// Register custom counters
-counter := prometheus.NewCounterVec(
-    prometheus.CounterOpts{
-        Name: "http_requests_total",
-        Help: "Total number of HTTP requests processed.",
-    },
-    []string{"method", "endpoint"},
+// Start both servers
+go m.SystemServer.ListenAndServe()
+go m.ApplicationServer.ListenAndServe()
+
+// Create custom application metrics
+requestCounter := m.CreateCounter(
+	"http_requests_total",
+	"Total HTTP requests",
+	[]string{"method", "status"},
 )
-m.Registry.MustRegister(counter)
+requestCounter.WithLabelValues("GET", "200").Inc()
+
+// Access metrics:
+// - System: http://localhost:9090/metrics
+// - Application: http://localhost:9091/metrics
 ```
 
-FX Module Integration:
+### FX Module Integration
 
-This package provides an Fx module for easy integration with applications using the Fx dependency injection framework:
+For production applications using Uber's fx, use the FXModule which provides both the concrete type and interface:
 
 ```
+import (
+	"go.uber.org/fx"
+	"github.com/Aleph-Alpha/std/v1/metrics"
+	"github.com/Aleph-Alpha/std/v1/logger"
+)
+
 app := fx.New(
-	logger.FXModule,
-	metrics.FXModule,
+	logger.FXModule, // Optional: provides std logger
+	metrics.FXModule, // Provides *Metrics and MetricsCollector interface
 	fx.Provide(func() metrics.Config {
 		return metrics.Config{
-			Address:                ":9090",
-			EnableDefaultCollectors: true,
-			ServiceName:             "search-store",
+			SystemMetricsAddress:      ":9090",
+			ApplicationMetricsAddress: ":9091",
+			ServiceName:               "search-store",
 		}
+	}),
+	fx.Invoke(func(m metrics.MetricsCollector) {
+		// Define application metrics
+		counter := m.CreateCounter(
+			"requests_processed",
+			"Total processed requests",
+			[]string{"status"},
+		)
+		counter.WithLabelValues("success").Inc()
 	}),
 )
 app.Run()
 ```
 
-Configuration:
+### Type Aliases in Consumer Code
 
-The metrics server can be configured via environment variables:
-
-```
-METRICS_ADDRESS=:9090                      # Port and address for /metrics endpoint
-METRICS_ENABLE_DEFAULT_COLLECTORS=true     # Enable runtime and process metrics
-METRICS_NAMESPACE=pharia_data              # Optional prefix for all metric names
-METRICS_SERVICE_NAME=search-store          # Adds service label to all metrics
-```
-
-Default Collectors:
-
-When EnableDefaultCollectors is true, the package automatically registers the following collectors:
-
-- Go runtime metrics \(goroutines, GC stats, heap usage\)
-- Process metrics \(CPU time, memory, file descriptors\)
-
-These metrics provide deep visibility into service performance and stability.
-
-Custom Metrics:
-
-Applications can register additional Prometheus metrics using the exposed Registry. For example:
+To simplify your code and make it metrics\-agnostic, use type aliases:
 
 ```
-requestDuration := prometheus.NewHistogramVec(
-    prometheus.HistogramOpts{
-        Name:    "http_request_duration_seconds",
-        Help:    "Histogram of request latencies.",
-        Buckets: prometheus.DefBuckets,
-    },
-    []string{"method", "route"},
+package myapp
+
+import stdMetrics "github.com/Aleph-Alpha/std/v1/metrics"
+
+// Use type alias to reference std's interface
+type MetricsCollector = stdMetrics.MetricsCollector
+
+// Now use MetricsCollector throughout your codebase
+func MyFunction(metrics MetricsCollector) {
+	counter := metrics.CreateCounter("my_counter", "My counter", []string{"label"})
+	counter.WithLabelValues("value").Inc()
+}
+```
+
+This eliminates the need for adapters and allows you to switch implementations by only changing the alias definition.
+
+### Configuration
+
+The metrics servers can be configured via environment variables:
+
+```
+METRICS_SYSTEM_ADDRESS=:9090          # System metrics endpoint address
+METRICS_APPLICATION_ADDRESS=:9091     # Application metrics endpoint address
+METRICS_SERVICE_NAME=search-store     # Adds service label to all metrics
+```
+
+Set an address to empty string \(""\) to disable that endpoint:
+
+```
+cfg := metrics.Config{
+	SystemMetricsAddress:      "",      // Disable system metrics
+	ApplicationMetricsAddress: ":9091", // Only application metrics
+	ServiceName:               "search-store",
+}
+```
+
+### Metric Types and Usage Examples
+
+\#\# 1. Counter \- Cumulative metrics that only increase
+
+Use counters for tracking totals \(requests, errors, bytes processed\):
+
+```
+requestCounter := m.CreateCounter(
+	"http_requests_total",
+	"Total number of HTTP requests",
+	[]string{"method", "status", "endpoint"},
 )
-m.Registry.MustRegister(requestDuration)
+
+// In your HTTP handler:
+requestCounter.WithLabelValues("GET", "200", "/api/search").Inc()
+requestCounter.WithLabelValues("POST", "500", "/api/index").Inc()
 ```
 
-Performance Considerations:
+\#\# 2. Gauge \- Values that can go up or down
 
-The metrics server runs in a separate HTTP handler and is lightweight. Default collectors use minimal resources, but avoid unnecessary high\-cardinality metrics or unbounded label values to maintain good performance.
+Use gauges for current state \(active connections, queue depth, temperature\):
 
-Thread Safety:
+```
+activeConnections := m.CreateGauge(
+	"active_database_connections",
+	"Number of active database connections",
+	[]string{"pool"},
+)
 
-All methods on the Metrics struct and Prometheus collectors are safe for concurrent use by multiple goroutines.
+// Track connection pool size
+activeConnections.WithLabelValues("postgres").Set(25)
+activeConnections.WithLabelValues("postgres").Inc()  // Add 1
+activeConnections.WithLabelValues("postgres").Dec()  // Subtract 1
+activeConnections.WithLabelValues("postgres").Add(5) // Add 5
+```
 
-Observability:
+\#\# 3. Histogram \- Distribution tracking with quantiles
 
-Exposed metrics can be visualized in Prometheus, Grafana, or any compatible monitoring system to provide insights into service health, latency, and resource utilization.
+Use histograms for latency, request sizes, or any value distribution:
+
+```
+requestDuration := m.CreateHistogram(
+	"http_request_duration_seconds",
+	"HTTP request duration in seconds",
+	[]string{"method", "endpoint"},
+	[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}, // buckets
+)
+
+// In your HTTP handler:
+start := time.Now()
+// ... handle request ...
+duration := time.Since(start).Seconds()
+requestDuration.WithLabelValues("GET", "/api/search").Observe(duration)
+```
+
+Prometheus will automatically calculate:
+
+- Quantiles \(p50, p95, p99\)
+- Count of observations
+- Sum of all observed values
+
+\#\# 4. Summary \- Client\-side streaming quantiles
+
+Use summaries when you need precise quantile calculations on the client side:
+
+```
+apiLatency := m.CreateSummary(
+	"api_request_latency_seconds",
+	"API request latency in seconds",
+	[]string{"endpoint"},
+	map[float64]float64{
+		0.5:  0.05,  // 50th percentile (median) with 5% error
+		0.9:  0.01,  // 90th percentile with 1% error
+		0.99: 0.001, // 99th percentile with 0.1% error
+	},
+)
+
+// In your API handler:
+start := time.Now()
+// ... process request ...
+apiLatency.WithLabelValues("/api/search").Observe(time.Since(start).Seconds())
+```
+
+### Complete HTTP Middleware Example
+
+Here's a complete example of HTTP request instrumentation:
+
+```
+package main
+
+import (
+	"net/http"
+	"time"
+
+	"go.uber.org/fx"
+	"github.com/Aleph-Alpha/std/v1/metrics"
+	"github.com/Aleph-Alpha/std/v1/logger"
+)
+
+type HTTPMetrics struct {
+	RequestsTotal   metrics.Counter
+	RequestDuration metrics.Histogram
+	RequestSize     metrics.Histogram
+	ResponseSize    metrics.Histogram
+	ActiveRequests  metrics.Gauge
+}
+
+func NewHTTPMetrics(m metrics.MetricsCollector) *HTTPMetrics {
+	return &HTTPMetrics{
+		RequestsTotal: m.CreateCounter(
+			"http_requests_total",
+			"Total number of HTTP requests",
+			[]string{"method", "endpoint", "status"},
+		),
+		RequestDuration: m.CreateHistogram(
+			"http_request_duration_seconds",
+			"HTTP request duration in seconds",
+			[]string{"method", "endpoint"},
+			[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+		),
+		RequestSize: m.CreateHistogram(
+			"http_request_size_bytes",
+			"HTTP request size in bytes",
+			[]string{"method", "endpoint"},
+			exponentialBuckets(100, 10, 8), // 100, 1000, 10000, ...
+		),
+		ResponseSize: m.CreateHistogram(
+			"http_response_size_bytes",
+			"HTTP response size in bytes",
+			[]string{"method", "endpoint"},
+			exponentialBuckets(100, 10, 8),
+		),
+		ActiveRequests: m.CreateGauge(
+			"http_requests_active",
+			"Number of active HTTP requests",
+			[]string{"method", "endpoint"},
+		),
+	}
+}
+
+func (hm *HTTPMetrics) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		endpoint := r.URL.Path
+		method := r.Method
+
+		// Track active requests
+		hm.ActiveRequests.WithLabelValues(method, endpoint).Inc()
+		defer hm.ActiveRequests.WithLabelValues(method, endpoint).Dec()
+
+		// Track request size
+		if r.ContentLength > 0 {
+			hm.RequestSize.WithLabelValues(method, endpoint).Observe(float64(r.ContentLength))
+		}
+
+		// Capture response
+		wrw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(wrw, r)
+
+		// Record metrics
+		duration := time.Since(start).Seconds()
+		status := fmt.Sprintf("%d", wrw.statusCode)
+
+		hm.RequestsTotal.WithLabelValues(method, endpoint, status).Inc()
+		hm.RequestDuration.WithLabelValues(method, endpoint).Observe(duration)
+		hm.ResponseSize.WithLabelValues(method, endpoint).Observe(float64(wrw.bytesWritten))
+	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode   int
+	bytesWritten int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return n, err
+}
+
+func main() {
+	app := fx.New(
+		logger.FXModule,
+		metrics.FXModule,
+		fx.Provide(
+			func() metrics.Config {
+				return metrics.Config{
+					SystemMetricsAddress:      ":9090",
+					ApplicationMetricsAddress: ":9091",
+					ServiceName:               "api-gateway",
+				}
+			},
+			NewHTTPMetrics,
+		),
+		fx.Invoke(func(hm *HTTPMetrics) {
+			// Your HTTP server setup with middleware
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/search", handleSearch)
+
+			server := &http.Server{
+				Addr:    ":8080",
+				Handler: hm.Middleware(mux),
+			}
+
+			go server.ListenAndServe()
+		}),
+	)
+	app.Run()
+}
+```
+
+### Database Metrics Example
+
+Track database operations with detailed labels:
+
+```
+type DBMetrics struct {
+	QueriesTotal    metrics.Counter
+	QueryDuration   metrics.Histogram
+	ActiveConns     metrics.Gauge
+	QueryErrors     metrics.Counter
+}
+
+func NewDBMetrics(m metrics.MetricsCollector) *DBMetrics {
+	return &DBMetrics{
+		QueriesTotal: m.CreateCounter(
+			"db_queries_total",
+			"Total number of database queries",
+			[]string{"operation", "table"},
+		),
+		QueryDuration: m.CreateHistogram(
+			"db_query_duration_seconds",
+			"Database query duration in seconds",
+			[]string{"operation", "table"},
+			[]float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5},
+		),
+		ActiveConns: m.CreateGauge(
+			"db_connections_active",
+			"Number of active database connections",
+			[]string{"pool"},
+		),
+		QueryErrors: m.CreateCounter(
+			"db_query_errors_total",
+			"Total number of database query errors",
+			[]string{"operation", "table", "error_type"},
+		),
+	}
+}
+
+// Usage in database layer:
+func (db *Database) Query(ctx context.Context, query string) error {
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start).Seconds()
+		db.metrics.QueryDuration.WithLabelValues("select", "documents").Observe(duration)
+	}()
+
+	db.metrics.QueriesTotal.WithLabelValues("select", "documents").Inc()
+
+	err := db.conn.QueryContext(ctx, query)
+	if err != nil {
+		db.metrics.QueryErrors.WithLabelValues("select", "documents", "timeout").Inc()
+		return err
+	}
+
+	return nil
+}
+```
+
+### Business Metrics Example
+
+Track application\-specific business metrics:
+
+```
+type BusinessMetrics struct {
+	DocumentsIndexed    metrics.Counter
+	SearchesPerformed   metrics.Counter
+	ActiveUsers         metrics.Gauge
+	DocumentProcessTime metrics.Histogram
+	CacheHits           metrics.Counter
+}
+
+func NewBusinessMetrics(m metrics.MetricsCollector) *BusinessMetrics {
+	return &BusinessMetrics{
+		DocumentsIndexed: m.CreateCounter(
+			"documents_indexed_total",
+			"Total number of documents indexed",
+			[]string{"type", "status"},
+		),
+		SearchesPerformed: m.CreateCounter(
+			"searches_performed_total",
+			"Total number of search queries performed",
+			[]string{"type", "result_count_bucket"},
+		),
+		ActiveUsers: m.CreateGauge(
+			"active_users",
+			"Number of currently active users",
+			[]string{"tier"},
+		),
+		DocumentProcessTime: m.CreateHistogram(
+			"document_processing_seconds",
+			"Time to process a document",
+			[]string{"type", "stage"},
+			[]float64{.1, .5, 1, 2, 5, 10, 30, 60},
+		),
+		CacheHits: m.CreateCounter(
+			"cache_operations_total",
+			"Total cache operations",
+			[]string{"cache", "operation", "result"},
+		),
+	}
+}
+```
+
+### Performance Considerations
+
+1. Label Cardinality:
+
+- Keep label values bounded \(avoid user IDs, request IDs, timestamps\)
+- High cardinality can cause memory issues
+- Good: \[\]string\{"method", "status"\} with \~10 combinations
+- Bad: \[\]string\{"user\_id"\} with millions of users
+
+2. Metric Updates:
+
+- All Prometheus metric operations are thread\-safe
+- Prefer gauges over counters when values can decrease
+- Use histograms for latency tracking \(more efficient than summaries\)
+
+3. Histogram vs Summary:
+
+- Histograms: Server\-side quantile calculation, aggregatable across instances
+- Summaries: Client\-side quantile calculation, NOT aggregatable
+- Prefer histograms unless you need precise quantiles per instance
+
+### Thread Safety
+
+All methods on the Metrics struct and all Prometheus collectors are safe for concurrent use by multiple goroutines. No additional synchronization is needed.
+
+### Observability
+
+Exposed metrics can be scraped by Prometheus and visualized in Grafana or any compatible monitoring system. Example Prometheus scrape config:
+
+```
+scrape_configs:
+  - job_name: 'system-metrics'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+
+  - job_name: 'application-metrics'
+    static_configs:
+      - targets: ['localhost:9091']
+    scrape_interval: 5s
+```
+
+### Testing
+
+For unit tests, you can create a metrics instance without starting the servers:
+
+```
+func TestMyFunction(t *testing.T) {
+	cfg := metrics.Config{
+		SystemMetricsAddress:      "",      // Disable
+		ApplicationMetricsAddress: ":0",    // Random port
+		ServiceName:               "test",
+	}
+	m := metrics.NewMetrics(cfg)
+
+	counter := m.CreateCounter("test_counter", "Test counter", []string{"label"})
+	counter.WithLabelValues("test").Inc()
+
+	// Verify metrics using prometheus/testutil
+	// ...
+}
+```
 
 ## Index
 
 - [Constants](<#constants>)
 - [Variables](<#variables>)
+- [func Ptr\(s string\) \*string](<#Ptr>)
 - [func RegisterMetricsLifecycle\(lc fx.Lifecycle, m \*Metrics, log \*logger.LoggerClient\)](<#RegisterMetricsLifecycle>)
 - [type Config](<#Config>)
+- [type Counter](<#Counter>)
+- [type Gauge](<#Gauge>)
+- [type Histogram](<#Histogram>)
 - [type Metrics](<#Metrics>)
   - [func NewMetrics\(cfg Config\) \*Metrics](<#NewMetrics>)
-  - [func \(m \*Metrics\) CreateCounter\(name, help string, labels \[\]string\) \*prometheus.CounterVec](<#Metrics.CreateCounter>)
-  - [func \(m \*Metrics\) CreateGauge\(name, help string, labels \[\]string\) \*prometheus.GaugeVec](<#Metrics.CreateGauge>)
-  - [func \(m \*Metrics\) CreateHistogram\(name, help string, labels \[\]string, buckets \[\]float64\) \*prometheus.HistogramVec](<#Metrics.CreateHistogram>)
-  - [func \(m \*Metrics\) IncrementRequests\(status string\)](<#Metrics.IncrementRequests>)
-  - [func \(m \*Metrics\) ObserveCPUUsage\(value float64, core string\)](<#Metrics.ObserveCPUUsage>)
-  - [func \(m \*Metrics\) RecordRequestDuration\(start time.Time, endpoint string\)](<#Metrics.RecordRequestDuration>)
+  - [func \(m \*Metrics\) CreateCounter\(name, help string, labels \[\]string\) Counter](<#Metrics.CreateCounter>)
+  - [func \(m \*Metrics\) CreateGauge\(name, help string, labels \[\]string\) Gauge](<#Metrics.CreateGauge>)
+  - [func \(m \*Metrics\) CreateHistogram\(name, help string, labels \[\]string, buckets \[\]float64\) Histogram](<#Metrics.CreateHistogram>)
+  - [func \(m \*Metrics\) CreateSummary\(name, help string, labels \[\]string, objectives map\[float64\]float64\) Summary](<#Metrics.CreateSummary>)
+- [type MetricsCollector](<#MetricsCollector>)
+- [type Observer](<#Observer>)
+- [type Summary](<#Summary>)
 
 
 ## Constants
 
-<a name="DefaultMetricsAddress"></a>Default port for metrics server if none is specified.
+<a name="DefaultSystemMetricsAddress"></a>Default addresses for metrics servers if none is specified.
 
 ```go
-const DefaultMetricsAddress = ":9090"
+const (
+    DefaultSystemMetricsAddress      = ":9090"
+    DefaultApplicationMetricsAddress = ":9091"
+)
 ```
 
 ## Variables
 
-<a name="FXModule"></a>FXModule defines the Fx module for the metrics package. This module integrates the Prometheus metrics server into an Fx\-based application by providing the Metrics factory and registering its lifecycle hooks.
+<a name="FXModule"></a>FXModule defines the Fx module for the metrics package. This module integrates two separate Prometheus metrics servers into an Fx\-based application by providing the Metrics factory and registering lifecycle hooks for both servers.
 
-The module:
+The module provides: 1. \*Metrics \(concrete type\) for direct use 2. MetricsCollector interface for dependency injection 3. Lifecycle management for both system and application metrics HTTP servers
 
-1. Provides the NewMetrics factory function to the dependency injection container, making the Metrics instance available to other components.
-2. Invokes RegisterMetricsLifecycle to manage startup and graceful shutdown of the Prometheus HTTP server.
+System Metrics Endpoint \(default: :9090\):
+
+- Go runtime metrics \(goroutines, memory, GC\)
+- Process metrics \(CPU, file descriptors\)
+- Build info metrics
+
+Application Metrics Endpoint \(default: :9091\):
+
+- User\-defined custom metrics created via CreateCounter, CreateGauge, etc.
 
 Usage:
 
@@ -153,94 +597,124 @@ app := fx.New(
     metrics.FXModule,
     fx.Provide(func() metrics.Config {
         return metrics.Config{
-            Address:                ":9090",
-            EnableDefaultCollectors: true,
-            ServiceName:             "search-store",
+            SystemMetricsAddress:      ":9090",
+            ApplicationMetricsAddress: ":9091",
+            ServiceName:               "search-store",
         }
     }),
-    // other modules...
+    fx.Invoke(func(m metrics.MetricsCollector) {
+        // Create custom metrics
+        counter := m.CreateCounter("requests_total", "Total requests", []string{"endpoint"})
+        counter.WithLabelValues("/api/search").Inc()
+    }),
 )
 ```
 
-Dependencies required by this module: \- A metrics.Config instance must be available in the dependency injection container \- A logger.Logger instance is optional but recommended for startup/shutdown logs
+Dependencies required by this module: \- A metrics.Config instance must be available in the dependency injection container \- A logger.LoggerClient instance is optional but recommended for startup/shutdown logs
 
 ```go
 var FXModule = fx.Module("metrics",
-    fx.Provide(NewMetrics),
+    fx.Provide(
+        NewMetrics,
+
+        fx.Annotate(
+            func(m *Metrics) MetricsCollector { return m },
+            fx.As(new(MetricsCollector)),
+        ),
+    ),
     fx.Invoke(RegisterMetricsLifecycle),
 )
 ```
 
+<a name="Ptr"></a>
+## func [Ptr](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/configs.go#L78>)
+
+```go
+func Ptr(s string) *string
+```
+
+Ptr returns a pointer to the given string value. Helper function for disabling endpoints in configuration.
+
+Example:
+
+```
+cfg := metrics.Config{
+    SystemMetricsAddress: metrics.Ptr(""),     // Explicitly disable
+    ApplicationMetricsAddress: nil,            // Use default
+    ServiceName: "my-service",
+}
+```
+
 <a name="RegisterMetricsLifecycle"></a>
-## func [RegisterMetricsLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/fx_module.go#L61>)
+## func [RegisterMetricsLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/fx_module.go#L79>)
 
 ```go
 func RegisterMetricsLifecycle(lc fx.Lifecycle, m *Metrics, log *logger.LoggerClient)
 ```
 
-RegisterMetricsLifecycle manages the startup and shutdown lifecycle of the Prometheus metrics HTTP server.
+RegisterMetricsLifecycle manages the startup and shutdown lifecycle of both Prometheus metrics HTTP servers \(system and application\).
 
 Parameters:
 
 - lc: The Fx lifecycle controller
-- m: The Metrics instance containing the HTTP server
+- m: The Metrics instance containing both HTTP servers
 - log: The logger instance for structured lifecycle logging \(optional\)
 
 The lifecycle hook:
 
-- OnStart: Launches the Prometheus HTTP server in a background goroutine.
-- OnStop: Gracefully shuts down the metrics server.
+- OnStart: Launches both metrics servers in background goroutines
+- OnStop: Gracefully shuts down both servers
 
-This ensures that metrics are available for scraping during the application's lifetime and that the server shuts down cleanly when the application stops.
+This ensures that both metrics endpoints are available for scraping during the application's lifetime and shut down cleanly when the application stops.
 
 Note: This function is automatically invoked by the FXModule and does not need to be called directly in application code.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/configs.go#L8-L61>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/configs.go#L15-L66>)
 
-Config defines the configuration structure for the Prometheus metrics server. It contains settings that control how metrics are exposed and collected.
+Config defines the configuration structure for the Prometheus metrics servers. It contains settings that control how metrics are exposed and collected.
+
+The package provides two separate metrics endpoints: 1. System Metrics Endpoint \(default: :9090\): Exposes Go runtime, process, and build info metrics 2. Application Metrics Endpoint \(default: :9091\): Exposes user\-defined application\-specific metrics
 
 ```go
 type Config struct {
-    // Address determines the network address where the Prometheus
-    // metrics HTTP server listens.
+    // SystemMetricsAddress determines the network address where the system
+    // metrics HTTP server listens. This endpoint exposes Go runtime,
+    // process, and build info metrics.
     //
     // Example values:
     //   - ":9090"   → Listen on all interfaces, port 9090
-    //   - "127.0.0.1:9100" → Listen only on localhost, port 9100
+    //   - "127.0.0.1:9090" → Listen only on localhost, port 9090
+    //   - nil (or omitted) → Use default ":9090"
+    //
+    // To disable the system metrics endpoint, use an empty string pointer:
+    //   SystemMetricsAddress: ptr(""),
     //
     // This setting can be configured via:
-    //   - YAML configuration with the "address" key
-    //   - Environment variable METRICS_ADDRESS
+    //   - YAML configuration with the "system_metrics_address" key
+    //   - Environment variable METRICS_SYSTEM_ADDRESS
     //
     // Default: ":9090"
-    Address string `yaml:"address" envconfig:"METRICS_ADDRESS"`
+    SystemMetricsAddress *string `yaml:"system_metrics_address" envconfig:"METRICS_SYSTEM_ADDRESS"`
 
-    // EnableDefaultCollectors controls whether the built-in Go runtime
-    // and process metrics are automatically registered.
+    // ApplicationMetricsAddress determines the network address where the
+    // application metrics HTTP server listens. This endpoint exposes
+    // user-defined custom metrics created via CreateCounter, CreateGauge, etc.
     //
-    // When true, metrics such as goroutine count, GC stats, and CPU usage
-    // will be included automatically. Disable only if you want full
-    // manual control over registered collectors.
+    // Example values:
+    //   - ":9091"   → Listen on all interfaces, port 9091
+    //   - "127.0.0.1:9091" → Listen only on localhost, port 9091
+    //   - nil (or omitted) → Use default ":9091"
+    //
+    // To disable the application metrics endpoint, use an empty string pointer:
+    //   ApplicationMetricsAddress: ptr(""),
     //
     // This setting can be configured via:
-    //   - YAML configuration with the "enable_default_collectors" key
-    //   - Environment variable METRICS_ENABLE_DEFAULT_COLLECTORS
+    //   - YAML configuration with the "application_metrics_address" key
+    //   - Environment variable METRICS_APPLICATION_ADDRESS
     //
-    // Default: true
-    EnableDefaultCollectors bool `yaml:"enable_default_collectors" envconfig:"METRICS_ENABLE_DEFAULT_COLLECTORS"`
-
-    // Namespace sets a global prefix for all metrics registered by this service.
-    // Useful when running multiple services in the same Prometheus cluster.
-    //
-    // Example:
-    //   Namespace: "pharia_data"
-    //   → Metric name becomes "pharia_data_http_requests_total"
-    //
-    // This setting can be configured via:
-    //   - YAML configuration with the "namespace" key
-    //   - Environment variable METRICS_NAMESPACE
-    Namespace string `yaml:"namespace" envconfig:"METRICS_NAMESPACE"`
+    // Default: ":9091"
+    ApplicationMetricsAddress *string `yaml:"application_metrics_address" envconfig:"METRICS_APPLICATION_ADDRESS"`
 
     // ServiceName identifies the service exposing metrics.
     // This is used as a common label in all metrics to help
@@ -257,115 +731,331 @@ type Config struct {
 }
 ```
 
+<a name="Counter"></a>
+## type [Counter](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/types.go#L11-L22>)
+
+Counter represents a cumulative metric that only increases. It is used to track totals such as request counts, errors, or bytes processed.
+
+This interface abstracts the underlying Prometheus CounterVec implementation.
+
+```go
+type Counter interface {
+    // WithLabelValues returns the Counter for the given label values.
+    // The number of label values must match the number of labels defined
+    // when the counter was created.
+    WithLabelValues(lvs ...string) Counter
+
+    // Inc increments the counter by 1.
+    Inc()
+
+    // Add adds the given value to the counter. The value must be >= 0.
+    Add(val float64)
+}
+```
+
+<a name="Gauge"></a>
+## type [Gauge](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/types.go#L28-L51>)
+
+Gauge represents a metric that can arbitrarily go up and down. It is used for values like active connections, temperature, or queue depth.
+
+This interface abstracts the underlying Prometheus GaugeVec implementation.
+
+```go
+type Gauge interface {
+    // WithLabelValues returns the Gauge for the given label values.
+    // The number of label values must match the number of labels defined
+    // when the gauge was created.
+    WithLabelValues(lvs ...string) Gauge
+
+    // Set sets the gauge to an arbitrary value.
+    Set(val float64)
+
+    // Inc increments the gauge by 1.
+    Inc()
+
+    // Dec decrements the gauge by 1.
+    Dec()
+
+    // Add adds the given value to the gauge. The value can be negative.
+    Add(val float64)
+
+    // Sub subtracts the given value from the gauge. The value can be negative.
+    Sub(val float64)
+
+    // SetToCurrentTime sets the gauge to the current Unix timestamp in seconds.
+    SetToCurrentTime()
+}
+```
+
+<a name="Histogram"></a>
+## type [Histogram](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/types.go#L57-L65>)
+
+Histogram tracks the distribution of observations \(e.g., request durations or response sizes\). Histograms calculate quantiles, counts, and sums on the server side.
+
+This interface abstracts the underlying Prometheus HistogramVec implementation.
+
+```go
+type Histogram interface {
+    // WithLabelValues returns the Histogram (Observer) for the given label values.
+    // The number of label values must match the number of labels defined
+    // when the histogram was created.
+    WithLabelValues(lvs ...string) Observer
+
+    // Observe adds a single observation to the histogram.
+    Observe(val float64)
+}
+```
+
 <a name="Metrics"></a>
-## type [Metrics](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L17-L29>)
+## type [Metrics](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L17-L40>)
 
-Metrics encapsulates the Prometheus registry and HTTP server responsible for exposing application metrics.
+Metrics encapsulates two separate Prometheus registries and HTTP servers: 1. System metrics \(Go runtime, process, build info\) \- exposed on SystemServer 2. Application metrics \(user\-defined custom metrics\) \- exposed on ApplicationServer
 
-This structure provides the components needed to register metrics collectors and serve them via the /metrics HTTP endpoint for Prometheus scraping.
+This separation allows different scrape configurations and access controls for system\-level vs application\-level observability.
 
 ```go
 type Metrics struct {
-    // Server defines the HTTP server used to expose the /metrics endpoint.
-    Server *http.Server
+    // SystemServer defines the HTTP server for the /metrics endpoint exposing
+    // Go runtime, process, and build info metrics.
+    // Endpoint: SystemMetricsAddress (default: :9090)
+    SystemServer *http.Server
 
-    // Registry is the Prometheus registry where all metrics are registered.
-    // Each service maintains its own isolated registry to prevent metric name collisions.
-    Registry *prometheus.Registry
+    // ApplicationServer defines the HTTP server for the /metrics endpoint exposing
+    // user-defined application metrics.
+    // Endpoint: ApplicationMetricsAddress (default: :9091)
+    ApplicationServer *http.Server
+
+    // SystemRegistry is the Prometheus registry for system-level metrics
+    // (Go runtime, process collectors, build info).
+    SystemRegistry *prometheus.Registry
+
+    // ApplicationRegistry is the Prometheus registry for user-defined metrics.
+    // All metrics created via CreateCounter, CreateGauge, CreateHistogram, CreateSummary
+    // are registered here.
+    ApplicationRegistry *prometheus.Registry
     // contains filtered or unexported fields
 }
 ```
 
 <a name="NewMetrics"></a>
-### func [NewMetrics](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L61>)
+### func [NewMetrics](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L78>)
 
 ```go
 func NewMetrics(cfg Config) *Metrics
 ```
 
-NewMetrics initializes and returns a new instance of the Metrics struct. It sets up a dedicated Prometheus registry, registers default system collectors, wraps all metrics with a constant \`service\` label, and creates an HTTP server exposing the /metrics endpoint.
+NewMetrics initializes and returns a new instance of the Metrics struct. It sets up two separate Prometheus registries and HTTP servers:
+
+1. System Metrics Endpoint \(default: :9090\):
+
+- Go runtime metrics \(goroutines, GC stats, heap usage\)
+- Process metrics \(CPU time, memory, file descriptors\)
+- Build info metrics
+
+2. Application Metrics Endpoint \(default: :9091\):
+
+- User\-defined metrics created via CreateCounter, CreateGauge, etc.
+- No default metrics \- fully controlled by the application
 
 Parameters:
 
-- cfg: Configuration for the metrics server, including listening address, service name, and whether to enable default collectors.
+- cfg: Configuration for the metrics servers, including addresses and service name
 
 Returns:
 
-- \*Metrics: A configured Metrics instance ready for lifecycle management and Fx module integration.
+- \*Metrics: A configured Metrics instance ready for lifecycle management and Fx module integration
 
-The setup includes:
-
-- A dedicated Prometheus registry for the service
-- Automatic registration of Go, process, and build info collectors
-- A global "service" label applied to all metrics for easier aggregation
-- An HTTP server exposing the metrics endpoint
+Both registries automatically wrap all metrics with a constant \`service\` label for easier aggregation and filtering in multi\-service environments.
 
 Example:
 
 ```
 cfg := metrics.Config{
-    Address:              ":9090",
-    ServiceName:           "document-index",
-    EnableDefaultCollectors: true,
+    SystemMetricsAddress:      ":9090",
+    ApplicationMetricsAddress: ":9091",
+    ServiceName:               "document-index",
 }
 metricsInstance := metrics.NewMetrics(cfg)
-go metricsInstance.Server.ListenAndServe()
+go metricsInstance.SystemServer.ListenAndServe()
+go metricsInstance.ApplicationServer.ListenAndServe()
 ```
 
-Access metrics at: http://localhost:9090/metrics
+Access metrics at:
+
+- System metrics: http://localhost:9090/metrics
+- Application metrics: http://localhost:9091/metrics
 
 <a name="Metrics.CreateCounter"></a>
-### func \(\*Metrics\) [CreateCounter](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L141>)
+### func \(\*Metrics\) [CreateCounter](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/utils.go#L17>)
 
 ```go
-func (m *Metrics) CreateCounter(name, help string, labels []string) *prometheus.CounterVec
+func (m *Metrics) CreateCounter(name, help string, labels []string) Counter
 ```
 
-Dynamic metric factories CreateCounter creates a new CounterVec metric and registers it.
+CreateCounter creates a new counter metric and registers it to the application metrics registry.
+
+Counters are cumulative metrics that only increase \(e.g., total requests, errors\).
+
+Example:
+
+```
+counter := m.CreateCounter("http_requests_total", "Total HTTP requests", []string{"method", "status"})
+counter.WithLabelValues("GET", "200").Inc()
+counter.WithLabelValues("POST", "500").Inc()
+```
 
 <a name="Metrics.CreateGauge"></a>
-### func \(\*Metrics\) [CreateGauge](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L155>)
+### func \(\*Metrics\) [CreateGauge](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/utils.go#L56>)
 
 ```go
-func (m *Metrics) CreateGauge(name, help string, labels []string) *prometheus.GaugeVec
+func (m *Metrics) CreateGauge(name, help string, labels []string) Gauge
 ```
 
-CreateGauge creates a new GaugeVec metric and registers it.
+CreateGauge creates a new gauge metric and registers it to the application metrics registry.
+
+Gauges represent values that can go up or down \(e.g., active connections, temperature, queue depth\).
+
+Example:
+
+```
+gauge := m.CreateGauge("active_connections", "Number of active connections", []string{"pool"})
+gauge.WithLabelValues("postgres").Set(42)
+gauge.WithLabelValues("postgres").Inc()
+gauge.WithLabelValues("postgres").Dec()
+```
 
 <a name="Metrics.CreateHistogram"></a>
-### func \(\*Metrics\) [CreateHistogram](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L148>)
+### func \(\*Metrics\) [CreateHistogram](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/utils.go#L38>)
 
 ```go
-func (m *Metrics) CreateHistogram(name, help string, labels []string, buckets []float64) *prometheus.HistogramVec
+func (m *Metrics) CreateHistogram(name, help string, labels []string, buckets []float64) Histogram
 ```
 
-CreateHistogram creates a new HistogramVec metric and registers it.
+CreateHistogram creates a new histogram metric and registers it to the application metrics registry.
 
-<a name="Metrics.IncrementRequests"></a>
-### func \(\*Metrics\) [IncrementRequests](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L122>)
+Histograms track distributions of values \(e.g., request latencies\) and automatically calculate quantiles and counts.
+
+Example:
+
+```
+hist := m.CreateHistogram(
+    "request_duration_seconds",
+    "Request duration in seconds",
+    []string{"endpoint"},
+    []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+)
+hist.WithLabelValues("/api/search").Observe(0.25)
+```
+
+<a name="Metrics.CreateSummary"></a>
+### func \(\*Metrics\) [CreateSummary](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/utils.go#L77>)
 
 ```go
-func (m *Metrics) IncrementRequests(status string)
+func (m *Metrics) CreateSummary(name, help string, labels []string, objectives map[float64]float64) Summary
 ```
 
-Default metric methods IncrementRequests increments the request counter with a given status label. Example: metrics.IncrementRequests\("success"\)
+CreateSummary creates a new summary metric and registers it to the application metrics registry.
 
-<a name="Metrics.ObserveCPUUsage"></a>
-### func \(\*Metrics\) [ObserveCPUUsage](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L135>)
+Summaries calculate streaming quantiles on the client side. Objectives define the quantile ranks and their allowed error.
+
+Example:
+
+```
+summary := m.CreateSummary(
+    "api_latency_seconds",
+    "API request latency in seconds",
+    []string{"endpoint"},
+    map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+)
+summary.WithLabelValues("/api/search").Observe(0.25)
+```
+
+<a name="MetricsCollector"></a>
+## type [MetricsCollector](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/interface.go#L11-L55>)
+
+MetricsCollector provides an interface for collecting and exposing application metrics. It abstracts metric operations with support for counters, histograms, gauges, and summaries.
+
+This interface is implemented by the concrete \*Metrics type and does not expose any Prometheus\-specific types, allowing for potential alternative implementations or testing mocks.
+
+All metrics created through this interface are registered to the application metrics registry and exposed via the application metrics endpoint \(default: :9091\).
 
 ```go
-func (m *Metrics) ObserveCPUUsage(value float64, core string)
+type MetricsCollector interface {
+    // CreateCounter creates a new counter metric and registers it to the
+    // application metrics registry.
+    //
+    // Counters are cumulative metrics that only increase over time (e.g., total requests).
+    // Use WithLabelValues to set specific label values before incrementing.
+    //
+    // Example:
+    //   counter := m.CreateCounter("http_requests_total", "Total HTTP requests", []string{"method", "status"})
+    //   counter.WithLabelValues("GET", "200").Inc()
+    CreateCounter(name, help string, labels []string) Counter
+
+    // CreateHistogram creates a new histogram metric and registers it to the
+    // application metrics registry.
+    //
+    // Histograms track distributions of values (e.g., request durations) and automatically
+    // calculate quantiles and counts across configurable buckets.
+    //
+    // Example:
+    //   hist := m.CreateHistogram("request_duration_seconds", "Request duration", []string{"endpoint"}, []float64{.01, .05, .1, .5, 1, 5})
+    //   hist.WithLabelValues("/api/search").Observe(0.25)
+    CreateHistogram(name, help string, labels []string, buckets []float64) Histogram
+
+    // CreateGauge creates a new gauge metric and registers it to the
+    // application metrics registry.
+    //
+    // Gauges represent values that can go up or down (e.g., active connections, temperature).
+    // Use Set, Inc, Dec, Add, or Sub to modify gauge values.
+    //
+    // Example:
+    //   gauge := m.CreateGauge("active_connections", "Number of active connections", []string{"pool"})
+    //   gauge.WithLabelValues("postgres").Set(42)
+    CreateGauge(name, help string, labels []string) Gauge
+
+    // CreateSummary creates a new summary metric and registers it to the
+    // application metrics registry.
+    //
+    // Summaries are similar to histograms but calculate streaming quantiles on the client side.
+    // Objectives define the quantile ranks (e.g., 0.5 for median, 0.99 for 99th percentile).
+    //
+    // Example:
+    //   summary := m.CreateSummary("api_latency_seconds", "API latency", []string{"endpoint"}, map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001})
+    //   summary.WithLabelValues("/api/search").Observe(0.25)
+    CreateSummary(name, help string, labels []string, objectives map[float64]float64) Summary
+}
 ```
 
-ObserveCPUUsage sets the CPU usage gauge for a given core. Example: metrics.ObserveCPUUsage\(87.2, "core\_0"\)
+<a name="Observer"></a>
+## type [Observer](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/types.go#L82-L85>)
 
-<a name="Metrics.RecordRequestDuration"></a>
-### func \(\*Metrics\) [RecordRequestDuration](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/setup.go#L128>)
+Observer is a common interface for metrics that observe values \(Histogram and Summary\).
 
 ```go
-func (m *Metrics) RecordRequestDuration(start time.Time, endpoint string)
+type Observer interface {
+    // Observe adds a single observation to the metric.
+    Observe(val float64)
+}
 ```
 
-RecordRequestDuration records the duration \(in seconds\) for a request endpoint. Example: defer metrics.RecordRequestDuration\(time.Now\(\), "/search"\)
+<a name="Summary"></a>
+## type [Summary](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/types.go#L71-L79>)
+
+Summary calculates streaming quantiles of observed values on the client side. Unlike histograms, summaries cannot be aggregated across multiple instances.
+
+This interface abstracts the underlying Prometheus SummaryVec implementation.
+
+```go
+type Summary interface {
+    // WithLabelValues returns the Summary (Observer) for the given label values.
+    // The number of label values must match the number of labels defined
+    // when the summary was created.
+    WithLabelValues(lvs ...string) Observer
+
+    // Observe adds a single observation to the summary.
+    Observe(val float64)
+}
+```
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)
