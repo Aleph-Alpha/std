@@ -36,7 +36,7 @@ func TestRedisBasicOperations(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -117,7 +117,7 @@ func TestRedisHashOperations(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -181,7 +181,7 @@ func TestRedisListOperations(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -239,7 +239,7 @@ func TestRedisSetOperations(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -301,7 +301,7 @@ func TestRedisJSONOperations(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -352,7 +352,7 @@ func TestRedisLocking(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -406,7 +406,7 @@ func TestRedisTTL(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -488,7 +488,7 @@ func TestRedisPipeline(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,
@@ -542,7 +542,7 @@ func TestRedisConcurrency(t *testing.T) {
 		}
 	}()
 
-	var client *Redis
+	var client *RedisClient
 
 	cfg := Config{
 		Host: host,

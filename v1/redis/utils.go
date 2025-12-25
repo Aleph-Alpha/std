@@ -11,7 +11,7 @@ import (
 
 // Ping checks if the Redis server is reachable and responsive.
 // It returns an error if the connection fails.
-func (r *Redis) Ping(ctx context.Context) error {
+func (r *RedisClient) Ping(ctx context.Context) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -20,7 +20,7 @@ func (r *Redis) Ping(ctx context.Context) error {
 
 // PoolStats returns connection pool statistics.
 // Useful for monitoring connection pool health.
-func (r *Redis) PoolStats() *redis.PoolStats {
+func (r *RedisClient) PoolStats() *redis.PoolStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -29,7 +29,7 @@ func (r *Redis) PoolStats() *redis.PoolStats {
 
 // Get retrieves the value associated with the given key.
 // Returns ErrNil if the key does not exist.
-func (r *Redis) Get(ctx context.Context, key string) (string, error) {
+func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -38,7 +38,7 @@ func (r *Redis) Get(ctx context.Context, key string) (string, error) {
 
 // Set sets the value for the given key with an optional TTL.
 // If ttl is 0, the key will not expire.
-func (r *Redis) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -47,7 +47,7 @@ func (r *Redis) Set(ctx context.Context, key string, value interface{}, ttl time
 
 // SetNX sets the value for the given key only if the key does not exist.
 // Returns true if the key was set, false if it already existed.
-func (r *Redis) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
+func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -55,12 +55,12 @@ func (r *Redis) SetNX(ctx context.Context, key string, value interface{}, ttl ti
 }
 
 // SetEX sets the value for the given key with a TTL (shorthand for Set with TTL).
-func (r *Redis) SetEX(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (r *RedisClient) SetEX(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	return r.Set(ctx, key, value, ttl)
 }
 
 // GetSet sets the value for the given key and returns the old value.
-func (r *Redis) GetSet(ctx context.Context, key string, value interface{}) (string, error) {
+func (r *RedisClient) GetSet(ctx context.Context, key string, value interface{}) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -70,7 +70,7 @@ func (r *Redis) GetSet(ctx context.Context, key string, value interface{}) (stri
 // MGet retrieves the values of multiple keys at once.
 // Returns a slice of values in the same order as the keys.
 // If a key doesn't exist, its value will be nil.
-func (r *Redis) MGet(ctx context.Context, keys ...string) ([]interface{}, error) {
+func (r *RedisClient) MGet(ctx context.Context, keys ...string) ([]interface{}, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -79,7 +79,7 @@ func (r *Redis) MGet(ctx context.Context, keys ...string) ([]interface{}, error)
 
 // MSet sets multiple key-value pairs at once.
 // The values parameter should be in the format: key1, value1, key2, value2, ...
-func (r *Redis) MSet(ctx context.Context, values ...interface{}) error {
+func (r *RedisClient) MSet(ctx context.Context, values ...interface{}) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -88,7 +88,7 @@ func (r *Redis) MSet(ctx context.Context, values ...interface{}) error {
 
 // Delete deletes one or more keys.
 // Returns the number of keys that were deleted.
-func (r *Redis) Delete(ctx context.Context, keys ...string) (int64, error) {
+func (r *RedisClient) Delete(ctx context.Context, keys ...string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -97,7 +97,7 @@ func (r *Redis) Delete(ctx context.Context, keys ...string) (int64, error) {
 
 // Exists checks if one or more keys exist.
 // Returns the number of keys that exist.
-func (r *Redis) Exists(ctx context.Context, keys ...string) (int64, error) {
+func (r *RedisClient) Exists(ctx context.Context, keys ...string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -106,7 +106,7 @@ func (r *Redis) Exists(ctx context.Context, keys ...string) (int64, error) {
 
 // Expire sets a timeout on a key.
 // After the timeout has expired, the key will be automatically deleted.
-func (r *Redis) Expire(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+func (r *RedisClient) Expire(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -115,7 +115,7 @@ func (r *Redis) Expire(ctx context.Context, key string, ttl time.Duration) (bool
 
 // ExpireAt sets an expiration timestamp on a key.
 // The key will be deleted when the timestamp is reached.
-func (r *Redis) ExpireAt(ctx context.Context, key string, tm time.Time) (bool, error) {
+func (r *RedisClient) ExpireAt(ctx context.Context, key string, tm time.Time) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -125,7 +125,7 @@ func (r *Redis) ExpireAt(ctx context.Context, key string, tm time.Time) (bool, e
 // TTL returns the remaining time to live of a key that has a timeout.
 // Returns -1 if the key exists but has no associated expire.
 // Returns -2 if the key does not exist.
-func (r *Redis) TTL(ctx context.Context, key string) (time.Duration, error) {
+func (r *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -133,7 +133,7 @@ func (r *Redis) TTL(ctx context.Context, key string) (time.Duration, error) {
 }
 
 // Persist removes the expiration from a key.
-func (r *Redis) Persist(ctx context.Context, key string) (bool, error) {
+func (r *RedisClient) Persist(ctx context.Context, key string) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -142,7 +142,7 @@ func (r *Redis) Persist(ctx context.Context, key string) (bool, error) {
 
 // Incr increments the integer value of a key by one.
 // If the key does not exist, it is set to 0 before performing the operation.
-func (r *Redis) Incr(ctx context.Context, key string) (int64, error) {
+func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -150,7 +150,7 @@ func (r *Redis) Incr(ctx context.Context, key string) (int64, error) {
 }
 
 // IncrBy increments the integer value of a key by the given amount.
-func (r *Redis) IncrBy(ctx context.Context, key string, value int64) (int64, error) {
+func (r *RedisClient) IncrBy(ctx context.Context, key string, value int64) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -158,7 +158,7 @@ func (r *Redis) IncrBy(ctx context.Context, key string, value int64) (int64, err
 }
 
 // IncrByFloat increments the float value of a key by the given amount.
-func (r *Redis) IncrByFloat(ctx context.Context, key string, value float64) (float64, error) {
+func (r *RedisClient) IncrByFloat(ctx context.Context, key string, value float64) (float64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -166,7 +166,7 @@ func (r *Redis) IncrByFloat(ctx context.Context, key string, value float64) (flo
 }
 
 // Decr decrements the integer value of a key by one.
-func (r *Redis) Decr(ctx context.Context, key string) (int64, error) {
+func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -174,7 +174,7 @@ func (r *Redis) Decr(ctx context.Context, key string) (int64, error) {
 }
 
 // DecrBy decrements the integer value of a key by the given amount.
-func (r *Redis) DecrBy(ctx context.Context, key string, value int64) (int64, error) {
+func (r *RedisClient) DecrBy(ctx context.Context, key string, value int64) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -184,7 +184,7 @@ func (r *Redis) DecrBy(ctx context.Context, key string, value int64) (int64, err
 // Keys returns all keys matching the given pattern.
 // WARNING: Use with caution in production as it can be slow on large datasets.
 // Consider using Scan instead.
-func (r *Redis) Keys(ctx context.Context, pattern string) ([]string, error) {
+func (r *RedisClient) Keys(ctx context.Context, pattern string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -193,7 +193,7 @@ func (r *Redis) Keys(ctx context.Context, pattern string) ([]string, error) {
 
 // Scan iterates over keys in the database using a cursor.
 // This is safer than Keys for large datasets as it doesn't block.
-func (r *Redis) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanIterator {
+func (r *RedisClient) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanIterator {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -201,7 +201,7 @@ func (r *Redis) Scan(ctx context.Context, cursor uint64, match string, count int
 }
 
 // Type returns the type of value stored at key.
-func (r *Redis) Type(ctx context.Context, key string) (string, error) {
+func (r *RedisClient) Type(ctx context.Context, key string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -212,7 +212,7 @@ func (r *Redis) Type(ctx context.Context, key string) (string, error) {
 
 // HSet sets field in the hash stored at key to value.
 // If the key doesn't exist, a new hash is created.
-func (r *Redis) HSet(ctx context.Context, key string, values ...interface{}) (int64, error) {
+func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -220,7 +220,7 @@ func (r *Redis) HSet(ctx context.Context, key string, values ...interface{}) (in
 }
 
 // HGet returns the value associated with field in the hash stored at key.
-func (r *Redis) HGet(ctx context.Context, key, field string) (string, error) {
+func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -228,7 +228,7 @@ func (r *Redis) HGet(ctx context.Context, key, field string) (string, error) {
 }
 
 // HGetAll returns all fields and values in the hash stored at key.
-func (r *Redis) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -236,7 +236,7 @@ func (r *Redis) HGetAll(ctx context.Context, key string) (map[string]string, err
 }
 
 // HMGet returns the values associated with the specified fields in the hash.
-func (r *Redis) HMGet(ctx context.Context, key string, fields ...string) ([]interface{}, error) {
+func (r *RedisClient) HMGet(ctx context.Context, key string, fields ...string) ([]interface{}, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -244,7 +244,7 @@ func (r *Redis) HMGet(ctx context.Context, key string, fields ...string) ([]inte
 }
 
 // HExists checks if a field exists in the hash stored at key.
-func (r *Redis) HExists(ctx context.Context, key, field string) (bool, error) {
+func (r *RedisClient) HExists(ctx context.Context, key, field string) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -252,7 +252,7 @@ func (r *Redis) HExists(ctx context.Context, key, field string) (bool, error) {
 }
 
 // HDel deletes one or more hash fields.
-func (r *Redis) HDel(ctx context.Context, key string, fields ...string) (int64, error) {
+func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -260,7 +260,7 @@ func (r *Redis) HDel(ctx context.Context, key string, fields ...string) (int64, 
 }
 
 // HLen returns the number of fields in the hash stored at key.
-func (r *Redis) HLen(ctx context.Context, key string) (int64, error) {
+func (r *RedisClient) HLen(ctx context.Context, key string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -268,7 +268,7 @@ func (r *Redis) HLen(ctx context.Context, key string) (int64, error) {
 }
 
 // HKeys returns all field names in the hash stored at key.
-func (r *Redis) HKeys(ctx context.Context, key string) ([]string, error) {
+func (r *RedisClient) HKeys(ctx context.Context, key string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -276,7 +276,7 @@ func (r *Redis) HKeys(ctx context.Context, key string) ([]string, error) {
 }
 
 // HVals returns all values in the hash stored at key.
-func (r *Redis) HVals(ctx context.Context, key string) ([]string, error) {
+func (r *RedisClient) HVals(ctx context.Context, key string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -284,7 +284,7 @@ func (r *Redis) HVals(ctx context.Context, key string) ([]string, error) {
 }
 
 // HIncrBy increments the integer value of a hash field by the given number.
-func (r *Redis) HIncrBy(ctx context.Context, key, field string, incr int64) (int64, error) {
+func (r *RedisClient) HIncrBy(ctx context.Context, key, field string, incr int64) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -292,7 +292,7 @@ func (r *Redis) HIncrBy(ctx context.Context, key, field string, incr int64) (int
 }
 
 // HIncrByFloat increments the float value of a hash field by the given amount.
-func (r *Redis) HIncrByFloat(ctx context.Context, key, field string, incr float64) (float64, error) {
+func (r *RedisClient) HIncrByFloat(ctx context.Context, key, field string, incr float64) (float64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -302,7 +302,7 @@ func (r *Redis) HIncrByFloat(ctx context.Context, key, field string, incr float6
 // --- List Operations ---
 
 // LPush inserts all the specified values at the head of the list stored at key.
-func (r *Redis) LPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
+func (r *RedisClient) LPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -310,7 +310,7 @@ func (r *Redis) LPush(ctx context.Context, key string, values ...interface{}) (i
 }
 
 // RPush inserts all the specified values at the tail of the list stored at key.
-func (r *Redis) RPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
+func (r *RedisClient) RPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -318,7 +318,7 @@ func (r *Redis) RPush(ctx context.Context, key string, values ...interface{}) (i
 }
 
 // LPop removes and returns the first element of the list stored at key.
-func (r *Redis) LPop(ctx context.Context, key string) (string, error) {
+func (r *RedisClient) LPop(ctx context.Context, key string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -326,7 +326,7 @@ func (r *Redis) LPop(ctx context.Context, key string) (string, error) {
 }
 
 // RPop removes and returns the last element of the list stored at key.
-func (r *Redis) RPop(ctx context.Context, key string) (string, error) {
+func (r *RedisClient) RPop(ctx context.Context, key string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -336,7 +336,7 @@ func (r *Redis) RPop(ctx context.Context, key string) (string, error) {
 // LRange returns the specified elements of the list stored at key.
 // The offsets start and stop are zero-based indexes.
 // Use -1 for the last element, -2 for the second last, etc.
-func (r *Redis) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+func (r *RedisClient) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -344,7 +344,7 @@ func (r *Redis) LRange(ctx context.Context, key string, start, stop int64) ([]st
 }
 
 // LLen returns the length of the list stored at key.
-func (r *Redis) LLen(ctx context.Context, key string) (int64, error) {
+func (r *RedisClient) LLen(ctx context.Context, key string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -352,7 +352,7 @@ func (r *Redis) LLen(ctx context.Context, key string) (int64, error) {
 }
 
 // LRem removes the first count occurrences of elements equal to value from the list.
-func (r *Redis) LRem(ctx context.Context, key string, count int64, value interface{}) (int64, error) {
+func (r *RedisClient) LRem(ctx context.Context, key string, count int64, value interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -360,7 +360,7 @@ func (r *Redis) LRem(ctx context.Context, key string, count int64, value interfa
 }
 
 // LTrim trims the list to the specified range.
-func (r *Redis) LTrim(ctx context.Context, key string, start, stop int64) error {
+func (r *RedisClient) LTrim(ctx context.Context, key string, start, stop int64) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -368,7 +368,7 @@ func (r *Redis) LTrim(ctx context.Context, key string, start, stop int64) error 
 }
 
 // LIndex returns the element at index in the list stored at key.
-func (r *Redis) LIndex(ctx context.Context, key string, index int64) (string, error) {
+func (r *RedisClient) LIndex(ctx context.Context, key string, index int64) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -376,7 +376,7 @@ func (r *Redis) LIndex(ctx context.Context, key string, index int64) (string, er
 }
 
 // LSet sets the list element at index to value.
-func (r *Redis) LSet(ctx context.Context, key string, index int64, value interface{}) error {
+func (r *RedisClient) LSet(ctx context.Context, key string, index int64, value interface{}) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -385,7 +385,7 @@ func (r *Redis) LSet(ctx context.Context, key string, index int64, value interfa
 
 // BLPop is a blocking version of LPop with a timeout.
 // It blocks until an element is available or the timeout is reached.
-func (r *Redis) BLPop(ctx context.Context, timeout time.Duration, keys ...string) ([]string, error) {
+func (r *RedisClient) BLPop(ctx context.Context, timeout time.Duration, keys ...string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -393,7 +393,7 @@ func (r *Redis) BLPop(ctx context.Context, timeout time.Duration, keys ...string
 }
 
 // BRPop is a blocking version of RPop with a timeout.
-func (r *Redis) BRPop(ctx context.Context, timeout time.Duration, keys ...string) ([]string, error) {
+func (r *RedisClient) BRPop(ctx context.Context, timeout time.Duration, keys ...string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -403,7 +403,7 @@ func (r *Redis) BRPop(ctx context.Context, timeout time.Duration, keys ...string
 // --- Set Operations ---
 
 // SAdd adds the specified members to the set stored at key.
-func (r *Redis) SAdd(ctx context.Context, key string, members ...interface{}) (int64, error) {
+func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -411,7 +411,7 @@ func (r *Redis) SAdd(ctx context.Context, key string, members ...interface{}) (i
 }
 
 // SRem removes the specified members from the set stored at key.
-func (r *Redis) SRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+func (r *RedisClient) SRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -419,7 +419,7 @@ func (r *Redis) SRem(ctx context.Context, key string, members ...interface{}) (i
 }
 
 // SMembers returns all the members of the set stored at key.
-func (r *Redis) SMembers(ctx context.Context, key string) ([]string, error) {
+func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -427,7 +427,7 @@ func (r *Redis) SMembers(ctx context.Context, key string) ([]string, error) {
 }
 
 // SIsMember checks if member is a member of the set stored at key.
-func (r *Redis) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
+func (r *RedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -435,7 +435,7 @@ func (r *Redis) SIsMember(ctx context.Context, key string, member interface{}) (
 }
 
 // SCard returns the number of elements in the set stored at key.
-func (r *Redis) SCard(ctx context.Context, key string) (int64, error) {
+func (r *RedisClient) SCard(ctx context.Context, key string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -443,7 +443,7 @@ func (r *Redis) SCard(ctx context.Context, key string) (int64, error) {
 }
 
 // SPop removes and returns one or more random members from the set.
-func (r *Redis) SPop(ctx context.Context, key string) (string, error) {
+func (r *RedisClient) SPop(ctx context.Context, key string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -451,7 +451,7 @@ func (r *Redis) SPop(ctx context.Context, key string) (string, error) {
 }
 
 // SPopN removes and returns count random members from the set.
-func (r *Redis) SPopN(ctx context.Context, key string, count int64) ([]string, error) {
+func (r *RedisClient) SPopN(ctx context.Context, key string, count int64) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -459,7 +459,7 @@ func (r *Redis) SPopN(ctx context.Context, key string, count int64) ([]string, e
 }
 
 // SRandMember returns one or more random members from the set without removing them.
-func (r *Redis) SRandMember(ctx context.Context, key string) (string, error) {
+func (r *RedisClient) SRandMember(ctx context.Context, key string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -467,7 +467,7 @@ func (r *Redis) SRandMember(ctx context.Context, key string) (string, error) {
 }
 
 // SRandMemberN returns count random members from the set without removing them.
-func (r *Redis) SRandMemberN(ctx context.Context, key string, count int64) ([]string, error) {
+func (r *RedisClient) SRandMemberN(ctx context.Context, key string, count int64) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -475,7 +475,7 @@ func (r *Redis) SRandMemberN(ctx context.Context, key string, count int64) ([]st
 }
 
 // SInter returns the members of the set resulting from the intersection of all the given sets.
-func (r *Redis) SInter(ctx context.Context, keys ...string) ([]string, error) {
+func (r *RedisClient) SInter(ctx context.Context, keys ...string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -483,7 +483,7 @@ func (r *Redis) SInter(ctx context.Context, keys ...string) ([]string, error) {
 }
 
 // SUnion returns the members of the set resulting from the union of all the given sets.
-func (r *Redis) SUnion(ctx context.Context, keys ...string) ([]string, error) {
+func (r *RedisClient) SUnion(ctx context.Context, keys ...string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -491,7 +491,7 @@ func (r *Redis) SUnion(ctx context.Context, keys ...string) ([]string, error) {
 }
 
 // SDiff returns the members of the set resulting from the difference between the first set and all the successive sets.
-func (r *Redis) SDiff(ctx context.Context, keys ...string) ([]string, error) {
+func (r *RedisClient) SDiff(ctx context.Context, keys ...string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -501,7 +501,7 @@ func (r *Redis) SDiff(ctx context.Context, keys ...string) ([]string, error) {
 // --- Sorted Set Operations ---
 
 // ZAdd adds all the specified members with the specified scores to the sorted set stored at key.
-func (r *Redis) ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error) {
+func (r *RedisClient) ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -509,7 +509,7 @@ func (r *Redis) ZAdd(ctx context.Context, key string, members ...redis.Z) (int64
 }
 
 // ZRem removes the specified members from the sorted set stored at key.
-func (r *Redis) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+func (r *RedisClient) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -518,7 +518,7 @@ func (r *Redis) ZRem(ctx context.Context, key string, members ...interface{}) (i
 
 // ZRange returns the specified range of elements in the sorted set stored at key.
 // The elements are ordered from the lowest to the highest score.
-func (r *Redis) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+func (r *RedisClient) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -526,7 +526,7 @@ func (r *Redis) ZRange(ctx context.Context, key string, start, stop int64) ([]st
 }
 
 // ZRangeWithScores returns the specified range with scores.
-func (r *Redis) ZRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error) {
+func (r *RedisClient) ZRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -534,7 +534,7 @@ func (r *Redis) ZRangeWithScores(ctx context.Context, key string, start, stop in
 }
 
 // ZRevRange returns the specified range in reverse order (highest to lowest score).
-func (r *Redis) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+func (r *RedisClient) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -542,7 +542,7 @@ func (r *Redis) ZRevRange(ctx context.Context, key string, start, stop int64) ([
 }
 
 // ZRevRangeWithScores returns the specified range in reverse order with scores.
-func (r *Redis) ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error) {
+func (r *RedisClient) ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -550,7 +550,7 @@ func (r *Redis) ZRevRangeWithScores(ctx context.Context, key string, start, stop
 }
 
 // ZRangeByScore returns all elements in the sorted set with a score between min and max.
-func (r *Redis) ZRangeByScore(ctx context.Context, key string, opt *redis.ZRangeBy) ([]string, error) {
+func (r *RedisClient) ZRangeByScore(ctx context.Context, key string, opt *redis.ZRangeBy) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -558,7 +558,7 @@ func (r *Redis) ZRangeByScore(ctx context.Context, key string, opt *redis.ZRange
 }
 
 // ZRevRangeByScore returns all elements in the sorted set with scores between max and min (in reverse order).
-func (r *Redis) ZRevRangeByScore(ctx context.Context, key string, opt *redis.ZRangeBy) ([]string, error) {
+func (r *RedisClient) ZRevRangeByScore(ctx context.Context, key string, opt *redis.ZRangeBy) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -566,7 +566,7 @@ func (r *Redis) ZRevRangeByScore(ctx context.Context, key string, opt *redis.ZRa
 }
 
 // ZScore returns the score of member in the sorted set stored at key.
-func (r *Redis) ZScore(ctx context.Context, key, member string) (float64, error) {
+func (r *RedisClient) ZScore(ctx context.Context, key, member string) (float64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -574,7 +574,7 @@ func (r *Redis) ZScore(ctx context.Context, key, member string) (float64, error)
 }
 
 // ZCard returns the number of elements in the sorted set stored at key.
-func (r *Redis) ZCard(ctx context.Context, key string) (int64, error) {
+func (r *RedisClient) ZCard(ctx context.Context, key string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -582,7 +582,7 @@ func (r *Redis) ZCard(ctx context.Context, key string) (int64, error) {
 }
 
 // ZCount returns the number of elements in the sorted set with a score between min and max.
-func (r *Redis) ZCount(ctx context.Context, key, min, max string) (int64, error) {
+func (r *RedisClient) ZCount(ctx context.Context, key, min, max string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -590,7 +590,7 @@ func (r *Redis) ZCount(ctx context.Context, key, min, max string) (int64, error)
 }
 
 // ZIncrBy increments the score of member in the sorted set by increment.
-func (r *Redis) ZIncrBy(ctx context.Context, key string, increment float64, member string) (float64, error) {
+func (r *RedisClient) ZIncrBy(ctx context.Context, key string, increment float64, member string) (float64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -598,7 +598,7 @@ func (r *Redis) ZIncrBy(ctx context.Context, key string, increment float64, memb
 }
 
 // ZRank returns the rank of member in the sorted set (0-based, lowest score first).
-func (r *Redis) ZRank(ctx context.Context, key, member string) (int64, error) {
+func (r *RedisClient) ZRank(ctx context.Context, key, member string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -606,7 +606,7 @@ func (r *Redis) ZRank(ctx context.Context, key, member string) (int64, error) {
 }
 
 // ZRevRank returns the rank of member in the sorted set (highest score first).
-func (r *Redis) ZRevRank(ctx context.Context, key, member string) (int64, error) {
+func (r *RedisClient) ZRevRank(ctx context.Context, key, member string) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -617,7 +617,7 @@ func (r *Redis) ZRevRank(ctx context.Context, key, member string) (int64, error)
 
 // Publish posts a message to the given channel.
 // Returns the number of clients that received the message.
-func (r *Redis) Publish(ctx context.Context, channel string, message interface{}) (int64, error) {
+func (r *RedisClient) Publish(ctx context.Context, channel string, message interface{}) (int64, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -626,7 +626,7 @@ func (r *Redis) Publish(ctx context.Context, channel string, message interface{}
 
 // Subscribe subscribes to the given channels.
 // Returns a PubSub instance that can be used to receive messages.
-func (r *Redis) Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
+func (r *RedisClient) Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -634,7 +634,7 @@ func (r *Redis) Subscribe(ctx context.Context, channels ...string) *redis.PubSub
 }
 
 // PSubscribe subscribes to channels matching the given patterns.
-func (r *Redis) PSubscribe(ctx context.Context, patterns ...string) *redis.PubSub {
+func (r *RedisClient) PSubscribe(ctx context.Context, patterns ...string) *redis.PubSub {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -645,7 +645,7 @@ func (r *Redis) PSubscribe(ctx context.Context, patterns ...string) *redis.PubSu
 
 // Pipeline returns a new pipeline.
 // Pipelines allow sending multiple commands in a single request.
-func (r *Redis) Pipeline() redis.Pipeliner {
+func (r *RedisClient) Pipeline() redis.Pipeliner {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -654,7 +654,7 @@ func (r *Redis) Pipeline() redis.Pipeliner {
 
 // TxPipeline returns a new transaction pipeline.
 // Commands in a transaction pipeline are wrapped in MULTI/EXEC.
-func (r *Redis) TxPipeline() redis.Pipeliner {
+func (r *RedisClient) TxPipeline() redis.Pipeliner {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -663,7 +663,7 @@ func (r *Redis) TxPipeline() redis.Pipeliner {
 
 // Watch watches the given keys for changes.
 // If any of the watched keys are modified before EXEC, the transaction will fail.
-func (r *Redis) Watch(ctx context.Context, fn func(*redis.Tx) error, keys ...string) error {
+func (r *RedisClient) Watch(ctx context.Context, fn func(*redis.Tx) error, keys ...string) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -673,7 +673,7 @@ func (r *Redis) Watch(ctx context.Context, fn func(*redis.Tx) error, keys ...str
 // --- JSON Helper Methods ---
 
 // SetJSON serializes the value to JSON and stores it in Redis.
-func (r *Redis) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (r *RedisClient) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
@@ -683,7 +683,7 @@ func (r *Redis) SetJSON(ctx context.Context, key string, value interface{}, ttl 
 }
 
 // GetJSON retrieves the value from Redis and deserializes it from JSON.
-func (r *Redis) GetJSON(ctx context.Context, key string, dest interface{}) error {
+func (r *RedisClient) GetJSON(ctx context.Context, key string, dest interface{}) error {
 	data, err := r.Get(ctx, key)
 	if err != nil {
 		return err
@@ -700,7 +700,7 @@ func (r *Redis) GetJSON(ctx context.Context, key string, dest interface{}) error
 
 // Lock represents a distributed lock.
 type Lock struct {
-	client *Redis
+	client *RedisClient
 	key    string
 	value  string
 	ttl    time.Duration
@@ -708,7 +708,7 @@ type Lock struct {
 
 // AcquireLock attempts to acquire a distributed lock.
 // Returns a Lock instance if successful, or an error if the lock is already held.
-func (r *Redis) AcquireLock(ctx context.Context, key string, ttl time.Duration) (*Lock, error) {
+func (r *RedisClient) AcquireLock(ctx context.Context, key string, ttl time.Duration) (*Lock, error) {
 	// Use a unique value to ensure only the lock holder can release it
 	value := fmt.Sprintf("%d", time.Now().UnixNano())
 
@@ -769,7 +769,7 @@ func (l *Lock) Refresh(ctx context.Context) error {
 
 // RateLimit implements a simple rate limiter using Redis.
 // Returns true if the operation is allowed, false if rate limit is exceeded.
-func (r *Redis) RateLimit(ctx context.Context, key string, limit int64, window time.Duration) (bool, error) {
+func (r *RedisClient) RateLimit(ctx context.Context, key string, limit int64, window time.Duration) (bool, error) {
 	// Use a Lua script for atomic rate limiting
 	script := `
 		local current = redis.call("incr", KEYS[1])

@@ -172,7 +172,7 @@ var (
 //
 // It maps common Kafka errors to the standardized error types defined above.
 // If an error doesn't match any known type, it's returned unchanged.
-func (k *Kafka) TranslateError(err error) error {
+func (k *KafkaClient) TranslateError(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -322,7 +322,7 @@ func translateByErrorMessage(errMsg string, originalErr error) error {
 }
 
 // IsRetryableError returns true if the error is retryable
-func (k *Kafka) IsRetryableError(err error) bool {
+func (k *KafkaClient) IsRetryableError(err error) bool {
 	switch {
 	case errors.Is(err, ErrConnectionFailed),
 		errors.Is(err, ErrConnectionLost),
@@ -342,14 +342,14 @@ func (k *Kafka) IsRetryableError(err error) bool {
 }
 
 // IsTemporaryError returns true if the error is temporary
-func (k *Kafka) IsTemporaryError(err error) bool {
+func (k *KafkaClient) IsTemporaryError(err error) bool {
 	return k.IsRetryableError(err) ||
 		errors.Is(err, ErrRebalanceInProgress) ||
 		errors.Is(err, ErrLeaderNotAvailable)
 }
 
 // IsPermanentError returns true if the error is permanent and should not be retried
-func (k *Kafka) IsPermanentError(err error) bool {
+func (k *KafkaClient) IsPermanentError(err error) bool {
 	switch {
 	case errors.Is(err, ErrAuthenticationFailed),
 		errors.Is(err, ErrAuthorizationFailed),
@@ -371,7 +371,7 @@ func (k *Kafka) IsPermanentError(err error) bool {
 }
 
 // IsAuthenticationError returns true if the error is authentication-related
-func (k *Kafka) IsAuthenticationError(err error) bool {
+func (k *KafkaClient) IsAuthenticationError(err error) bool {
 	switch {
 	case errors.Is(err, ErrAuthenticationFailed),
 		errors.Is(err, ErrAuthorizationFailed),

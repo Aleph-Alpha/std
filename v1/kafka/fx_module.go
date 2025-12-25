@@ -11,9 +11,10 @@ import (
 // This module registers the Kafka client with the Fx dependency injection framework,
 // making it available to other components in the application.
 //
-// The module:
-// 1. Provides the Kafka client factory function
-// 2. Invokes the lifecycle registration to manage the client's lifecycle
+// The module provides:
+// 1. *KafkaClient (concrete type) for direct use
+// 2. Client interface for dependency injection
+// 3. Lifecycle management for graceful startup and shutdown
 //
 // Usage:
 //
@@ -23,7 +24,12 @@ import (
 //	)
 var FXModule = fx.Module("kafka",
 	fx.Provide(
-		NewClientWithDI,
+		NewClientWithDI, // Provides *KafkaClient
+		// Also provide the Client interface
+		fx.Annotate(
+			func(k *KafkaClient) Client { return k },
+			fx.As(new(Client)),
+		),
 	),
 	fx.Invoke(RegisterKafkaLifecycle),
 )
@@ -49,7 +55,7 @@ type KafkaParams struct {
 //     This struct embeds fx.In to enable automatic injection of these dependencies.
 //
 // Returns:
-//   - *Kafka: A fully initialized Kafka client ready for use.
+//   - *KafkaClient: A fully initialized Kafka client ready for use.
 //
 // Example usage with fx:
 //
@@ -71,7 +77,7 @@ type KafkaParams struct {
 //
 // Under the hood, this function injects the optional logger, serializer,
 // and deserializer before delegating to the standard NewClient function.
-func NewClientWithDI(params KafkaParams) (*Kafka, error) {
+func NewClientWithDI(params KafkaParams) (*KafkaClient, error) {
 	// Inject the logger into the config if provided
 	if params.Logger != nil {
 		params.Config.Logger = params.Logger
@@ -105,7 +111,7 @@ type KafkaLifecycleParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Client    *Kafka
+	Client    *KafkaClient
 }
 
 // RegisterKafkaLifecycle registers the Kafka client with the fx lifecycle system.
@@ -146,7 +152,7 @@ func RegisterKafkaLifecycle(params KafkaLifecycleParams) {
 //
 // Any errors during shutdown are logged but not propagated, as they typically
 // cannot be handled at this stage of application shutdown.
-func (k *Kafka) GracefulShutdown() {
+func (k *KafkaClient) GracefulShutdown() {
 	k.closeShutdownOnce.Do(func() {
 		close(k.shutdownSignal)
 	})

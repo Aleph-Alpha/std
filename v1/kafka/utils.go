@@ -10,35 +10,6 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-// Message defines the interface for consumed messages from Kafka.
-// This interface abstracts the underlying Kafka message structure and
-// provides methods for committing messages.
-type Message interface {
-	// CommitMsg commits the message, informing Kafka that the message
-	// has been successfully processed.
-	CommitMsg() error
-
-	// Body returns the message payload as a byte slice.
-	Body() []byte
-
-	// BodyAs deserializes the message body into the target structure.
-	// It uses the configured Deserializer, or falls back to JSONDeserializer.
-	// This is a convenience method equivalent to calling Deserialize(msg, target).
-	BodyAs(target interface{}) error
-
-	// Key returns the message key as a string.
-	Key() string
-
-	// Header returns the headers associated with the message.
-	Header() map[string]interface{}
-
-	// Partition returns the partition this message came from.
-	Partition() int
-
-	// Offset returns the offset of this message.
-	Offset() int64
-}
-
 // ConsumerMessage implements the Message interface and wraps a Kafka message.
 type ConsumerMessage struct {
 	message      kafka.Message
@@ -79,7 +50,7 @@ type ConsumerMessage struct {
 //	        log.Printf("Failed to commit message: %v", err)
 //	    }
 //	}
-func (k *Kafka) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
+func (k *KafkaClient) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message {
 	return k.ConsumeParallel(ctx, wg, 1)
 }
 
@@ -110,7 +81,7 @@ func (k *Kafka) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message 
 //	        log.Printf("Failed to commit message: %v", err)
 //	    }
 //	}
-func (k *Kafka) ConsumeParallel(ctx context.Context, wg *sync.WaitGroup, numWorkers int) <-chan Message {
+func (k *KafkaClient) ConsumeParallel(ctx context.Context, wg *sync.WaitGroup, numWorkers int) <-chan Message {
 	if numWorkers < 1 {
 		numWorkers = 1
 	}
@@ -140,7 +111,7 @@ func (k *Kafka) ConsumeParallel(ctx context.Context, wg *sync.WaitGroup, numWork
 }
 
 // consumeWorker is a worker goroutine that fetches and sends messages
-func (k *Kafka) consumeWorker(ctx context.Context, outChan chan<- Message, workerID int) {
+func (k *KafkaClient) consumeWorker(ctx context.Context, outChan chan<- Message, workerID int) {
 	for {
 		select {
 		case <-k.shutdownSignal:
@@ -229,7 +200,7 @@ func (k *Kafka) consumeWorker(ctx context.Context, outChan chan<- Message, worke
 //	    span.RecordError(err)
 //	    log.Printf("Failed to publish message: %v", err)
 //	}
-func (k *Kafka) Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error {
+func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error {
 	select {
 	case <-ctx.Done():
 		log.Printf("ERROR: Context error for publishing msg to Kafka: %v", ctx.Err())
@@ -393,7 +364,7 @@ func (cm *ConsumerMessage) Offset() int64 {
 //	    fmt.Printf("Event: %s, UserID: %d\n", event.Event, event.UserID)
 //	    msg.CommitMsg()
 //	}
-func (k *Kafka) Deserialize(msg Message, target interface{}) error {
+func (k *KafkaClient) Deserialize(msg Message, target interface{}) error {
 	k.mu.RLock()
 	deserializer := k.deserializer
 	k.mu.RUnlock()

@@ -22,7 +22,7 @@ import (
 //   - span_id: The span ID as a string
 //
 // If no span context is found or tracing is disabled, returns an empty slice.
-func (l *Logger) extractTracingFields(ctx context.Context) []zap.Field {
+func (l *LoggerClient) extractTracingFields(ctx context.Context) []zap.Field {
 	if !l.tracingEnabled || ctx == nil {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (l *Logger) extractTracingFields(ctx context.Context) []zap.Field {
 //
 // The method handles both error objects and arbitrary key-value pairs from the fields maps.
 // If multiple fields maps contain the same key, the later maps will override earlier ones.
-func (l *Logger) convertToZapFields(err error, fields ...map[string]interface{}) []zap.Field {
+func (l *LoggerClient) convertToZapFields(err error, fields ...map[string]interface{}) []zap.Field {
 	var zapFields []zap.Field
 	if err != nil {
 		zapFields = append(zapFields, zap.Error(err))
@@ -85,7 +85,7 @@ func (l *Logger) convertToZapFields(err error, fields ...map[string]interface{})
 //	    "user_id": 12345,
 //	    "login_method": "oauth",
 //	})
-func (l *Logger) Info(msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) Info(msg string, err error, fields ...map[string]interface{}) {
 	l.Zap.Info(msg, l.convertToZapFields(err, fields...)...)
 }
 
@@ -105,7 +105,7 @@ func (l *Logger) Info(msg string, err error, fields ...map[string]interface{}) {
 //	    "payload_size": 1024,
 //	    "processing_time_ms": 15,
 //	})
-func (l *Logger) Debug(msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) Debug(msg string, err error, fields ...map[string]interface{}) {
 	l.Zap.Debug(msg, l.convertToZapFields(err, fields...)...)
 }
 
@@ -124,7 +124,7 @@ func (l *Logger) Debug(msg string, err error, fields ...map[string]interface{}) 
 //	    "cpu_usage": 85.5,
 //	    "memory_usage_mb": 1024,
 //	})
-func (l *Logger) Warn(msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) Warn(msg string, err error, fields ...map[string]interface{}) {
 	l.Zap.Warn(msg, l.convertToZapFields(err, fields...)...)
 }
 
@@ -146,7 +146,7 @@ func (l *Logger) Warn(msg string, err error, fields ...map[string]interface{}) {
 //	        "database": "users",
 //	    })
 //	}
-func (l *Logger) Error(msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) Error(msg string, err error, fields ...map[string]interface{}) {
 	l.Zap.Error(msg, l.convertToZapFields(err, fields...)...)
 }
 
@@ -169,7 +169,7 @@ func (l *Logger) Error(msg string, err error, fields ...map[string]interface{}) 
 //	}
 //
 // Note: This function does not return as it terminates the application.
-func (l *Logger) Fatal(msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) Fatal(msg string, err error, fields ...map[string]interface{}) {
 	l.Zap.Fatal(msg, l.convertToZapFields(err, fields...)...)
 }
 
@@ -188,7 +188,7 @@ func (l *Logger) Fatal(msg string, err error, fields ...map[string]interface{}) 
 //	    "user_id": 12345,
 //	    "login_method": "oauth",
 //	})
-func (l *Logger) InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
 	zapFields := l.convertToZapFields(err, fields...)
 	zapFields = append(zapFields, l.extractTracingFields(ctx)...)
 	l.Zap.Info(msg, zapFields...)
@@ -210,7 +210,7 @@ func (l *Logger) InfoWithContext(ctx context.Context, msg string, err error, fie
 //	    "payload_size": 1024,
 //	    "processing_time_ms": 15,
 //	})
-func (l *Logger) DebugWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) DebugWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
 	zapFields := l.convertToZapFields(err, fields...)
 	zapFields = append(zapFields, l.extractTracingFields(ctx)...)
 	l.Zap.Debug(msg, zapFields...)
@@ -231,7 +231,7 @@ func (l *Logger) DebugWithContext(ctx context.Context, msg string, err error, fi
 //	    "cpu_usage": 85.5,
 //	    "memory_usage_mb": 1024,
 //	})
-func (l *Logger) WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
 	zapFields := l.convertToZapFields(err, fields...)
 	zapFields = append(zapFields, l.extractTracingFields(ctx)...)
 	l.Zap.Warn(msg, zapFields...)
@@ -255,7 +255,7 @@ func (l *Logger) WarnWithContext(ctx context.Context, msg string, err error, fie
 //	        "database": "users",
 //	    })
 //	}
-func (l *Logger) ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
 	zapFields := l.convertToZapFields(err, fields...)
 	zapFields = append(zapFields, l.extractTracingFields(ctx)...)
 	l.Zap.Error(msg, zapFields...)
@@ -282,7 +282,7 @@ func (l *Logger) ErrorWithContext(ctx context.Context, msg string, err error, fi
 //	}
 //
 // Note: This function does not return as it terminates the application.
-func (l *Logger) FatalWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+func (l *LoggerClient) FatalWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
 	zapFields := l.convertToZapFields(err, fields...)
 	zapFields = append(zapFields, l.extractTracingFields(ctx)...)
 	l.Zap.Fatal(msg, zapFields...)

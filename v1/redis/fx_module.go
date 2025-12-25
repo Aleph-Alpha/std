@@ -62,7 +62,7 @@ type RedisParams struct {
 //
 // Under the hood, this function injects the optional logger before delegating
 // to the standard NewClient function.
-func NewClientWithDI(params RedisParams) (*Redis, error) {
+func NewClientWithDI(params RedisParams) (*RedisClient, error) {
 	// Inject the logger into the config if provided
 	if params.Logger != nil {
 		params.Config.Logger = params.Logger
@@ -76,7 +76,7 @@ type RedisLifecycleParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Client    *Redis
+	Client    *RedisClient
 }
 
 // RegisterRedisLifecycle registers the Redis client with the fx lifecycle system.
@@ -127,7 +127,7 @@ type ClusterRedisParams struct {
 }
 
 // NewClusterClientWithDI creates a new Redis Cluster client using dependency injection.
-func NewClusterClientWithDI(params ClusterRedisParams) (*Redis, error) {
+func NewClusterClientWithDI(params ClusterRedisParams) (*RedisClient, error) {
 	// Inject the logger into the config if provided
 	if params.Logger != nil {
 		params.Config.Logger = params.Logger
@@ -153,7 +153,7 @@ type FailoverRedisParams struct {
 }
 
 // NewFailoverClientWithDI creates a new Redis Sentinel client using dependency injection.
-func NewFailoverClientWithDI(params FailoverRedisParams) (*Redis, error) {
+func NewFailoverClientWithDI(params FailoverRedisParams) (*RedisClient, error) {
 	// Inject the logger into the config if provided
 	if params.Logger != nil {
 		params.Config.Logger = params.Logger

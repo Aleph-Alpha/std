@@ -224,7 +224,7 @@ var (
 //
 // It maps common RabbitMQ errors to the standardized error types defined above.
 // If an error doesn't match any known type, it's returned unchanged.
-func (r *Rabbit) TranslateError(err error) error {
+func (r *RabbitClient) TranslateError(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -253,7 +253,7 @@ func (r *Rabbit) TranslateError(err error) error {
 }
 
 // translateAMQPError maps AMQP error codes to custom errors
-func (r *Rabbit) translateAMQPError(amqpErr *amqp.Error) error {
+func (r *RabbitClient) translateAMQPError(amqpErr *amqp.Error) error {
 	switch amqpErr.Code {
 	// Connection-level errors (300-399)
 	case amqp.ConnectionForced:
@@ -304,7 +304,7 @@ func (r *Rabbit) translateAMQPError(amqpErr *amqp.Error) error {
 }
 
 // translateByAMQPReason translates errors based on AMQP reason field
-func (r *Rabbit) translateByAMQPReason(reason string, originalErr *amqp.Error) error {
+func (r *RabbitClient) translateByAMQPReason(reason string, originalErr *amqp.Error) error {
 	reason = strings.ToLower(reason)
 
 	switch {
@@ -430,7 +430,7 @@ func (r *Rabbit) translateByAMQPReason(reason string, originalErr *amqp.Error) e
 }
 
 // translateNetworkError maps network errors to custom errors
-func (r *Rabbit) translateNetworkError(netErr net.Error) error {
+func (r *RabbitClient) translateNetworkError(netErr net.Error) error {
 	if netErr.Timeout() {
 		return ErrTimeout
 	}
@@ -438,7 +438,7 @@ func (r *Rabbit) translateNetworkError(netErr net.Error) error {
 }
 
 // translateSyscallError maps syscall errors to custom errors
-func (r *Rabbit) translateSyscallError(syscallErr syscall.Errno) error {
+func (r *RabbitClient) translateSyscallError(syscallErr syscall.Errno) error {
 	switch syscallErr {
 	case syscall.ECONNREFUSED:
 		return ErrConnectionFailed
@@ -478,7 +478,7 @@ func (r *Rabbit) translateSyscallError(syscallErr syscall.Errno) error {
 }
 
 // translateByErrorMessage translates errors based on error message patterns (fallback)
-func (r *Rabbit) translateByErrorMessage(errMsg string, originalErr error) error {
+func (r *RabbitClient) translateByErrorMessage(errMsg string, originalErr error) error {
 	switch {
 	// Connection related
 	case strings.Contains(errMsg, "connection refused"):
@@ -702,7 +702,7 @@ const (
 )
 
 // GetErrorCategory returns the category of the given error
-func (r *Rabbit) GetErrorCategory(err error) ErrorCategory {
+func (r *RabbitClient) GetErrorCategory(err error) ErrorCategory {
 	switch {
 	case errors.Is(err, ErrConnectionFailed), errors.Is(err, ErrConnectionLost), errors.Is(err, ErrConnectionClosed):
 		return CategoryConnection
@@ -738,7 +738,7 @@ func (r *Rabbit) GetErrorCategory(err error) ErrorCategory {
 }
 
 // IsRetryableError returns true if the error is retryable
-func (r *Rabbit) IsRetryableError(err error) bool {
+func (r *RabbitClient) IsRetryableError(err error) bool {
 	switch {
 	case errors.Is(err, ErrConnectionFailed),
 		errors.Is(err, ErrConnectionLost),
@@ -765,7 +765,7 @@ func (r *Rabbit) IsRetryableError(err error) bool {
 }
 
 // IsTemporaryError returns true if the error is temporary
-func (r *Rabbit) IsTemporaryError(err error) bool {
+func (r *RabbitClient) IsTemporaryError(err error) bool {
 	return r.IsRetryableError(err) ||
 		errors.Is(err, ErrResourceLocked) ||
 		errors.Is(err, ErrQuotaExceeded) ||
@@ -774,7 +774,7 @@ func (r *Rabbit) IsTemporaryError(err error) bool {
 }
 
 // IsPermanentError returns true if the error is permanent and should not be retried
-func (r *Rabbit) IsPermanentError(err error) bool {
+func (r *RabbitClient) IsPermanentError(err error) bool {
 	switch {
 	case errors.Is(err, ErrAuthenticationFailed),
 		errors.Is(err, ErrInvalidCredentials),
@@ -801,7 +801,7 @@ func (r *Rabbit) IsPermanentError(err error) bool {
 }
 
 // IsConnectionError returns true if the error is connection-related
-func (r *Rabbit) IsConnectionError(err error) bool {
+func (r *RabbitClient) IsConnectionError(err error) bool {
 	switch {
 	case errors.Is(err, ErrConnectionFailed),
 		errors.Is(err, ErrConnectionLost),
@@ -813,7 +813,7 @@ func (r *Rabbit) IsConnectionError(err error) bool {
 }
 
 // IsChannelError returns true if the error is channel-related
-func (r *Rabbit) IsChannelError(err error) bool {
+func (r *RabbitClient) IsChannelError(err error) bool {
 	switch {
 	case errors.Is(err, ErrChannelClosed),
 		errors.Is(err, ErrChannelError),
@@ -825,7 +825,7 @@ func (r *Rabbit) IsChannelError(err error) bool {
 }
 
 // IsAuthenticationError returns true if the error is authentication-related
-func (r *Rabbit) IsAuthenticationError(err error) bool {
+func (r *RabbitClient) IsAuthenticationError(err error) bool {
 	switch {
 	case errors.Is(err, ErrAuthenticationFailed),
 		errors.Is(err, ErrInvalidCredentials),
@@ -838,7 +838,7 @@ func (r *Rabbit) IsAuthenticationError(err error) bool {
 }
 
 // IsResourceError returns true if the error is resource-related
-func (r *Rabbit) IsResourceError(err error) bool {
+func (r *RabbitClient) IsResourceError(err error) bool {
 	switch {
 	case errors.Is(err, ErrExchangeNotFound),
 		errors.Is(err, ErrQueueNotFound),
@@ -854,7 +854,7 @@ func (r *Rabbit) IsResourceError(err error) bool {
 }
 
 // IsAlarmError returns true if the error is alarm-related
-func (r *Rabbit) IsAlarmError(err error) bool {
+func (r *RabbitClient) IsAlarmError(err error) bool {
 	switch {
 	case errors.Is(err, ErrMemoryAlarm),
 		errors.Is(err, ErrDiskAlarm),

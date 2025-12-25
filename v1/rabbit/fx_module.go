@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/fx"
 )
 
@@ -12,9 +13,10 @@ import (
 // This module registers the RabbitMQ client with the Fx dependency injection framework,
 // making it available to other components in the application.
 //
-// The module:
-// 1. Provides the RabbitMQ client factory function
-// 2. Invokes the lifecycle registration to manage the client's lifecycle
+// The module provides:
+// 1. *RabbitClient (concrete type) for direct use
+// 2. Client interface for dependency injection
+// 3. Lifecycle management for graceful startup and shutdown
 //
 // Usage:
 //
@@ -24,7 +26,12 @@ import (
 //	)
 var FXModule = fx.Module("rabbit",
 	fx.Provide(
-		NewClientWithDI,
+		NewClientWithDI, // Provides *RabbitClient
+		// Also provide the Client interface
+		fx.Annotate(
+			func(r *RabbitClient) Client { return r },
+			fx.As(new(Client)),
+		),
 	),
 	fx.Invoke(RegisterRabbitLifecycle),
 )
@@ -46,7 +53,7 @@ type RabbitParams struct {
 //     automatic injection of these dependencies.
 //
 // Returns:
-//   - *Rabbit: A fully initialized RabbitMQ client ready for use.
+//   - *RabbitClient: A fully initialized RabbitMQ client ready for use.
 //
 // Example usage with fx:
 //
@@ -65,7 +72,7 @@ type RabbitParams struct {
 // Under the hood, this function simply delegates to the standard NewClient function,
 // making it easier to integrate with dependency injection frameworks while maintaining
 // the same initialization logic.
-func NewClientWithDI(params RabbitParams) (*Rabbit, error) {
+func NewClientWithDI(params RabbitParams) (*RabbitClient, error) {
 	return NewClient(params.Config)
 }
 
@@ -74,7 +81,7 @@ type RabbitLifecycleParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Client    *Rabbit
+	Client    *RabbitClient
 	Config    Config
 }
 
@@ -132,7 +139,7 @@ func RegisterRabbitLifecycle(params RabbitLifecycleParams) {
 //
 // Any errors during shutdown are logged but not propagated, as they typically
 // cannot be handled at this stage of application shutdown.
-func (rb *Rabbit) GracefulShutdown() {
+func (rb *RabbitClient) GracefulShutdown() {
 	rb.closeShutdownOnce.Do(func() {
 		close(rb.shutdownSignal)
 	})
@@ -153,4 +160,12 @@ func (rb *Rabbit) GracefulShutdown() {
 		}
 	}
 	rb.mu.Unlock()
+}
+
+// GetChannel returns the underlying AMQP channel for direct operations when needed.
+// This allows advanced users to access RabbitMQ-specific functionality.
+func (rb *RabbitClient) GetChannel() *amqp.Channel {
+	rb.mu.RLock()
+	defer rb.mu.RUnlock()
+	return rb.Channel
 }

@@ -4,6 +4,20 @@
 // message brokers, providing connection management, message publishing, and
 // consuming capabilities with a focus on reliability and ease of use.
 //
+// # Architecture
+//
+// The package follows the "accept interfaces, return structs" Go idiom:
+//   - Client interface: Defines the contract for Kafka operations
+//   - KafkaClient struct: Concrete implementation of the Client interface
+//   - Message interface: Defines the contract for consumed messages
+//   - Constructor returns *KafkaClient (concrete type)
+//   - FX module provides both *KafkaClient and Client interface
+//
+// This design allows:
+//   - Direct usage: Use *KafkaClient for simple cases
+//   - Interface usage: Depend on Client interface for testability and flexibility
+//   - Zero adapters needed: Consumer code can use type aliases
+//
 // Core Features:
 //   - Robust connection management with automatic reconnection
 //   - Simple publishing interface with error handling
@@ -13,16 +27,15 @@
 //   - Integration with the Logger package for structured logging
 //   - Distributed tracing support via message headers
 //
-// Basic Usage:
+// # Basic Usage (Direct)
 //
 //	import (
 //		"github.com/Aleph-Alpha/std/v1/kafka"
-//		"github.com/Aleph-Alpha/std/v1/logger"
 //		"context"
 //		"sync"
 //	)
 //
-//	// Create a new Kafka client
+//	// Create a new Kafka client (returns concrete *KafkaClient)
 //	client, err := kafka.NewClient(kafka.Config{
 //		Brokers:    []string{"localhost:9092"},
 //		Topic:      "events",
@@ -32,38 +45,85 @@
 //		DataType:   "json",       // Automatic JSON serializer (default)
 //	})
 //	if err != nil {
-//		log.Fatal("Failed to connect to Kafka", err, nil)
+//		log.Fatal("Failed to connect to Kafka", err)
 //	}
-//	defer client.Close()
+//	defer client.GracefulShutdown()
 //
 //	// Publish a message (automatically serialized as JSON)
 //	ctx := context.Background()
 //	event := map[string]interface{}{"id": "123", "name": "John"}
-//	err = client.Publish(ctx, "key", event, nil)
+//	err = client.Publish(ctx, "key", event)
 //	if err != nil {
-//		log.Error("Failed to publish message", err, nil)
+//		log.Printf("Failed to publish message: %v", err)
 //	}
 //
-//	// Consume messages
+// # FX Module Integration
+//
+// The package provides an FX module that injects both concrete and interface types:
+//
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/kafka"
+//		"go.uber.org/fx"
+//	)
+//
+//	app := fx.New(
+//		kafka.FXModule,
+//		fx.Provide(
+//			func() kafka.Config {
+//				return kafka.Config{
+//					Brokers:    []string{"localhost:9092"},
+//					Topic:      "events",
+//					IsConsumer: false,
+//					DataType:   "json",
+//				}
+//			},
+//		),
+//		fx.Invoke(func(k kafka.Client) {
+//			// Use the Client interface
+//			ctx := context.Background()
+//			event := map[string]interface{}{"id": "123"}
+//			k.Publish(ctx, "key", event)
+//		}),
+//	)
+//	app.Run()
+//
+// # Using Type Aliases (Recommended for Consumer Code)
+//
+// Consumer applications can use type aliases to avoid creating adapters:
+//
+//	// In your application's messaging package
+//	package messaging
+//
+//	import stdKafka "github.com/Aleph-Alpha/std/v1/kafka"
+//
+//	// Type aliases reference std interfaces directly
+//	type Client = stdKafka.Client
+//	type Message = stdKafka.Message
+//
+// Then use these aliases throughout your application:
+//
+//	func MyService(kafka messaging.Client) {
+//		kafka.Publish(ctx, "key", data)
+//	}
+//
+// # Consuming Messages
+//
 //	wg := &sync.WaitGroup{}
 //	ctx, cancel := context.WithCancel(context.Background())
 //	defer cancel()
 //
 //	msgChan := client.Consume(ctx, wg)
 //	for msg := range msgChan {
-//		log.Info("Received message", nil, map[string]interface{}{
-//			"body": string(msg.Body()),
-//		})
-//
 //		// Process the message
+//		fmt.Printf("Received: %s\n", string(msg.Body()))
 //
 //		// Commit the message
 //		if err := msg.CommitMsg(); err != nil {
-//			log.Error("Failed to commit message", err, nil)
+//			log.Printf("Failed to commit: %v", err)
 //		}
 //	}
 //
-// High-Throughput Consumption with Parallel Workers:
+// # High-Throughput Consumption with Parallel Workers
 //
 // For high-volume topics, use ConsumeParallel to process messages concurrently:
 //
@@ -79,11 +139,11 @@
 //
 //		// Commit the message
 //		if err := msg.CommitMsg(); err != nil {
-//			log.Error("Failed to commit message", err, nil)
+//			log.Printf("Failed to commit: %v", err)
 //		}
 //	}
 //
-// Distributed Tracing with Message Headers:
+// # Distributed Tracing with Message Headers
 //
 // This package supports distributed tracing by allowing you to propagate trace context
 // through message headers, enabling end-to-end visibility across services.

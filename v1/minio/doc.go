@@ -5,6 +5,14 @@
 // It provides functionality for object operations, bucket management, and presigned URL
 // generation with a focus on ease of use and reliability.
 //
+// # Architecture
+//
+// This package follows the "accept interfaces, return structs" design pattern:
+//   - Client interface: Defines the contract for MinIO/S3 operations
+//   - MinioClient struct: Concrete implementation of the Client interface
+//   - NewClient constructor: Returns *MinioClient (concrete type)
+//   - FX module: Provides both *MinioClient and Client interface for dependency injection
+//
 // Core Features:
 //   - Bucket operations (create, check existence)
 //   - Object operations (upload, download, delete)
@@ -13,63 +21,101 @@
 //   - Notification configuration
 //   - Integration with the Logger package for structured logging
 //
-// Basic Usage:
+// # Direct Usage (Without FX)
 //
-//		import (
-//			"github.com/Aleph-Alpha/std/v1/minio"
-//			"github.com/Aleph-Alpha/std/v1/logger"
-//		)
+// For simple applications or tests, create a client directly:
 //
-//		// Create a logger (optional)
-//		log, _ := logger.NewLoggerClient(logger.Config{Level: "info"})
-//		loggerAdapter := minio.NewLoggerAdapter(log)
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/minio"
+//		"context"
+//	)
 //
-//		// Create a new MinIO client with logger
-//		client, err := minio.NewClient(minio.Config{
-//			Connection: minio.ConnectionConfig{
-//				Endpoint:        "play.min.io",
-//				AccessKeyID:     "minioadmin",
-//				SecretAccessKey: "minioadmin",
-//				UseSSL:          true,
-//				BucketName:      "mybucket",
-//	         AccessBucketCreation: true,
-//			},
-//			PresignedConfig: minio.PresignedConfig{
-//				ExpiryDuration: 1 * time.Hour,
-//			},
-//		}, loggerAdapter)
-//		if err != nil {
-//			log.Fatal("Failed to create MinIO client", err, nil)
-//		}
+//	// Create a new MinIO client (returns concrete *MinioClient)
+//	client, err := minio.NewClient(minio.Config{
+//		Connection: minio.ConnectionConfig{
+//			Endpoint:        "play.min.io",
+//			AccessKeyID:     "minioadmin",
+//			SecretAccessKey: "minioadmin",
+//			UseSSL:          true,
+//			BucketName:      "mybucket",
+//			AccessBucketCreation: true,
+//		},
+//	}, nil) // Pass logger if needed
+//	if err != nil {
+//		return err
+//	}
 //
-//		// Alternative: Create MinIO client without logger (uses fallback)
-//		client, err := minio.NewClient(config, nil)
-//		if err != nil {
-//			return fmt.Errorf("failed to initialize MinIO client: %w", err)
-//		}
+//	// Use the client
+//	ctx := context.Background()
+//	_, err = client.Put(ctx, "path/to/object.txt", file, fileInfo.Size())
 //
-//		// Create a bucket if it doesn't exist
-//		err = client.CreateBucket(context.Background(), "mybucket")
-//		if err != nil {
-//			log.Error("Failed to create bucket", err, nil)
-//		}
+// # FX Module Integration
 //
-//		// Upload a file
-//		file, _ := os.Open("/local/path/file.txt")
-//		defer file.Close()
-//		fileInfo, _ := file.Stat()
-//		_, err = client.Put(context.Background(), "path/to/object.txt", file, fileInfo.Size())
-//		if err != nil {
-//			log.Error("Failed to upload file", err, nil)
-//		}
+// For production applications using Uber's fx, use the FXModule which provides
+// both the concrete type and interface:
 //
-//		// Generate a presigned URL for downloading
-//		url, err := client.PreSignedGet(context.Background(), "path/to/object.txt")
-//		if err != nil {
-//			log.Error("Failed to generate presigned URL", err, nil)
-//		}
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/minio"
+//		"github.com/Aleph-Alpha/std/v1/logger"
+//		"go.uber.org/fx"
+//	)
 //
-// Multipart Operations:
+//	app := fx.New(
+//		logger.FXModule, // Optional: provides std logger
+//		minio.FXModule,  // Provides *MinioClient and minio.Client interface
+//		fx.Provide(func() minio.Config {
+//			return minio.Config{
+//				Connection: minio.ConnectionConfig{
+//					Endpoint:        "play.min.io",
+//					AccessKeyID:     "minioadmin",
+//					SecretAccessKey: "minioadmin",
+//					BucketName:      "mybucket",
+//				},
+//			}
+//		}),
+//		fx.Invoke(func(client *minio.MinioClient) {
+//			// Use concrete type directly
+//			ctx := context.Background()
+//			client.Put(ctx, "key", reader, size)
+//		}),
+//		// ... other modules
+//	)
+//	app.Run()
+//
+// # Type Aliases in Consumer Code
+//
+// To simplify your code and make it storage-agnostic, use type aliases:
+//
+//	package myapp
+//
+//	import stdMinio "github.com/Aleph-Alpha/std/v1/minio"
+//
+//	// Use type alias to reference std's interface
+//	type MinioClient = stdMinio.Client
+//
+//	// Now use MinioClient throughout your codebase
+//	func MyFunction(client MinioClient) {
+//		client.Get(ctx, "key")
+//	}
+//
+// This eliminates the need for adapters and allows you to switch implementations
+// by only changing the alias definition.
+//
+// # Basic Operations
+//
+//	// Create a bucket
+//	err = client.CreateBucket(ctx, "mybucket")
+//
+//	// Upload a file
+//	file, _ := os.Open("/local/path/file.txt")
+//	defer file.Close()
+//	fileInfo, _ := file.Stat()
+//	_, err = client.Put(ctx, "path/to/object.txt", file, fileInfo.Size())
+//
+//	// Generate a presigned URL for downloading
+//	url, err := client.PreSignedGet(ctx, "path/to/object.txt")
+//
+// # Multipart Operations
 //
 // For large files, the package provides multipart upload and download capabilities:
 //
@@ -167,5 +213,7 @@
 //
 // Thread Safety:
 //
-// All methods on the Minio type are safe for concurrent use by multiple goroutines.
+// All methods on the MinioClient type are safe for concurrent use by multiple goroutines.
+// The underlying `*minio.Client` and `*minio.Core` pointers are stored in atomic pointers and
+// can be swapped during reconnection without racing with concurrent operations.
 package minio

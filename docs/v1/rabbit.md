@@ -10,6 +10,16 @@ Package rabbit provides functionality for interacting with RabbitMQ.
 
 The rabbit package offers a simplified interface for working with RabbitMQ message queues, providing connection management, message publishing, and consuming capabilities with a focus on reliability and ease of use.
 
+### Architecture
+
+This package follows the "accept interfaces, return structs" design pattern:
+
+- Client interface: Defines the contract for RabbitMQ operations
+- RabbitClient struct: Concrete implementation of the Client interface
+- Message interface: Defines the contract for consumed messages
+- NewClient constructor: Returns \*RabbitClient \(concrete type\)
+- FX module: Provides both \*RabbitClient and Client interface for dependency injection
+
 Core Features:
 
 - Robust connection management with automatic reconnection
@@ -19,18 +29,19 @@ Core Features:
 - Integration with the Logger package for structured logging
 - Distributed tracing support via message headers
 
-Basic Usage:
+### Direct Usage \\\(Without FX\\\)
+
+For simple applications or tests, create a client directly:
 
 ```
 import (
 	"github.com/Aleph-Alpha/std/v1/rabbit"
-	"github.com/Aleph-Alpha/std/v1/logger"
 	"context"
 	"sync"
 )
 
-// Create a new RabbitMQ client
-client, err := rabbit.New(rabbit.Config{
+// Create a new RabbitMQ client (returns concrete *RabbitClient)
+client, err := rabbit.NewClient(rabbit.Config{
 	Connection: rabbit.ConnectionConfig{
 		URI: "amqp://guest:guest@localhost:5672/",
 	},
@@ -39,22 +50,78 @@ client, err := rabbit.New(rabbit.Config{
 		ExchangeType: "topic",
 		RoutingKey:   "user.created",
 		QueueName:    "user-events",
-		ContentType:  "application/json",
 	},
-}, log)
+})
 if err != nil {
-	log.Fatal("Failed to connect to RabbitMQ", err, nil)
+	return err
 }
-defer client.Close()
+defer client.GracefulShutdown()
 
 // Publish a message
 ctx := context.Background()
 message := []byte(`{"id": "123", "name": "John"}`)
-err = client.Publish(ctx, message, nil)
-if err != nil {
-	log.Error("Failed to publish message", err, nil)
-}
+err = client.Publish(ctx, message)
+```
 
+### FX Module Integration
+
+For production applications using Uber's fx, use the FXModule which provides both the concrete type and interface:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/rabbit"
+	"github.com/Aleph-Alpha/std/v1/logger"
+	"go.uber.org/fx"
+)
+
+app := fx.New(
+	logger.FXModule, // Optional: provides std logger
+	rabbit.FXModule, // Provides *RabbitClient and rabbit.Client interface
+	fx.Provide(func() rabbit.Config {
+		return rabbit.Config{
+			Connection: rabbit.ConnectionConfig{
+				URI: "amqp://guest:guest@localhost:5672/",
+			},
+			Channel: rabbit.ChannelConfig{
+				ExchangeName: "events",
+				QueueName:    "user-events",
+			},
+		}
+	}),
+	fx.Invoke(func(client *rabbit.RabbitClient) {
+		// Use concrete type directly
+		ctx := context.Background()
+		client.Publish(ctx, []byte("message"))
+	}),
+	// ... other modules
+)
+app.Run()
+```
+
+### Type Aliases in Consumer Code
+
+To simplify your code and make it message\-broker\-agnostic, use type aliases:
+
+```
+package myapp
+
+import stdRabbit "github.com/Aleph-Alpha/std/v1/rabbit"
+
+// Use type alias to reference std's interface
+type RabbitClient = stdRabbit.Client
+type RabbitMessage = stdRabbit.Message
+
+// Now use RabbitClient throughout your codebase
+func MyFunction(client RabbitClient) {
+	client.Publish(ctx, []byte("message"))
+}
+```
+
+This eliminates the need for adapters and allows you to switch implementations by only changing the alias definition.
+
+### Message Consumption
+
+```
 // Consume messages
 wg := &sync.WaitGroup{}
 ctx, cancel := context.WithCancel(context.Background())
@@ -62,11 +129,10 @@ defer cancel()
 
 msgChan := client.Consume(ctx, wg)
 for msg := range msgChan {
+	// Process the message
 	log.Info("Received message", nil, map[string]interface{}{
 		"body": string(msg.Body()),
 	})
-
-	// Process the message
 
 	// Acknowledge the message
 	if err := msg.AckMsg(); err != nil {
@@ -75,7 +141,7 @@ for msg := range msgChan {
 }
 ```
 
-Distributed Tracing with Message Headers:
+### Distributed Tracing with Message Headers
 
 This package supports distributed tracing by allowing you to propagate trace context through message headers, enabling end\-to\-end visibility across services.
 
@@ -195,6 +261,7 @@ All methods on the Rabbit type are safe for concurrent use by multiple goroutine
 - [Variables](<#variables>)
 - [func RegisterRabbitLifecycle\(params RabbitLifecycleParams\)](<#RegisterRabbitLifecycle>)
 - [type Channel](<#Channel>)
+- [type Client](<#Client>)
 - [type Config](<#Config>)
 - [type Connection](<#Connection>)
 - [type ConsumerMessage](<#ConsumerMessage>)
@@ -205,24 +272,25 @@ All methods on the Rabbit type are safe for concurrent use by multiple goroutine
 - [type DeadLetter](<#DeadLetter>)
 - [type ErrorCategory](<#ErrorCategory>)
 - [type Message](<#Message>)
-- [type Rabbit](<#Rabbit>)
-  - [func NewClient\(config Config\) \(\*Rabbit, error\)](<#NewClient>)
-  - [func NewClientWithDI\(params RabbitParams\) \(\*Rabbit, error\)](<#NewClientWithDI>)
-  - [func \(rb \*Rabbit\) Consume\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.Consume>)
-  - [func \(rb \*Rabbit\) ConsumeDLQ\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Rabbit.ConsumeDLQ>)
-  - [func \(r \*Rabbit\) GetErrorCategory\(err error\) ErrorCategory](<#Rabbit.GetErrorCategory>)
-  - [func \(rb \*Rabbit\) GracefulShutdown\(\)](<#Rabbit.GracefulShutdown>)
-  - [func \(r \*Rabbit\) IsAlarmError\(err error\) bool](<#Rabbit.IsAlarmError>)
-  - [func \(r \*Rabbit\) IsAuthenticationError\(err error\) bool](<#Rabbit.IsAuthenticationError>)
-  - [func \(r \*Rabbit\) IsChannelError\(err error\) bool](<#Rabbit.IsChannelError>)
-  - [func \(r \*Rabbit\) IsConnectionError\(err error\) bool](<#Rabbit.IsConnectionError>)
-  - [func \(r \*Rabbit\) IsPermanentError\(err error\) bool](<#Rabbit.IsPermanentError>)
-  - [func \(r \*Rabbit\) IsResourceError\(err error\) bool](<#Rabbit.IsResourceError>)
-  - [func \(r \*Rabbit\) IsRetryableError\(err error\) bool](<#Rabbit.IsRetryableError>)
-  - [func \(r \*Rabbit\) IsTemporaryError\(err error\) bool](<#Rabbit.IsTemporaryError>)
-  - [func \(rb \*Rabbit\) Publish\(ctx context.Context, msg \[\]byte, headers ...map\[string\]interface\{\}\) error](<#Rabbit.Publish>)
-  - [func \(rb \*Rabbit\) RetryConnection\(cfg Config\)](<#Rabbit.RetryConnection>)
-  - [func \(r \*Rabbit\) TranslateError\(err error\) error](<#Rabbit.TranslateError>)
+- [type RabbitClient](<#RabbitClient>)
+  - [func NewClient\(config Config\) \(\*RabbitClient, error\)](<#NewClient>)
+  - [func NewClientWithDI\(params RabbitParams\) \(\*RabbitClient, error\)](<#NewClientWithDI>)
+  - [func \(rb \*RabbitClient\) Consume\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#RabbitClient.Consume>)
+  - [func \(rb \*RabbitClient\) ConsumeDLQ\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#RabbitClient.ConsumeDLQ>)
+  - [func \(rb \*RabbitClient\) GetChannel\(\) \*amqp.Channel](<#RabbitClient.GetChannel>)
+  - [func \(r \*RabbitClient\) GetErrorCategory\(err error\) ErrorCategory](<#RabbitClient.GetErrorCategory>)
+  - [func \(rb \*RabbitClient\) GracefulShutdown\(\)](<#RabbitClient.GracefulShutdown>)
+  - [func \(r \*RabbitClient\) IsAlarmError\(err error\) bool](<#RabbitClient.IsAlarmError>)
+  - [func \(r \*RabbitClient\) IsAuthenticationError\(err error\) bool](<#RabbitClient.IsAuthenticationError>)
+  - [func \(r \*RabbitClient\) IsChannelError\(err error\) bool](<#RabbitClient.IsChannelError>)
+  - [func \(r \*RabbitClient\) IsConnectionError\(err error\) bool](<#RabbitClient.IsConnectionError>)
+  - [func \(r \*RabbitClient\) IsPermanentError\(err error\) bool](<#RabbitClient.IsPermanentError>)
+  - [func \(r \*RabbitClient\) IsResourceError\(err error\) bool](<#RabbitClient.IsResourceError>)
+  - [func \(r \*RabbitClient\) IsRetryableError\(err error\) bool](<#RabbitClient.IsRetryableError>)
+  - [func \(r \*RabbitClient\) IsTemporaryError\(err error\) bool](<#RabbitClient.IsTemporaryError>)
+  - [func \(rb \*RabbitClient\) Publish\(ctx context.Context, msg \[\]byte, headers ...map\[string\]interface\{\}\) error](<#RabbitClient.Publish>)
+  - [func \(rb \*RabbitClient\) RetryConnection\(cfg Config\)](<#RabbitClient.RetryConnection>)
+  - [func \(r \*RabbitClient\) TranslateError\(err error\) error](<#RabbitClient.TranslateError>)
 - [type RabbitLifecycleParams](<#RabbitLifecycleParams>)
 - [type RabbitParams](<#RabbitParams>)
 
@@ -441,7 +509,7 @@ var (
 
 <a name="FXModule"></a>FXModule is an fx.Module that provides and configures the RabbitMQ client. This module registers the RabbitMQ client with the Fx dependency injection framework, making it available to other components in the application.
 
-The module: 1. Provides the RabbitMQ client factory function 2. Invokes the lifecycle registration to manage the client's lifecycle
+The module provides: 1. \*RabbitClient \(concrete type\) for direct use 2. Client interface for dependency injection 3. Lifecycle management for graceful startup and shutdown
 
 Usage:
 
@@ -456,13 +524,18 @@ app := fx.New(
 var FXModule = fx.Module("rabbit",
     fx.Provide(
         NewClientWithDI,
+
+        fx.Annotate(
+            func(r *RabbitClient) Client { return r },
+            fx.As(new(Client)),
+        ),
     ),
     fx.Invoke(RegisterRabbitLifecycle),
 )
 ```
 
 <a name="RegisterRabbitLifecycle"></a>
-## func [RegisterRabbitLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L99>)
+## func [RegisterRabbitLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L106>)
 
 ```go
 func RegisterRabbitLifecycle(params RabbitLifecycleParams)
@@ -522,6 +595,40 @@ type Channel struct {
     // ContentType specifies the MIME type of published messages
     // Common values: "application/json", "text/plain", "application/octet-stream"
     ContentType string
+}
+```
+
+<a name="Client"></a>
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/interface.go#L14-L44>)
+
+Client provides a high\-level interface for interacting with RabbitMQ. It abstracts connection management, channel operations, and message publishing/consuming.
+
+This interface is implemented by the concrete \*RabbitClient type.
+
+```go
+type Client interface {
+
+    // Publish sends a message to RabbitMQ with optional headers.
+    // The message is sent using the configured exchange and routing key.
+    Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error
+
+    // Consume starts consuming messages from the main queue.
+    // Returns a channel that delivers consumed messages.
+    Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
+
+    // ConsumeDLQ starts consuming messages from the dead letter queue (DLQ).
+    // This allows processing of messages that failed in the main queue.
+    ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
+
+    // RetryConnection monitors the connection and automatically reconnects on failure.
+    // This method should be run in a goroutine.
+    RetryConnection(cfg Config)
+
+    // GracefulShutdown closes all RabbitMQ connections and channels cleanly.
+    GracefulShutdown()
+
+    // GetChannel returns the underlying AMQP channel for direct operations when needed.
+    GetChannel() *amqp.Channel
 }
 ```
 
@@ -590,7 +697,7 @@ type Connection struct {
 ```
 
 <a name="ConsumerMessage"></a>
-## type [ConsumerMessage](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L48-L51>)
+## type [ConsumerMessage](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L14-L17>)
 
 ConsumerMessage implements the Message interface and wraps an AMQP delivery. This struct provides access to the message content and acknowledgment methods.
 
@@ -601,7 +708,7 @@ type ConsumerMessage struct {
 ```
 
 <a name="ConsumerMessage.AckMsg"></a>
-### func \(\*ConsumerMessage\) [AckMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L287>)
+### func \(\*ConsumerMessage\) [AckMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L253>)
 
 ```go
 func (rb *ConsumerMessage) AckMsg() error
@@ -612,7 +719,7 @@ AckMsg acknowledges the message, informing RabbitMQ that the message has been su
 Returns an error if the acknowledgment fails.
 
 <a name="ConsumerMessage.Body"></a>
-### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L304>)
+### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L270>)
 
 ```go
 func (rb *ConsumerMessage) Body() []byte
@@ -621,7 +728,7 @@ func (rb *ConsumerMessage) Body() []byte
 Body returns the message payload as a byte slice.
 
 <a name="ConsumerMessage.Header"></a>
-### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L342>)
+### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L308>)
 
 ```go
 func (rb *ConsumerMessage) Header() map[string]interface{}
@@ -664,7 +771,7 @@ for msg := range msgChan {
 ```
 
 <a name="ConsumerMessage.NackMsg"></a>
-### func \(\*ConsumerMessage\) [NackMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L299>)
+### func \(\*ConsumerMessage\) [NackMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L265>)
 
 ```go
 func (rb *ConsumerMessage) NackMsg(requeue bool) error
@@ -734,50 +841,34 @@ const (
 ```
 
 <a name="Message"></a>
-## type [Message](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L15-L44>)
+## type [Message](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/interface.go#L48-L61>)
 
-Message defines the interface for consumed messages from RabbitMQ. This interface abstracts the underlying AMQP message structure and provides methods for acknowledging or rejecting messages.
+Message represents a consumed message from RabbitMQ. It provides methods for acknowledging, rejecting, and accessing message data.
 
 ```go
 type Message interface {
-    // AckMsg acknowledges the message, informing RabbitMQ that the message
-    // has been successfully processed and can be removed from the queue.
+    // AckMsg acknowledges the message, removing it from the queue.
     AckMsg() error
 
-    // NackMsg rejects the message. If requeue is true, the message will be
-    // returned to the queue for redelivery; otherwise, it will be discarded
-    // or sent to a dead-letter exchange if configured.
+    // NackMsg negatively acknowledges the message.
+    // If requeue is true, the message is requeued; otherwise it goes to DLQ.
     NackMsg(requeue bool) error
 
     // Body returns the message payload as a byte slice.
     Body() []byte
 
-    // Header returns the headers associated with the message.
-    // Message headers provide metadata about the message and can contain
-    // application-specific information set by the message publisher.
-    //
-    // Headers are a map of key-value pairs where the keys are strings
-    // and values can be of various types. Common uses for headers include:
-    //   - Message type identification
-    //   - Content format specification
-    //   - Routing information
-    //   - Tracing context propagation
-    //   - Custom application metadata
-    //
-    // For distributed tracing with OpenTelemetry, headers can carry trace
-    // context between services, enabling end-to-end tracing across
-    // message-based communication.
+    // Header returns the message headers.
     Header() map[string]interface{}
 }
 ```
 
-<a name="Rabbit"></a>
-## type [Rabbit](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L18-L36>)
+<a name="RabbitClient"></a>
+## type [RabbitClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L18-L36>)
 
 Rabbit represents a client for interacting with RabbitMQ. It manages connections, channels, and provides methods for publishing and consuming messages with automatic reconnection capabilities.
 
 ```go
-type Rabbit struct {
+type RabbitClient struct {
 
     // Channel is the main AMQP channel used for publishing and consuming messages.
     // It's exposed publicly to allow direct operations when needed.
@@ -787,10 +878,10 @@ type Rabbit struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L53>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L56>)
 
 ```go
-func NewClient(config Config) (*Rabbit, error)
+func NewClient(config Config) (*RabbitClient, error)
 ```
 
 NewClient creates and initializes a new RabbitMQ client with the provided configuration. This function establishes the initial connection to RabbitMQ, sets up channels, and configures exchanges and queues as specified in the configuration.
@@ -800,20 +891,23 @@ Parameters:
 - cfg: Configuration for connecting to RabbitMQ and setting up channels
 - logger: Logger implementation for recording events and errors
 
-Returns a new Rabbit client instance that is ready to use. If connection fails after all retries or channel setup fails, it will log a fatal error.
+Returns a new RabbitClient instance that is ready to use. If connection fails after all retries or channel setup fails, it will return an error.
 
 Example:
 
 ```
-client := rabbit.NewClient(config, myLogger)
-defer client.Close()
+client, err := rabbit.NewClient(config)
+if err != nil {
+	log.Fatal(err)
+}
+defer client.GracefulShutdown()
 ```
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L68>)
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L75>)
 
 ```go
-func NewClientWithDI(params RabbitParams) (*Rabbit, error)
+func NewClientWithDI(params RabbitParams) (*RabbitClient, error)
 ```
 
 NewClientWithDI creates a new RabbitMQ client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where dependencies are automatically provided via the RabbitParams struct.
@@ -824,7 +918,7 @@ Parameters:
 
 Returns:
 
-- \*Rabbit: A fully initialized RabbitMQ client ready for use.
+- \*RabbitClient: A fully initialized RabbitMQ client ready for use.
 
 Example usage with fx:
 
@@ -844,11 +938,11 @@ app := fx.New(
 
 Under the hood, this function simply delegates to the standard NewClient function, making it easier to integrate with dependency injection frameworks while maintaining the same initialization logic.
 
-<a name="Rabbit.Consume"></a>
-### func \(\*Rabbit\) [Consume](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L153>)
+<a name="RabbitClient.Consume"></a>
+### func \(\*RabbitClient\) [Consume](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L119>)
 
 ```go
-func (rb *Rabbit) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
+func (rb *RabbitClient) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
 ```
 
 Consume starts consuming messages from the queue specified in the configuration. This method provides a channel where consumed messages will be delivered.
@@ -879,11 +973,11 @@ for msg := range msgChan {
 }
 ```
 
-<a name="Rabbit.ConsumeDLQ"></a>
-### func \(\*Rabbit\) [ConsumeDLQ](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L182>)
+<a name="RabbitClient.ConsumeDLQ"></a>
+### func \(\*RabbitClient\) [ConsumeDLQ](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L148>)
 
 ```go
-func (rb *Rabbit) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
+func (rb *RabbitClient) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
 ```
 
 ConsumeDLQ starts consuming messages from the dead\-letter queue. This method is useful for processing failed messages sent to the dead\-letter queue.
@@ -912,20 +1006,29 @@ for msg := range dlqChan {
 }
 ```
 
-<a name="Rabbit.GetErrorCategory"></a>
-### func \(\*Rabbit\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L705>)
+<a name="RabbitClient.GetChannel"></a>
+### func \(\*RabbitClient\) [GetChannel](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L167>)
 
 ```go
-func (r *Rabbit) GetErrorCategory(err error) ErrorCategory
+func (rb *RabbitClient) GetChannel() *amqp.Channel
+```
+
+GetChannel returns the underlying AMQP channel for direct operations when needed. This allows advanced users to access RabbitMQ\-specific functionality.
+
+<a name="RabbitClient.GetErrorCategory"></a>
+### func \(\*RabbitClient\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L705>)
+
+```go
+func (r *RabbitClient) GetErrorCategory(err error) ErrorCategory
 ```
 
 GetErrorCategory returns the category of the given error
 
-<a name="Rabbit.GracefulShutdown"></a>
-### func \(\*Rabbit\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L135>)
+<a name="RabbitClient.GracefulShutdown"></a>
+### func \(\*RabbitClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L142>)
 
 ```go
-func (rb *Rabbit) GracefulShutdown()
+func (rb *RabbitClient) GracefulShutdown()
 ```
 
 GracefulShutdown closes the RabbitMQ client's connections and channels cleanly. This method ensures that all resources are properly released when the application is shutting down.
@@ -934,83 +1037,83 @@ The shutdown process: 1. Signals all goroutines to stop by closing the shutdownS
 
 Any errors during shutdown are logged but not propagated, as they typically cannot be handled at this stage of application shutdown.
 
-<a name="Rabbit.IsAlarmError"></a>
-### func \(\*Rabbit\) [IsAlarmError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L857>)
+<a name="RabbitClient.IsAlarmError"></a>
+### func \(\*RabbitClient\) [IsAlarmError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L857>)
 
 ```go
-func (r *Rabbit) IsAlarmError(err error) bool
+func (r *RabbitClient) IsAlarmError(err error) bool
 ```
 
 IsAlarmError returns true if the error is alarm\-related
 
-<a name="Rabbit.IsAuthenticationError"></a>
-### func \(\*Rabbit\) [IsAuthenticationError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L828>)
+<a name="RabbitClient.IsAuthenticationError"></a>
+### func \(\*RabbitClient\) [IsAuthenticationError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L828>)
 
 ```go
-func (r *Rabbit) IsAuthenticationError(err error) bool
+func (r *RabbitClient) IsAuthenticationError(err error) bool
 ```
 
 IsAuthenticationError returns true if the error is authentication\-related
 
-<a name="Rabbit.IsChannelError"></a>
-### func \(\*Rabbit\) [IsChannelError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L816>)
+<a name="RabbitClient.IsChannelError"></a>
+### func \(\*RabbitClient\) [IsChannelError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L816>)
 
 ```go
-func (r *Rabbit) IsChannelError(err error) bool
+func (r *RabbitClient) IsChannelError(err error) bool
 ```
 
 IsChannelError returns true if the error is channel\-related
 
-<a name="Rabbit.IsConnectionError"></a>
-### func \(\*Rabbit\) [IsConnectionError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L804>)
+<a name="RabbitClient.IsConnectionError"></a>
+### func \(\*RabbitClient\) [IsConnectionError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L804>)
 
 ```go
-func (r *Rabbit) IsConnectionError(err error) bool
+func (r *RabbitClient) IsConnectionError(err error) bool
 ```
 
 IsConnectionError returns true if the error is connection\-related
 
-<a name="Rabbit.IsPermanentError"></a>
-### func \(\*Rabbit\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L777>)
+<a name="RabbitClient.IsPermanentError"></a>
+### func \(\*RabbitClient\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L777>)
 
 ```go
-func (r *Rabbit) IsPermanentError(err error) bool
+func (r *RabbitClient) IsPermanentError(err error) bool
 ```
 
 IsPermanentError returns true if the error is permanent and should not be retried
 
-<a name="Rabbit.IsResourceError"></a>
-### func \(\*Rabbit\) [IsResourceError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L841>)
+<a name="RabbitClient.IsResourceError"></a>
+### func \(\*RabbitClient\) [IsResourceError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L841>)
 
 ```go
-func (r *Rabbit) IsResourceError(err error) bool
+func (r *RabbitClient) IsResourceError(err error) bool
 ```
 
 IsResourceError returns true if the error is resource\-related
 
-<a name="Rabbit.IsRetryableError"></a>
-### func \(\*Rabbit\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L741>)
+<a name="RabbitClient.IsRetryableError"></a>
+### func \(\*RabbitClient\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L741>)
 
 ```go
-func (r *Rabbit) IsRetryableError(err error) bool
+func (r *RabbitClient) IsRetryableError(err error) bool
 ```
 
 IsRetryableError returns true if the error is retryable
 
-<a name="Rabbit.IsTemporaryError"></a>
-### func \(\*Rabbit\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L768>)
+<a name="RabbitClient.IsTemporaryError"></a>
+### func \(\*RabbitClient\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L768>)
 
 ```go
-func (r *Rabbit) IsTemporaryError(err error) bool
+func (r *RabbitClient) IsTemporaryError(err error) bool
 ```
 
 IsTemporaryError returns true if the error is temporary
 
-<a name="Rabbit.Publish"></a>
-### func \(\*Rabbit\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L241>)
+<a name="RabbitClient.Publish"></a>
+### func \(\*RabbitClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L207>)
 
 ```go
-func (rb *Rabbit) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error
+func (rb *RabbitClient) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error
 ```
 
 Publish sends a message to the RabbitMQ exchange specified in the configuration. This method is thread\-safe and respects context cancellation.
@@ -1072,11 +1175,11 @@ if err != nil {
 log.Println("Message published successfully with trace context")
 ```
 
-<a name="Rabbit.RetryConnection"></a>
-### func \(\*Rabbit\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L229>)
+<a name="RabbitClient.RetryConnection"></a>
+### func \(\*RabbitClient\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L232>)
 
 ```go
-func (rb *Rabbit) RetryConnection(cfg Config)
+func (rb *RabbitClient) RetryConnection(cfg Config)
 ```
 
 RetryConnection continuously monitors the RabbitMQ connection and automatically re\-establishes it if it fails. This method is typically run in a goroutine.
@@ -1095,11 +1198,11 @@ The method will:
 
 This provides resilience against network issues and RabbitMQ server restarts.
 
-<a name="Rabbit.TranslateError"></a>
-### func \(\*Rabbit\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L227>)
+<a name="RabbitClient.TranslateError"></a>
+### func \(\*RabbitClient\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/errors.go#L227>)
 
 ```go
-func (r *Rabbit) TranslateError(err error) error
+func (r *RabbitClient) TranslateError(err error) error
 ```
 
 TranslateError converts AMQP/RabbitMQ\-specific errors into standardized application errors. This function provides abstraction from the underlying AMQP implementation details, allowing application code to handle errors in a RabbitMQ\-agnostic way.
@@ -1107,7 +1210,7 @@ TranslateError converts AMQP/RabbitMQ\-specific errors into standardized applica
 It maps common RabbitMQ errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="RabbitLifecycleParams"></a>
-## type [RabbitLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L73-L79>)
+## type [RabbitLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L80-L86>)
 
 RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
 
@@ -1116,13 +1219,13 @@ type RabbitLifecycleParams struct {
     fx.In
 
     Lifecycle fx.Lifecycle
-    Client    *Rabbit
+    Client    *RabbitClient
     Config    Config
 }
 ```
 
 <a name="RabbitParams"></a>
-## type [RabbitParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L33-L37>)
+## type [RabbitParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L40-L44>)
 
 RabbitParams groups the dependencies needed to create a Rabbit client
 

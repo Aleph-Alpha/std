@@ -11,9 +11,10 @@ import (
 // This module registers the MinIO client with the Fx dependency injection framework,
 // making it available to other components in the application.
 //
-// The module:
-// 1. Provides the MinIO client factory function
-// 2. Invokes the lifecycle registration to manage the client's lifecycle
+// The module provides:
+// 1. *MinioClient (concrete type) for direct use
+// 2. Client interface for dependency injection
+// 3. Lifecycle management for graceful startup and shutdown
 //
 // Usage:
 //
@@ -23,7 +24,12 @@ import (
 //	)
 var FXModule = fx.Module("minio",
 	fx.Provide(
-		NewMinioClientWithDI,
+		NewMinioClientWithDI, // Provides *MinioClient
+		// Also provide the Client interface
+		fx.Annotate(
+			func(m *MinioClient) Client { return m },
+			fx.As(new(Client)),
+		),
 	),
 	fx.Invoke(RegisterLifecycle),
 )
@@ -36,7 +42,7 @@ type MinioParams struct {
 	Logger MinioLogger `optional:"true"`
 }
 
-func NewMinioClientWithDI(params MinioParams) (*Minio, error) {
+func NewMinioClientWithDI(params MinioParams) (*MinioClient, error) {
 	return NewClient(params.Config, params.Logger)
 }
 
@@ -44,7 +50,7 @@ type MinioLifeCycleParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Minio     *Minio
+	Minio     *MinioClient
 }
 
 // RegisterLifecycle registers the MinIO client with the fx lifecycle system.
@@ -130,12 +136,8 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 //	    defer minioClient.GracefulShutdown()
 //	    // processing logic...
 //	}
-func (m *Minio) GracefulShutdown() {
+func (m *MinioClient) GracefulShutdown() {
 	m.closeShutdownOnce.Do(func() {
 		close(m.shutdownSignal)
-	})
-
-	m.closeReconnectOnce.Do(func() {
-		close(m.reconnectSignal)
 	})
 }

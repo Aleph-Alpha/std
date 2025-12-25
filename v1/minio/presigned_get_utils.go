@@ -97,12 +97,17 @@ func newMultipartPresignedGet(info *MultipartPresignedGetInfo) MultipartPresigne
 //	    10*1024*1024, // 10 MiB parts
 //	    2*time.Hour,
 //	)
-func (m *Minio) GenerateMultipartPresignedGetURLs(
+func (m *MinioClient) GenerateMultipartPresignedGetURLs(
 	ctx context.Context,
 	objectKey string,
 	partSize int64,
 	expiry ...time.Duration,
 ) (MultipartPresignedGet, error) {
+	c := m.client.Load()
+	if c == nil {
+		return nil, ErrConnectionFailed
+	}
+
 	// Determine expiry
 	expiryDuration := m.cfg.PresignedConfig.ExpiryDuration
 	if len(expiry) > 0 && expiry[0] > 0 {
@@ -110,7 +115,7 @@ func (m *Minio) GenerateMultipartPresignedGetURLs(
 	}
 
 	// Get object stats to determine size and other metadata
-	objInfo, err := m.Client.StatObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.StatObjectOptions{})
+	objInfo, err := c.StatObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get object info: %w", err)
 	}
@@ -145,7 +150,7 @@ func (m *Minio) GenerateMultipartPresignedGetURLs(
 		reqParams.Set("response-content-range", byteRange)
 
 		// Generate presigned URL for this part
-		presignedURL, err := m.Client.Presign(ctx, "GET", m.cfg.Connection.BucketName, objectKey, expiryDuration, reqParams)
+		presignedURL, err := c.Presign(ctx, "GET", m.cfg.Connection.BucketName, objectKey, expiryDuration, reqParams)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate presigned URL for part %d: %w", i+1, err)
 		}
@@ -257,8 +262,13 @@ func (m *multipartPresignedGetImpl) IsExpired() bool {
 //	if err == nil {
 //	    fmt.Printf("Download link: %s\n", url)
 //	}
-func (m *Minio) PreSignedGet(ctx context.Context, objectKey string) (string, error) {
-	presignedUrl, err := m.Client.PresignedGetObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
+func (m *MinioClient) PreSignedGet(ctx context.Context, objectKey string) (string, error) {
+	c := m.client.Load()
+	if c == nil {
+		return "", ErrConnectionFailed
+	}
+
+	presignedUrl, err := c.PresignedGetObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
 	if err != nil {
 		return "", err
 	}

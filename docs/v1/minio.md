@@ -10,6 +10,15 @@ Package minio provides functionality for interacting with MinIO/S3\-compatible o
 
 The minio package offers a simplified interface for working with object storage systems that are compatible with the S3 API, including MinIO, Amazon S3, and others. It provides functionality for object operations, bucket management, and presigned URL generation with a focus on ease of use and reliability.
 
+### Architecture
+
+This package follows the "accept interfaces, return structs" design pattern:
+
+- Client interface: Defines the contract for MinIO/S3 operations
+- MinioClient struct: Concrete implementation of the Client interface
+- NewClient constructor: Returns \*MinioClient \(concrete type\)
+- FX module: Provides both \*MinioClient and Client interface for dependency injection
+
 Core Features:
 
 - Bucket operations \(create, check existence\)
@@ -19,65 +28,107 @@ Core Features:
 - Notification configuration
 - Integration with the Logger package for structured logging
 
-Basic Usage:
+### Direct Usage \\\(Without FX\\\)
+
+For simple applications or tests, create a client directly:
 
 ```
 import (
-		"github.com/Aleph-Alpha/std/v1/minio"
-		"github.com/Aleph-Alpha/std/v1/logger"
-	)
+	"github.com/Aleph-Alpha/std/v1/minio"
+	"context"
+)
 
-	// Create a logger (optional)
-	log, _ := logger.NewLoggerClient(logger.Config{Level: "info"})
-	loggerAdapter := minio.NewLoggerAdapter(log)
+// Create a new MinIO client (returns concrete *MinioClient)
+client, err := minio.NewClient(minio.Config{
+	Connection: minio.ConnectionConfig{
+		Endpoint:        "play.min.io",
+		AccessKeyID:     "minioadmin",
+		SecretAccessKey: "minioadmin",
+		UseSSL:          true,
+		BucketName:      "mybucket",
+		AccessBucketCreation: true,
+	},
+}, nil) // Pass logger if needed
+if err != nil {
+	return err
+}
 
-	// Create a new MinIO client with logger
-	client, err := minio.NewClient(minio.Config{
-		Connection: minio.ConnectionConfig{
-			Endpoint:        "play.min.io",
-			AccessKeyID:     "minioadmin",
-			SecretAccessKey: "minioadmin",
-			UseSSL:          true,
-			BucketName:      "mybucket",
-         AccessBucketCreation: true,
-		},
-		PresignedConfig: minio.PresignedConfig{
-			ExpiryDuration: 1 * time.Hour,
-		},
-	}, loggerAdapter)
-	if err != nil {
-		log.Fatal("Failed to create MinIO client", err, nil)
-	}
-
-	// Alternative: Create MinIO client without logger (uses fallback)
-	client, err := minio.NewClient(config, nil)
-	if err != nil {
-		return fmt.Errorf("failed to initialize MinIO client: %w", err)
-	}
-
-	// Create a bucket if it doesn't exist
-	err = client.CreateBucket(context.Background(), "mybucket")
-	if err != nil {
-		log.Error("Failed to create bucket", err, nil)
-	}
-
-	// Upload a file
-	file, _ := os.Open("/local/path/file.txt")
-	defer file.Close()
-	fileInfo, _ := file.Stat()
-	_, err = client.Put(context.Background(), "path/to/object.txt", file, fileInfo.Size())
-	if err != nil {
-		log.Error("Failed to upload file", err, nil)
-	}
-
-	// Generate a presigned URL for downloading
-	url, err := client.PreSignedGet(context.Background(), "path/to/object.txt")
-	if err != nil {
-		log.Error("Failed to generate presigned URL", err, nil)
-	}
+// Use the client
+ctx := context.Background()
+_, err = client.Put(ctx, "path/to/object.txt", file, fileInfo.Size())
 ```
 
-Multipart Operations:
+### FX Module Integration
+
+For production applications using Uber's fx, use the FXModule which provides both the concrete type and interface:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/minio"
+	"github.com/Aleph-Alpha/std/v1/logger"
+	"go.uber.org/fx"
+)
+
+app := fx.New(
+	logger.FXModule, // Optional: provides std logger
+	minio.FXModule,  // Provides *MinioClient and minio.Client interface
+	fx.Provide(func() minio.Config {
+		return minio.Config{
+			Connection: minio.ConnectionConfig{
+				Endpoint:        "play.min.io",
+				AccessKeyID:     "minioadmin",
+				SecretAccessKey: "minioadmin",
+				BucketName:      "mybucket",
+			},
+		}
+	}),
+	fx.Invoke(func(client *minio.MinioClient) {
+		// Use concrete type directly
+		ctx := context.Background()
+		client.Put(ctx, "key", reader, size)
+	}),
+	// ... other modules
+)
+app.Run()
+```
+
+### Type Aliases in Consumer Code
+
+To simplify your code and make it storage\-agnostic, use type aliases:
+
+```
+package myapp
+
+import stdMinio "github.com/Aleph-Alpha/std/v1/minio"
+
+// Use type alias to reference std's interface
+type MinioClient = stdMinio.Client
+
+// Now use MinioClient throughout your codebase
+func MyFunction(client MinioClient) {
+	client.Get(ctx, "key")
+}
+```
+
+This eliminates the need for adapters and allows you to switch implementations by only changing the alias definition.
+
+### Basic Operations
+
+```
+// Create a bucket
+err = client.CreateBucket(ctx, "mybucket")
+
+// Upload a file
+file, _ := os.Open("/local/path/file.txt")
+defer file.Close()
+fileInfo, _ := file.Stat()
+_, err = client.Put(ctx, "path/to/object.txt", file, fileInfo.Size())
+
+// Generate a presigned URL for downloading
+url, err := client.PreSignedGet(ctx, "path/to/object.txt")
+```
+
+### Multipart Operations
 
 For large files, the package provides multipart upload and download capabilities:
 
@@ -184,7 +235,7 @@ if err != nil {
 
 Thread Safety:
 
-All methods on the Minio type are safe for concurrent use by multiple goroutines.
+All methods on the MinioClient type are safe for concurrent use by multiple goroutines. The underlying \`\*minio.Client\` and \`\*minio.Core\` pointers are stored in atomic pointers and can be swapped during reconnection without racing with concurrent operations.
 
 Package minio is a generated GoMock package.
 
@@ -205,6 +256,7 @@ Package minio is a generated GoMock package.
 - [type BufferPoolConfig](<#BufferPoolConfig>)
   - [func DefaultBufferPoolConfig\(\) BufferPoolConfig](<#DefaultBufferPoolConfig>)
 - [type BufferPoolStats](<#BufferPoolStats>)
+- [type Client](<#Client>)
 - [type Config](<#Config>)
 - [type ConnectionConfig](<#ConnectionConfig>)
 - [type ConnectionPoolConfig](<#ConnectionPoolConfig>)
@@ -220,32 +272,32 @@ Package minio is a generated GoMock package.
   - [func \(la \*LoggerAdapter\) Info\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Info>)
   - [func \(la \*LoggerAdapter\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Warn>)
 - [type MQTTNotification](<#MQTTNotification>)
-- [type Minio](<#Minio>)
-  - [func NewClient\(config Config, logger MinioLogger\) \(\*Minio, error\)](<#NewClient>)
-  - [func NewMinioClientWithDI\(params MinioParams\) \(\*Minio, error\)](<#NewMinioClientWithDI>)
-  - [func \(m \*Minio\) AbortMultipartUpload\(ctx context.Context, objectKey, uploadID string\) error](<#Minio.AbortMultipartUpload>)
-  - [func \(m \*Minio\) CleanupIncompleteUploads\(ctx context.Context, prefix string, olderThan time.Duration\) error](<#Minio.CleanupIncompleteUploads>)
-  - [func \(m \*Minio\) CleanupResources\(\)](<#Minio.CleanupResources>)
-  - [func \(m \*Minio\) CompleteMultipartUpload\(ctx context.Context, objectKey, uploadID string, partNumbers \[\]int, etags \[\]string\) error](<#Minio.CompleteMultipartUpload>)
-  - [func \(m \*Minio\) Delete\(ctx context.Context, objectKey string\) error](<#Minio.Delete>)
-  - [func \(m \*Minio\) GenerateMultipartPresignedGetURLs\(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration\) \(MultipartPresignedGet, error\)](<#Minio.GenerateMultipartPresignedGetURLs>)
-  - [func \(m \*Minio\) GenerateMultipartUploadURLs\(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration\) \(MultipartUpload, error\)](<#Minio.GenerateMultipartUploadURLs>)
-  - [func \(m \*Minio\) Get\(ctx context.Context, objectKey string\) \(\[\]byte, error\)](<#Minio.Get>)
-  - [func \(m \*Minio\) GetBufferPoolStats\(\) BufferPoolStats](<#Minio.GetBufferPoolStats>)
-  - [func \(m \*Minio\) GetErrorCategory\(err error\) ErrorCategory](<#Minio.GetErrorCategory>)
-  - [func \(m \*Minio\) GetResourceStats\(\) ResourceStats](<#Minio.GetResourceStats>)
-  - [func \(m \*Minio\) GracefulShutdown\(\)](<#Minio.GracefulShutdown>)
-  - [func \(m \*Minio\) IsPermanentError\(err error\) bool](<#Minio.IsPermanentError>)
-  - [func \(m \*Minio\) IsRetryableError\(err error\) bool](<#Minio.IsRetryableError>)
-  - [func \(m \*Minio\) IsTemporaryError\(err error\) bool](<#Minio.IsTemporaryError>)
-  - [func \(m \*Minio\) ListIncompleteUploads\(ctx context.Context, prefix string\) \(\[\]minio.ObjectMultipartInfo, error\)](<#Minio.ListIncompleteUploads>)
-  - [func \(m \*Minio\) PreSignedGet\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedGet>)
-  - [func \(m \*Minio\) PreSignedHeadObject\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedHeadObject>)
-  - [func \(m \*Minio\) PreSignedPut\(ctx context.Context, objectKey string\) \(string, error\)](<#Minio.PreSignedPut>)
-  - [func \(m \*Minio\) Put\(ctx context.Context, objectKey string, reader io.Reader, size ...int64\) \(int64, error\)](<#Minio.Put>)
-  - [func \(m \*Minio\) ResetResourceStats\(\)](<#Minio.ResetResourceStats>)
-  - [func \(m \*Minio\) StreamGet\(ctx context.Context, objectKey string, chunkSize int\) \(\<\-chan \[\]byte, \<\-chan error\)](<#Minio.StreamGet>)
-  - [func \(m \*Minio\) TranslateError\(err error\) error](<#Minio.TranslateError>)
+- [type MinioClient](<#MinioClient>)
+  - [func NewClient\(config Config, logger MinioLogger\) \(\*MinioClient, error\)](<#NewClient>)
+  - [func NewMinioClientWithDI\(params MinioParams\) \(\*MinioClient, error\)](<#NewMinioClientWithDI>)
+  - [func \(m \*MinioClient\) AbortMultipartUpload\(ctx context.Context, objectKey, uploadID string\) error](<#MinioClient.AbortMultipartUpload>)
+  - [func \(m \*MinioClient\) CleanupIncompleteUploads\(ctx context.Context, prefix string, olderThan time.Duration\) error](<#MinioClient.CleanupIncompleteUploads>)
+  - [func \(m \*MinioClient\) CleanupResources\(\)](<#MinioClient.CleanupResources>)
+  - [func \(m \*MinioClient\) CompleteMultipartUpload\(ctx context.Context, objectKey, uploadID string, partNumbers \[\]int, etags \[\]string\) error](<#MinioClient.CompleteMultipartUpload>)
+  - [func \(m \*MinioClient\) Delete\(ctx context.Context, objectKey string\) error](<#MinioClient.Delete>)
+  - [func \(m \*MinioClient\) GenerateMultipartPresignedGetURLs\(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration\) \(MultipartPresignedGet, error\)](<#MinioClient.GenerateMultipartPresignedGetURLs>)
+  - [func \(m \*MinioClient\) GenerateMultipartUploadURLs\(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration\) \(MultipartUpload, error\)](<#MinioClient.GenerateMultipartUploadURLs>)
+  - [func \(m \*MinioClient\) Get\(ctx context.Context, objectKey string\) \(\[\]byte, error\)](<#MinioClient.Get>)
+  - [func \(m \*MinioClient\) GetBufferPoolStats\(\) BufferPoolStats](<#MinioClient.GetBufferPoolStats>)
+  - [func \(m \*MinioClient\) GetErrorCategory\(err error\) ErrorCategory](<#MinioClient.GetErrorCategory>)
+  - [func \(m \*MinioClient\) GetResourceStats\(\) ResourceStats](<#MinioClient.GetResourceStats>)
+  - [func \(m \*MinioClient\) GracefulShutdown\(\)](<#MinioClient.GracefulShutdown>)
+  - [func \(m \*MinioClient\) IsPermanentError\(err error\) bool](<#MinioClient.IsPermanentError>)
+  - [func \(m \*MinioClient\) IsRetryableError\(err error\) bool](<#MinioClient.IsRetryableError>)
+  - [func \(m \*MinioClient\) IsTemporaryError\(err error\) bool](<#MinioClient.IsTemporaryError>)
+  - [func \(m \*MinioClient\) ListIncompleteUploads\(ctx context.Context, prefix string\) \(\[\]minio.ObjectMultipartInfo, error\)](<#MinioClient.ListIncompleteUploads>)
+  - [func \(m \*MinioClient\) PreSignedGet\(ctx context.Context, objectKey string\) \(string, error\)](<#MinioClient.PreSignedGet>)
+  - [func \(m \*MinioClient\) PreSignedHeadObject\(ctx context.Context, objectKey string\) \(string, error\)](<#MinioClient.PreSignedHeadObject>)
+  - [func \(m \*MinioClient\) PreSignedPut\(ctx context.Context, objectKey string\) \(string, error\)](<#MinioClient.PreSignedPut>)
+  - [func \(m \*MinioClient\) Put\(ctx context.Context, objectKey string, reader io.Reader, size ...int64\) \(int64, error\)](<#MinioClient.Put>)
+  - [func \(m \*MinioClient\) ResetResourceStats\(\)](<#MinioClient.ResetResourceStats>)
+  - [func \(m \*MinioClient\) StreamGet\(ctx context.Context, objectKey string, chunkSize int\) \(\<\-chan \[\]byte, \<\-chan error\)](<#MinioClient.StreamGet>)
+  - [func \(m \*MinioClient\) TranslateError\(err error\) error](<#MinioClient.TranslateError>)
 - [type MinioLifeCycleParams](<#MinioLifeCycleParams>)
 - [type MinioLogger](<#MinioLogger>)
   - [func NewLoggerAdapter\(logger interface \{
@@ -477,7 +529,7 @@ var (
 
 <a name="FXModule"></a>FXModule is an fx.Module that provides and configures the MinIO client. This module registers the MinIO client with the Fx dependency injection framework, making it available to other components in the application.
 
-The module: 1. Provides the MinIO client factory function 2. Invokes the lifecycle registration to manage the client's lifecycle
+The module provides: 1. \*MinioClient \(concrete type\) for direct use 2. Client interface for dependency injection 3. Lifecycle management for graceful startup and shutdown
 
 Usage:
 
@@ -492,13 +544,18 @@ app := fx.New(
 var FXModule = fx.Module("minio",
     fx.Provide(
         NewMinioClientWithDI,
+
+        fx.Annotate(
+            func(m *MinioClient) Client { return m },
+            fx.As(new(Client)),
+        ),
     ),
     fx.Invoke(RegisterLifecycle),
 )
 ```
 
 <a name="RegisterLifecycle"></a>
-## func [RegisterLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L65>)
+## func [RegisterLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L71>)
 
 ```go
 func RegisterLifecycle(params MinioLifeCycleParams)
@@ -707,6 +764,98 @@ type BufferPoolStats struct {
     MaxPoolSize int `json:"maxPoolSize"`
     // ReuseRatio is the ratio of reused buffers to created buffers
     ReuseRatio float64 `json:"reuseRatio"`
+}
+```
+
+<a name="Client"></a>
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/interface.go#L16-L110>)
+
+Client provides a high\-level interface for interacting with MinIO/S3\-compatible storage. It abstracts object storage operations with features like multipart uploads, presigned URLs, and resource monitoring.
+
+This interface is implemented by the concrete \*MinioClient type.
+
+```go
+type Client interface {
+
+    // Put uploads an object to MinIO storage.
+    Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error)
+
+    // Get retrieves an object from MinIO storage and returns its contents.
+    Get(ctx context.Context, objectKey string) ([]byte, error)
+
+    // StreamGet retrieves an object in chunks, useful for large files.
+    StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error)
+
+    // Delete removes an object from MinIO storage.
+    Delete(ctx context.Context, objectKey string) error
+
+    // PreSignedPut generates a presigned URL for uploading an object.
+    PreSignedPut(ctx context.Context, objectKey string) (string, error)
+
+    // PreSignedGet generates a presigned URL for downloading an object.
+    PreSignedGet(ctx context.Context, objectKey string) (string, error)
+
+    // PreSignedHeadObject generates a presigned URL for retrieving object metadata.
+    PreSignedHeadObject(ctx context.Context, objectKey string) (string, error)
+
+    // GenerateMultipartUploadURLs generates presigned URLs for multipart upload.
+    GenerateMultipartUploadURLs(
+        ctx context.Context,
+        objectKey string,
+        fileSize int64,
+        contentType string,
+        expiry ...time.Duration,
+    ) (MultipartUpload, error)
+
+    // CompleteMultipartUpload finalizes a multipart upload.
+    CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error
+
+    // AbortMultipartUpload cancels a multipart upload.
+    AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error
+
+    // ListIncompleteUploads lists all incomplete multipart uploads.
+    ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error)
+
+    // CleanupIncompleteUploads removes stale incomplete multipart uploads.
+    CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error
+
+    // GenerateMultipartPresignedGetURLs generates presigned URLs for downloading parts of an object.
+    GenerateMultipartPresignedGetURLs(
+        ctx context.Context,
+        objectKey string,
+        partSize int64,
+        expiry ...time.Duration,
+    ) (MultipartPresignedGet, error)
+
+    // GetResourceStats returns comprehensive resource usage statistics.
+    GetResourceStats() ResourceStats
+
+    // GetBufferPoolStats returns buffer pool statistics.
+    GetBufferPoolStats() BufferPoolStats
+
+    // ResetResourceStats resets all resource monitoring statistics.
+    ResetResourceStats()
+
+    // CleanupResources performs cleanup of buffer pools and forces garbage collection.
+    CleanupResources()
+
+    // TranslateError converts MinIO-specific errors into standardized application errors.
+    TranslateError(err error) error
+
+    // GetErrorCategory returns the category of an error.
+    GetErrorCategory(err error) ErrorCategory
+
+    // IsRetryableError checks if an error can be retried.
+    IsRetryableError(err error) bool
+
+    // IsTemporaryError checks if an error is temporary.
+    IsTemporaryError(err error) bool
+
+    // IsPermanentError checks if an error is permanent.
+    IsPermanentError(err error) bool
+
+    // GracefulShutdown safely terminates all MinIO client operations.
+    GracefulShutdown()
 }
 ```
 
@@ -970,18 +1119,13 @@ type MQTTNotification struct {
 }
 ```
 
-<a name="Minio"></a>
-## type [Minio](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L161-L191>)
+<a name="MinioClient"></a>
+## type [MinioClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L161-L191>)
 
-Minio represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and thread\-safety.
+MinioClient represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and resource monitoring.
 
 ```go
-type Minio struct {
-    // Client is the standard MinIO client for high-level operations
-    Client *minio.Client
-
-    // CoreClient provides access to low-level operations not available in the standard client
-    CoreClient *minio.Core
+type MinioClient struct {
     // contains filtered or unexported fields
 }
 ```
@@ -990,7 +1134,7 @@ type Minio struct {
 ### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L659>)
 
 ```go
-func NewClient(config Config, logger MinioLogger) (*Minio, error)
+func NewClient(config Config, logger MinioLogger) (*MinioClient, error)
 ```
 
 NewClient creates and validates a new MinIO client. It establishes connections to both the standard and core MinIO APIs, validates the connection, and ensures the configured bucket exists.
@@ -1000,7 +1144,7 @@ Parameters:
 - config: Configuration for the MinIO client
 - logger: Optional logger for recording operations and errors. If nil, a fallback logger will be used.
 
-Returns a configured and validated MinIO client or an error if initialization fails.
+Returns a configured and validated MinioClient or an error if initialization fails.
 
 Example:
 
@@ -1019,19 +1163,19 @@ if err != nil {
 ```
 
 <a name="NewMinioClientWithDI"></a>
-### func [NewMinioClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L39>)
+### func [NewMinioClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L45>)
 
 ```go
-func NewMinioClientWithDI(params MinioParams) (*Minio, error)
+func NewMinioClientWithDI(params MinioParams) (*MinioClient, error)
 ```
 
 
 
-<a name="Minio.AbortMultipartUpload"></a>
-### func \(\*Minio\) [AbortMultipartUpload](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L411>)
+<a name="MinioClient.AbortMultipartUpload"></a>
+### func \(\*MinioClient\) [AbortMultipartUpload](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L421>)
 
 ```go
-func (m *Minio) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error
+func (m *MinioClient) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error
 ```
 
 AbortMultipartUpload aborts a multipart upload. This method cancels an in\-progress multipart upload and removes any parts that have already been uploaded.
@@ -1050,11 +1194,11 @@ Example:
 err := minioClient.AbortMultipartUpload(ctx, "uploads/myfile.zip", uploadID)
 ```
 
-<a name="Minio.CleanupIncompleteUploads"></a>
-### func \(\*Minio\) [CleanupIncompleteUploads](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L535>)
+<a name="MinioClient.CleanupIncompleteUploads"></a>
+### func \(\*MinioClient\) [CleanupIncompleteUploads](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L560>)
 
 ```go
-func (m *Minio) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error
+func (m *MinioClient) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error
 ```
 
 CleanupIncompleteUploads aborts any incomplete uploads older than the given duration. This method helps maintain storage hygiene by removing abandoned upload sessions.
@@ -1074,11 +1218,11 @@ Example:
 err := minioClient.CleanupIncompleteUploads(ctx, "uploads/", 24*time.Hour)
 ```
 
-<a name="Minio.CleanupResources"></a>
-### func \(\*Minio\) [CleanupResources](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1066>)
+<a name="MinioClient.CleanupResources"></a>
+### func \(\*MinioClient\) [CleanupResources](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1079>)
 
 ```go
-func (m *Minio) CleanupResources()
+func (m *MinioClient) CleanupResources()
 ```
 
 CleanupResources performs cleanup of buffer pools and forces garbage collection. This method is useful during shutdown or when memory pressure is high.
@@ -1090,11 +1234,11 @@ Example:
 defer minioClient.CleanupResources()
 ```
 
-<a name="Minio.CompleteMultipartUpload"></a>
-### func \(\*Minio\) [CompleteMultipartUpload](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L441>)
+<a name="MinioClient.CompleteMultipartUpload"></a>
+### func \(\*MinioClient\) [CompleteMultipartUpload](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L456>)
 
 ```go
-func (m *Minio) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error
+func (m *MinioClient) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error
 ```
 
 CompleteMultipartUpload finalizes a multipart upload by combining all parts. This method tells MinIO/S3 to assemble all the uploaded parts into the final object.
@@ -1121,11 +1265,11 @@ err := minioClient.CompleteMultipartUpload(
 )
 ```
 
-<a name="Minio.Delete"></a>
-### func \(\*Minio\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L225>)
+<a name="MinioClient.Delete"></a>
+### func \(\*MinioClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L241>)
 
 ```go
-func (m *Minio) Delete(ctx context.Context, objectKey string) error
+func (m *MinioClient) Delete(ctx context.Context, objectKey string) error
 ```
 
 Delete removes an object from the specified bucket. This method permanently deletes the object from MinIO storage.
@@ -1146,11 +1290,11 @@ if err == nil {
 }
 ```
 
-<a name="Minio.GenerateMultipartPresignedGetURLs"></a>
-### func \(\*Minio\) [GenerateMultipartPresignedGetURLs](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L100-L105>)
+<a name="MinioClient.GenerateMultipartPresignedGetURLs"></a>
+### func \(\*MinioClient\) [GenerateMultipartPresignedGetURLs](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L100-L105>)
 
 ```go
-func (m *Minio) GenerateMultipartPresignedGetURLs(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration) (MultipartPresignedGet, error)
+func (m *MinioClient) GenerateMultipartPresignedGetURLs(ctx context.Context, objectKey string, partSize int64, expiry ...time.Duration) (MultipartPresignedGet, error)
 ```
 
 GenerateMultipartPresignedGetURLs generates URLs for downloading an object in parts This method is useful for large objects that may benefit from parallel downloads or resumable downloads by clients.
@@ -1178,11 +1322,11 @@ download, err := minioClient.GenerateMultipartPresignedGetURLs(
 )
 ```
 
-<a name="Minio.GenerateMultipartUploadURLs"></a>
-### func \(\*Minio\) [GenerateMultipartUploadURLs](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L251-L257>)
+<a name="MinioClient.GenerateMultipartUploadURLs"></a>
+### func \(\*MinioClient\) [GenerateMultipartUploadURLs](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L251-L257>)
 
 ```go
-func (m *Minio) GenerateMultipartUploadURLs(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration) (MultipartUpload, error)
+func (m *MinioClient) GenerateMultipartUploadURLs(ctx context.Context, objectKey string, fileSize int64, contentType string, expiry ...time.Duration) (MultipartUpload, error)
 ```
 
 GenerateMultipartUploadURLs initiates a multipart upload and generates all necessary URLs. This method prepares everything needed for a client to directly upload multiple parts to MinIO/S3 without further server interaction until the upload is complete.
@@ -1212,11 +1356,11 @@ upload, err := minioClient.GenerateMultipartUploadURLs(
 )
 ```
 
-<a name="Minio.Get"></a>
-### func \(\*Minio\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L81>)
+<a name="MinioClient.Get"></a>
+### func \(\*MinioClient\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L86>)
 
 ```go
-func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error)
+func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error)
 ```
 
 Get retrieves an object from the bucket and returns its contents as a byte slice. This method is optimized for both small and large files with safety considerations for buffer use. For small files, it uses direct allocation, while for larger files it leverages a buffer pool to reduce memory pressure.
@@ -1243,11 +1387,11 @@ if err == nil {
 }
 ```
 
-<a name="Minio.GetBufferPoolStats"></a>
-### func \(\*Minio\) [GetBufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1037>)
+<a name="MinioClient.GetBufferPoolStats"></a>
+### func \(\*MinioClient\) [GetBufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1050>)
 
 ```go
-func (m *Minio) GetBufferPoolStats() BufferPoolStats
+func (m *MinioClient) GetBufferPoolStats() BufferPoolStats
 ```
 
 GetBufferPoolStats returns buffer pool statistics for monitoring buffer efficiency. This is useful for understanding memory usage patterns and optimizing buffer sizes.
@@ -1264,20 +1408,20 @@ fmt.Printf("Buffer reuse ratio: %.2f%%\n", stats.ReuseRatio*100)
 fmt.Printf("Buffers in pool: %d\n", stats.CurrentPoolSize)
 ```
 
-<a name="Minio.GetErrorCategory"></a>
-### func \(\*Minio\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L571>)
+<a name="MinioClient.GetErrorCategory"></a>
+### func \(\*MinioClient\) [GetErrorCategory](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L571>)
 
 ```go
-func (m *Minio) GetErrorCategory(err error) ErrorCategory
+func (m *MinioClient) GetErrorCategory(err error) ErrorCategory
 ```
 
 GetErrorCategory returns the category of the given error
 
-<a name="Minio.GetResourceStats"></a>
-### func \(\*Minio\) [GetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1019>)
+<a name="MinioClient.GetResourceStats"></a>
+### func \(\*MinioClient\) [GetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1032>)
 
 ```go
-func (m *Minio) GetResourceStats() ResourceStats
+func (m *MinioClient) GetResourceStats() ResourceStats
 ```
 
 GetResourceStats returns comprehensive resource usage statistics for monitoring. This method provides insights into connection health, request performance, memory usage, and buffer pool efficiency.
@@ -1295,11 +1439,11 @@ fmt.Printf("Request success rate: %.2f%%\n", stats.RequestSuccessRate*100)
 fmt.Printf("Average request duration: %v\n", stats.AverageRequestDuration)
 ```
 
-<a name="Minio.GracefulShutdown"></a>
-### func \(\*Minio\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L133>)
+<a name="MinioClient.GracefulShutdown"></a>
+### func \(\*MinioClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L139>)
 
 ```go
-func (m *Minio) GracefulShutdown()
+func (m *MinioClient) GracefulShutdown()
 ```
 
 GracefulShutdown safely terminates all MinIO client operations and closes associated resources. This method ensures a clean shutdown process by using sync.Once to guarantee each channel is closed exactly once, preventing "close of closed channel" panics that could occur when multiple shutdown paths execute concurrently.
@@ -1324,38 +1468,38 @@ func processFiles() {
 }
 ```
 
-<a name="Minio.IsPermanentError"></a>
-### func \(\*Minio\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L629>)
+<a name="MinioClient.IsPermanentError"></a>
+### func \(\*MinioClient\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L629>)
 
 ```go
-func (m *Minio) IsPermanentError(err error) bool
+func (m *MinioClient) IsPermanentError(err error) bool
 ```
 
 IsPermanentError returns true if the error is permanent and should not be retried
 
-<a name="Minio.IsRetryableError"></a>
-### func \(\*Minio\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L607>)
+<a name="MinioClient.IsRetryableError"></a>
+### func \(\*MinioClient\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L607>)
 
 ```go
-func (m *Minio) IsRetryableError(err error) bool
+func (m *MinioClient) IsRetryableError(err error) bool
 ```
 
 IsRetryableError returns true if the error is retryable
 
-<a name="Minio.IsTemporaryError"></a>
-### func \(\*Minio\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L624>)
+<a name="MinioClient.IsTemporaryError"></a>
+### func \(\*MinioClient\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L624>)
 
 ```go
-func (m *Minio) IsTemporaryError(err error) bool
+func (m *MinioClient) IsTemporaryError(err error) bool
 ```
 
 IsTemporaryError returns true if the error is temporary
 
-<a name="Minio.ListIncompleteUploads"></a>
-### func \(\*Minio\) [ListIncompleteUploads](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L505>)
+<a name="MinioClient.ListIncompleteUploads"></a>
+### func \(\*MinioClient\) [ListIncompleteUploads](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L525>)
 
 ```go
-func (m *Minio) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error)
+func (m *MinioClient) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error)
 ```
 
 ListIncompleteUploads lists all incomplete multipart uploads for cleanup. This method retrieves information about multipart uploads that were started but never completed or aborted.
@@ -1381,11 +1525,11 @@ if err == nil {
 }
 ```
 
-<a name="Minio.PreSignedGet"></a>
-### func \(\*Minio\) [PreSignedGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L260>)
+<a name="MinioClient.PreSignedGet"></a>
+### func \(\*MinioClient\) [PreSignedGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L265>)
 
 ```go
-func (m *Minio) PreSignedGet(ctx context.Context, objectKey string) (string, error)
+func (m *MinioClient) PreSignedGet(ctx context.Context, objectKey string) (string, error)
 ```
 
 PreSignedGet generates a pre\-signed URL for GetObject operations. This method creates a temporary URL that allows downloading an object without additional authentication.
@@ -1409,11 +1553,11 @@ if err == nil {
 }
 ```
 
-<a name="Minio.PreSignedHeadObject"></a>
-### func \(\*Minio\) [PreSignedHeadObject](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L574>)
+<a name="MinioClient.PreSignedHeadObject"></a>
+### func \(\*MinioClient\) [PreSignedHeadObject](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L599>)
 
 ```go
-func (m *Minio) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error)
+func (m *MinioClient) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error)
 ```
 
 PreSignedHeadObject generates a pre\-signed URL for HeadObject operations. This method creates a temporary URL that allows checking object metadata without downloading the object itself.
@@ -1437,11 +1581,11 @@ if err == nil {
 }
 ```
 
-<a name="Minio.PreSignedPut"></a>
-### func \(\*Minio\) [PreSignedPut](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L604>)
+<a name="MinioClient.PreSignedPut"></a>
+### func \(\*MinioClient\) [PreSignedPut](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L634>)
 
 ```go
-func (m *Minio) PreSignedPut(ctx context.Context, objectKey string) (string, error)
+func (m *MinioClient) PreSignedPut(ctx context.Context, objectKey string) (string, error)
 ```
 
 PreSignedPut generates a pre\-signed URL for PutObject operations. This method creates a temporary URL that allows uploading an object without additional authentication.
@@ -1465,11 +1609,11 @@ if err == nil {
 }
 ```
 
-<a name="Minio.Put"></a>
-### func \(\*Minio\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L37>)
+<a name="MinioClient.Put"></a>
+### func \(\*MinioClient\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L37>)
 
 ```go
-func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error)
+func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error)
 ```
 
 Put uploads an object to the specified bucket. This method handles the direct upload of data to MinIO, managing both the transfer and proper error handling.
@@ -1499,11 +1643,11 @@ if err == nil {
 }
 ```
 
-<a name="Minio.ResetResourceStats"></a>
-### func \(\*Minio\) [ResetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1053>)
+<a name="MinioClient.ResetResourceStats"></a>
+### func \(\*MinioClient\) [ResetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1066>)
 
 ```go
-func (m *Minio) ResetResourceStats()
+func (m *MinioClient) ResetResourceStats()
 ```
 
 ResetResourceStats resets all resource monitoring statistics. This is useful for getting fresh metrics for a specific time period.
@@ -1517,20 +1661,20 @@ minioClient.ResetResourceStats()
 stats := minioClient.GetResourceStats()
 ```
 
-<a name="Minio.StreamGet"></a>
-### func \(\*Minio\) [StreamGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L144>)
+<a name="MinioClient.StreamGet"></a>
+### func \(\*MinioClient\) [StreamGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L154>)
 
 ```go
-func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error)
+func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error)
 ```
 
 StreamGet downloads a file from MinIO and sends chunks through a channel
 
-<a name="Minio.TranslateError"></a>
-### func \(\*Minio\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L175>)
+<a name="MinioClient.TranslateError"></a>
+### func \(\*MinioClient\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/errors.go#L175>)
 
 ```go
-func (m *Minio) TranslateError(err error) error
+func (m *MinioClient) TranslateError(err error) error
 ```
 
 TranslateError converts MinIO\-specific errors into standardized application errors. This function provides abstraction from the underlying MinIO implementation details, allowing application code to handle errors in a MinIO\-agnostic way.
@@ -1538,7 +1682,7 @@ TranslateError converts MinIO\-specific errors into standardized application err
 It maps common MinIO errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="MinioLifeCycleParams"></a>
-## type [MinioLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L43-L48>)
+## type [MinioLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L49-L54>)
 
 
 
@@ -1547,7 +1691,7 @@ type MinioLifeCycleParams struct {
     fx.In
 
     Lifecycle fx.Lifecycle
-    Minio     *Minio
+    Minio     *MinioClient
 }
 ```
 
@@ -1587,7 +1731,7 @@ func NewLoggerAdapter(logger interface {
 NewLoggerAdapter creates a new LoggerAdapter that wraps the logger package's Logger. This function provides a bridge between the logger package and MinIO's logging interface.
 
 <a name="MinioParams"></a>
-## type [MinioParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L31-L37>)
+## type [MinioParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L37-L43>)
 
 
 

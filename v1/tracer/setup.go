@@ -14,37 +14,37 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
-// Tracer provides a simplified API for distributed tracing with OpenTelemetry.
+// TracerClient provides a simplified API for distributed tracing with OpenTelemetry.
 // It wraps the OpenTelemetry TracerProvider and provides convenient methods for
 // creating spans, recording errors, and propagating trace context across service boundaries.
 //
-// Tracer handles the complexity of trace context propagation, span creation, and attribute
+// TracerClient handles the complexity of trace context propagation, span creation, and attribute
 // management, making it easier to implement distributed tracing in your applications.
 //
-// To use Tracer effectively:
+// To use TracerClient effectively:
 // 1. Create spans for significant operations in your code
 // 2. Record errors when operations fail
 // 3. Add attributes to spans to provide context
 // 4. Extract and inject trace context when crossing service boundaries
 //
-// The Tracer is designed to be thread-safe and can be shared across goroutines.
-type Tracer struct {
+// The TracerClient is designed to be thread-safe and can be shared across goroutines.
+// It implements the Tracer interface.
+type TracerClient struct {
 	tracer *trace.TracerProvider
 }
 
-// NewClient creates and initializes a new Tracer instance with OpenTelemetry.
+// NewClient creates and initializes a new TracerClient instance with OpenTelemetry.
 // This function sets up the OpenTelemetry tracer provider with the provided configuration,
 // configures trace exporters if enabled, and sets global OpenTelemetry settings.
 //
 // Parameters:
 //   - cfg: Configuration for the tracer, including service name, environment, and export settings
-//   - logger: Logger for recording initialization events and errors
 //
 // Returns:
-//   - *Tracer: A configured Tracer instance ready for creating spans and managing trace context
+//   - *TracerClient: A configured TracerClient instance ready for creating spans and managing trace context
 //
 // If trace export is enabled in the configuration, this function will set up an OTLP HTTP exporter
-// that sends traces to the configured endpoint. If export fails to initialize, it will log a fatal error.
+// that sends traces to the configured endpoint. If export fails to initialize, it will return an error.
 //
 // The function also configures resource attributes for the service, including:
 //   - Service name
@@ -59,12 +59,15 @@ type Tracer struct {
 //	    EnableExport: true,
 //	}
 //
-//	tracerClient := tracer.NewClient(cfg, logger)
+//	tracerClient, err := tracer.NewClient(cfg)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //
 //	// Use the tracer in your application
 //	ctx, span := tracerClient.StartSpan(context.Background(), "process-request")
 //	defer span.End()
-func NewClient(cfg Config) (*Tracer, error) {
+func NewClient(cfg Config) (*TracerClient, error) {
 	var options []trace.TracerProviderOption
 
 	if cfg.EnableExport {
@@ -88,5 +91,5 @@ func NewClient(cfg Config) (*Tracer, error) {
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
-	return &Tracer{tracer: tp}, nil
+	return &TracerClient{tracer: tp}, nil
 }

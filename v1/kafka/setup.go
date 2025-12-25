@@ -15,10 +15,12 @@ import (
 	"github.com/segmentio/kafka-go/sasl/scram"
 )
 
-// Kafka represents a client for interacting with Apache Kafka.
+// KafkaClient represents a client for interacting with Apache Kafka.
 // It manages connections and provides methods for publishing
 // and consuming messages.
-type Kafka struct {
+//
+// KafkaClient implements the Client interface.
+type KafkaClient struct {
 	// cfg stores the configuration for this Kafka client
 	cfg Config
 
@@ -43,13 +45,13 @@ type Kafka struct {
 	closeShutdownOnce sync.Once
 }
 
-// NewClient creates and initializes a new Kafka client with the provided configuration.
+// NewClient creates and initializes a new KafkaClient with the provided configuration.
 // This function sets up the producer and/or consumer based on the configuration.
 //
 // Parameters:
 //   - cfg: Configuration for connecting to Kafka
 //
-// Returns a new Kafka client instance that is ready to use.
+// Returns a new KafkaClient instance that is ready to use.
 //
 // Example:
 //
@@ -58,8 +60,8 @@ type Kafka struct {
 //		log.Printf("ERROR: failed to create Kafka client: %v", err)
 //		return nil, err
 //	}
-//	defer client.Close()
-func NewClient(cfg Config) (*Kafka, error) {
+//	defer client.GracefulShutdown()
+func NewClient(cfg Config) (*KafkaClient, error) {
 	// Apply defaults
 	if cfg.MinBytes == 0 {
 		cfg.MinBytes = DefaultMinBytes
@@ -97,7 +99,7 @@ func NewClient(cfg Config) (*Kafka, error) {
 	// EnableAutoOffsetStore defaults to true if not explicitly set
 	// This is handled in createReader
 
-	k := &Kafka{
+	k := &KafkaClient{
 		cfg:            cfg,
 		shutdownSignal: make(chan struct{}),
 	}
@@ -141,7 +143,7 @@ func NewClient(cfg Config) (*Kafka, error) {
 
 // SetSerializer sets the serializer for the Kafka client.
 // This is typically called by the FX module during initialization.
-func (k *Kafka) SetSerializer(s Serializer) {
+func (k *KafkaClient) SetSerializer(s Serializer) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.serializer = s
@@ -149,7 +151,7 @@ func (k *Kafka) SetSerializer(s Serializer) {
 
 // SetDeserializer sets the deserializer for the Kafka client.
 // This is typically called by the FX module during initialization.
-func (k *Kafka) SetDeserializer(d Deserializer) {
+func (k *KafkaClient) SetDeserializer(d Deserializer) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.deserializer = d
