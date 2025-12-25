@@ -71,7 +71,8 @@ type Config struct {
 }
 
 // NewClient creates a new schema registry client
-func NewClient(config Config) (Registry, error) {
+// Returns the concrete *Client type.
+func NewClient(config Config) (*Client, error) {
 	if config.URL == "" {
 		return nil, fmt.Errorf("schema registry URL is required")
 	}

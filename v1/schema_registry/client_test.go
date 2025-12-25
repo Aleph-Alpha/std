@@ -287,9 +287,8 @@ func TestConfig(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Verify credentials are stored
-		client := registry.(*Client)
-		assert.Equal(t, "user", client.username)
-		assert.Equal(t, "pass", client.password)
+		// Verify credentials are stored (no type assertion needed, already *Client)
+		assert.Equal(t, "user", registry.username)
+		assert.Equal(t, "pass", registry.password)
 	})
 }

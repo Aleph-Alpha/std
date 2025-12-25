@@ -11,9 +11,10 @@ import (
 // This module registers the Schema Registry client with the Fx dependency injection framework,
 // making it available to other components in the application.
 //
-// The module:
-// 1. Provides the Schema Registry client factory function
-// 2. Invokes the lifecycle registration to manage the client's lifecycle
+// The module provides:
+// 1. *Client (concrete type) for direct use
+// 2. Registry interface for dependency injection
+// 3. Lifecycle management for proper initialization
 //
 // Usage:
 //
@@ -31,7 +32,12 @@ import (
 //	)
 var FXModule = fx.Module("schema_registry",
 	fx.Provide(
-		NewClientWithDI,
+		NewClientWithDI, // Provides *Client
+		// Also provide the Registry interface
+		fx.Annotate(
+			func(c *Client) Registry { return c },
+			fx.As(new(Registry)),
+		),
 	),
 	fx.Invoke(RegisterSchemaRegistryLifecycle),
 )
@@ -47,13 +53,15 @@ type SchemaRegistryParams struct {
 // This function is designed to be used with Uber's fx dependency injection framework
 // where dependencies are automatically provided via the SchemaRegistryParams struct.
 //
+// Returns the concrete *Client type.
+//
 // Parameters:
 //   - params: A SchemaRegistryParams struct that contains the Config instance
 //     required to initialize the Schema Registry client.
 //     This struct embeds fx.In to enable automatic injection of these dependencies.
 //
 // Returns:
-//   - Registry: A fully initialized Schema Registry client ready for use.
+//   - *Client: A fully initialized Schema Registry client ready for use.
 //
 // Example usage with fx:
 //
@@ -70,7 +78,7 @@ type SchemaRegistryParams struct {
 //	        },
 //	    ),
 //	)
-func NewClientWithDI(params SchemaRegistryParams) (Registry, error) {
+func NewClientWithDI(params SchemaRegistryParams) (*Client, error) {
 	return NewClient(params.Config)
 }
 
@@ -79,7 +87,7 @@ type SchemaRegistryLifecycleParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Registry  Registry
+	Client    *Client
 }
 
 // RegisterSchemaRegistryLifecycle registers the Schema Registry client with the fx lifecycle system.
