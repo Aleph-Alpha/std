@@ -11,10 +11,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Redis represents a client for interacting with Redis.
+// RedisClient represents a client for interacting with Redis.
 // It wraps the go-redis client and provides a simplified interface
 // with connection management and helper methods.
-type Redis struct {
+//
+// RedisClient implements the Client interface.
+type RedisClient struct {
 	// client is the underlying Redis client
 	client redis.UniversalClient
 
@@ -54,7 +56,7 @@ type Redis struct {
 //		return nil, err
 //	}
 //	defer client.Close()
-func NewClient(cfg Config) (*Redis, error) {
+func NewClient(cfg Config) (*RedisClient, error) {
 	// Apply defaults
 	if cfg.Host == "" {
 		cfg.Host = DefaultHost
@@ -116,7 +118,7 @@ func NewClient(cfg Config) (*Redis, error) {
 
 	client := redis.NewClient(opts)
 
-	r := &Redis{
+	r := &RedisClient{
 		client:         client,
 		cfg:            cfg,
 		logger:         cfg.Logger,
@@ -145,7 +147,7 @@ func NewClient(cfg Config) (*Redis, error) {
 //		},
 //		Password: "",
 //	})
-func NewClusterClient(cfg ClusterConfig) (*Redis, error) {
+func NewClusterClient(cfg ClusterConfig) (*RedisClient, error) {
 	// Apply defaults
 	if cfg.MaxRedirects == 0 {
 		cfg.MaxRedirects = DefaultClusterMaxRedirects
@@ -204,7 +206,7 @@ func NewClusterClient(cfg ClusterConfig) (*Redis, error) {
 
 	client := redis.NewClusterClient(opts)
 
-	r := &Redis{
+	r := &RedisClient{
 		client:         client,
 		cfg:            cfg,
 		logger:         cfg.Logger,
@@ -235,7 +237,7 @@ func NewClusterClient(cfg ClusterConfig) (*Redis, error) {
 //		Password: "",
 //		DB:       0,
 //	})
-func NewFailoverClient(cfg FailoverConfig) (*Redis, error) {
+func NewFailoverClient(cfg FailoverConfig) (*RedisClient, error) {
 	// Apply defaults
 	if cfg.MaxRetries == 0 {
 		cfg.MaxRetries = DefaultMaxRetries
@@ -293,7 +295,7 @@ func NewFailoverClient(cfg FailoverConfig) (*Redis, error) {
 
 	client := redis.NewFailoverClient(opts)
 
-	r := &Redis{
+	r := &RedisClient{
 		client:         client,
 		cfg:            cfg,
 		logger:         cfg.Logger,
@@ -344,7 +346,7 @@ func createTLSConfig(cfg TLSConfig, defaultServerName string) (*tls.Config, erro
 
 // Client returns the underlying go-redis client for advanced operations.
 // This allows users to access the full go-redis API when needed.
-func (r *Redis) Client() redis.UniversalClient {
+func (r *RedisClient) Client() redis.UniversalClient {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.client
@@ -352,7 +354,7 @@ func (r *Redis) Client() redis.UniversalClient {
 
 // Close closes the Redis client and releases all resources.
 // This should be called when the client is no longer needed.
-func (r *Redis) Close() error {
+func (r *RedisClient) Close() error {
 	r.closeShutdownOnce.Do(func() {
 		close(r.shutdownSignal)
 	})

@@ -5,6 +5,14 @@
 // pub/sub capabilities, and advanced data structure operations with a focus
 // on reliability and ease of use.
 //
+// # Architecture
+//
+// This package follows the "accept interfaces, return structs" design pattern:
+//   - Client interface: Defines the contract for Redis operations
+//   - RedisClient struct: Concrete implementation of the Client interface
+//   - NewClient constructor: Returns *RedisClient (concrete type)
+//   - FX module: Provides both *RedisClient and Client interface for dependency injection
+//
 // Core Features:
 //   - Robust connection management with automatic reconnection
 //   - Connection pooling for optimal performance
@@ -17,16 +25,17 @@
 //   - TLS/SSL support for secure connections
 //   - Cluster and Sentinel support
 //
-// Basic Usage:
+// # Direct Usage (Without FX)
+//
+// For simple applications or tests, create a client directly:
 //
 //	import (
 //		"github.com/Aleph-Alpha/std/v1/redis"
-//		"github.com/Aleph-Alpha/std/v1/logger"
 //		"context"
 //		"time"
 //	)
 //
-//	// Create a new Redis client
+//	// Create a new Redis client (returns concrete *RedisClient)
 //	client, err := redis.NewClient(redis.Config{
 //		Host:     "localhost",
 //		Port:     6379,
@@ -38,27 +47,59 @@
 //	}
 //	defer client.Close()
 //
-//	// Set a value with TTL
+//	// Use the client
 //	ctx := context.Background()
 //	err = client.Set(ctx, "user:123", "John Doe", 5*time.Minute)
-//	if err != nil {
-//		log.Error("Failed to set value", err, nil)
+//
+// # FX Module Integration
+//
+// For production applications using Uber's fx, use the FXModule which provides
+// both the concrete type and interface:
+//
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/redis"
+//		"github.com/Aleph-Alpha/std/v1/logger"
+//		"go.uber.org/fx"
+//	)
+//
+//	app := fx.New(
+//		logger.FXModule, // Optional: provides std logger
+//		redis.FXModule,  // Provides *RedisClient and redis.Client interface
+//		fx.Provide(func() redis.Config {
+//			return redis.Config{
+//				Host: "localhost",
+//				Port: 6379,
+//			}
+//		}),
+//		fx.Invoke(func(client *redis.RedisClient) {
+//			// Use concrete type directly
+//			ctx := context.Background()
+//			client.Set(ctx, "key", "value", 0)
+//		}),
+//		// ... other modules
+//	)
+//	app.Run()
+//
+// # Type Aliases in Consumer Code
+//
+// To simplify your code and make it database-agnostic, use type aliases:
+//
+//	package myapp
+//
+//	import stdRedis "github.com/Aleph-Alpha/std/v1/redis"
+//
+//	// Use type alias to reference std's interface
+//	type RedisClient = stdRedis.Client
+//
+//	// Now use RedisClient throughout your codebase
+//	func MyFunction(client RedisClient) {
+//		client.Get(ctx, "key")
 //	}
 //
-//	// Get a value
-//	value, err := client.Get(ctx, "user:123")
-//	if err != nil {
-//		log.Error("Failed to get value", err, nil)
-//	}
-//	fmt.Println("User:", value)
+// This eliminates the need for adapters and allows you to switch implementations
+// by only changing the alias definition.
 //
-//	// Delete a key
-//	err = client.Delete(ctx, "user:123")
-//	if err != nil {
-//		log.Error("Failed to delete key", err, nil)
-//	}
-//
-// Hash Operations:
+// # Basic Operations
 //
 //	// Set hash fields
 //	err = client.HSet(ctx, "user:123", map[string]interface{}{
@@ -76,7 +117,7 @@
 //	// Delete hash fields
 //	err = client.HDel(ctx, "user:123", "age")
 //
-// List Operations:
+// # List Operations
 //
 //	// Push to list (left/right)
 //	err = client.LPush(ctx, "tasks", "task1", "task2")
@@ -92,7 +133,7 @@
 //	// Get list length
 //	length, err := client.LLen(ctx, "tasks")
 //
-// Set Operations:
+// # Set Operations
 //
 //	// Add members to set
 //	err = client.SAdd(ctx, "tags", "redis", "cache", "database")
@@ -106,7 +147,7 @@
 //	// Remove members
 //	err = client.SRem(ctx, "tags", "cache")
 //
-// Sorted Set Operations:
+// # Sorted Set Operations
 //
 //	// Add members with scores
 //	err = client.ZAdd(ctx, "leaderboard", map[string]float64{
@@ -124,7 +165,7 @@
 //	// Get member score
 //	score, err := client.ZScore(ctx, "leaderboard", "player1")
 //
-// Pub/Sub Messaging:
+// # Pub/Sub Messaging
 //
 //	// Publisher
 //	err = client.Publish(ctx, "events", "user.created")
@@ -137,7 +178,7 @@
 //		fmt.Println("Received:", msg.Channel, msg.Payload)
 //	}
 //
-// Pattern-based Subscription:
+// # Pattern-based Subscription
 //
 //	// Subscribe to pattern
 //	pubsub := client.PSubscribe(ctx, "user.*")
@@ -147,7 +188,7 @@
 //		fmt.Println("Received on pattern:", msg.Channel, msg.Payload)
 //	}
 //
-// Pipeline for Bulk Operations:
+// # Pipeline for Bulk Operations
 //
 //	// Create pipeline
 //	pipe := client.Pipeline()
@@ -163,7 +204,7 @@
 //		log.Error("Pipeline failed", err, nil)
 //	}
 //
-// Transactions (MULTI/EXEC):
+// # Transactions (MULTI/EXEC)
 //
 //	// Watch keys for optimistic locking
 //	err = client.Watch(ctx, func(tx *redis.Tx) error {
@@ -181,7 +222,7 @@
 //		return err
 //	}, "counter")
 //
-// TTL and Expiration:
+// # TTL and Expiration
 //
 //	// Set expiration on existing key
 //	err = client.Expire(ctx, "session:123", 30*time.Minute)
@@ -192,7 +233,7 @@
 //	// Persist (remove expiration)
 //	err = client.Persist(ctx, "session:123")
 //
-// Key Scanning:
+// # Key Scanning
 //
 //	// Scan keys with pattern
 //	keys, err := client.Keys(ctx, "user:*")
@@ -207,7 +248,7 @@
 //		log.Error("Scan error", err, nil)
 //	}
 //
-// JSON Operations (with RedisJSON module):
+// # JSON Operations
 //
 //	// Set JSON value
 //	user := map[string]interface{}{
@@ -224,7 +265,7 @@
 //	// Update JSON field
 //	err = client.JSONSet(ctx, "user:123", "$.age", 31)
 //
-// Distributed Locking:
+// # Distributed Locking
 //
 //	// Acquire lock
 //	lock, err := client.AcquireLock(ctx, "resource:123", 10*time.Second)
@@ -237,21 +278,7 @@
 //	// Do work with exclusive access
 //	// ...
 //
-// FX Module Integration:
-//
-// This package provides a fx module for easy integration:
-//
-//	app := fx.New(
-//		logger.FXModule, // Optional: provides std logger
-//		redis.FXModule,
-//		// ... other modules
-//	)
-//	app.Run()
-//
-// The Redis module will automatically use the logger if it's available in the
-// dependency injection container.
-//
-// Configuration:
+// # Configuration
 //
 // The redis client can be configured via environment variables or explicitly:
 //
@@ -261,7 +288,7 @@
 //	REDIS_DB=0
 //	REDIS_POOL_SIZE=10
 //
-// Custom Logger Integration:
+// # Custom Logger Integration
 //
 // You can integrate the std/v1/logger for better error logging:
 //
@@ -283,7 +310,7 @@
 //		Logger:   log, // Redis errors will use this logger
 //	})
 //
-// TLS/SSL Configuration:
+// # TLS/SSL Configuration
 //
 //	client, err := redis.NewClient(redis.Config{
 //		Host:     "redis.example.com",
@@ -297,7 +324,7 @@
 //		},
 //	})
 //
-// Cluster Configuration:
+// # Cluster Configuration
 //
 //	client, err := redis.NewClusterClient(redis.ClusterConfig{
 //		Addrs: []string{
@@ -309,7 +336,7 @@
 //		TLS:      tlsConfig,
 //	})
 //
-// Sentinel Configuration:
+// # Sentinel Configuration
 //
 //	client, err := redis.NewFailoverClient(redis.FailoverConfig{
 //		MasterName: "mymaster",
@@ -322,7 +349,7 @@
 //		DB:       0,
 //	})
 //
-// Connection Pooling:
+// # Connection Pooling
 //
 // The Redis client uses connection pooling by default for optimal performance:
 //
@@ -336,7 +363,7 @@
 //		IdleTimeout:  5 * time.Minute,   // Close idle connections after timeout
 //	})
 //
-// Health Check:
+// # Health Check
 //
 //	// Ping to check connection
 //	err := client.Ping(ctx)
@@ -349,7 +376,7 @@
 //	fmt.Printf("Hits: %d, Misses: %d, Timeouts: %d\n",
 //		stats.Hits, stats.Misses, stats.Timeouts)
 //
-// Caching Pattern with Automatic Serialization:
+// # Caching Pattern with Automatic Serialization
 //
 //	type User struct {
 //		ID    int    `json:"id"`
@@ -370,7 +397,7 @@
 //		client.SetJSON(ctx, "user:123", cachedUser, 10*time.Minute)
 //	}
 //
-// Rate Limiting:
+// # Rate Limiting
 //
 //	// Simple rate limiter using Redis
 //	allowed, err := client.RateLimit(ctx, "api:user:123", 100, time.Minute)
@@ -381,7 +408,7 @@
 //		return errors.New("rate limit exceeded")
 //	}
 //
-// Thread Safety:
+// # Thread Safety
 //
 // All methods on the Redis client are safe for concurrent use by multiple
 // goroutines. The underlying connection pool handles concurrent access efficiently.
