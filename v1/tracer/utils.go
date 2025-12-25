@@ -10,63 +10,6 @@ import (
 	traceSpan "go.opentelemetry.io/otel/trace"
 )
 
-// Span represents a trace span for tracking operations in distributed systems.
-// It provides methods for ending the span, recording errors, and setting attributes.
-//
-// The Span interface abstracts the underlying OpenTelemetry implementation details,
-// providing a clean API for application code to interact with spans without
-// direct dependencies on the tracing library.
-//
-// Spans represent a single operation or unit of work in your application. They form
-// a hierarchy where a parent span can have multiple child spans, creating a trace
-// that shows the flow of operations and their relationships.
-//
-// To use a span effectively:
-// 1. Always call End() when the operation completes (typically with defer)
-// 2. Add attributes that provide context about the operation
-// 3. Record any errors that occur during the operation
-//
-// Spans created with StartSpan() automatically inherit the parent span from the context
-// if one exists, creating a proper span hierarchy.
-type Span interface {
-	// End completes the span and sends it to configured exporters.
-	// End should be called when the operation being traced is complete.
-	// It's recommended to defer this call immediately after obtaining the span.
-	//
-	// Example:
-	//   ctx, span := tracer.StartSpan(ctx, "operation-name")
-	//   defer span.End()
-	End()
-
-	// SetAttributes adds key-value pairs of attributes to the span.
-	// These attributes provide additional context about the operation.
-	// The method supports various data types including strings, integers,
-	// floating-point numbers, and booleans.
-	//
-	// Example:
-	//   span.SetAttributes(map[string]interface{}{
-	//     "user.id": userID,
-	//     "request.size": size,
-	//     "request.type": "background",
-	//     "priority": 3,
-	//     "retry.enabled": true,
-	//   })
-	SetAttributes(attrs map[string]interface{})
-
-	// RecordError marks the span as having encountered an error and
-	// records the error information within the span. This helps with
-	// error tracing and debugging by clearly identifying which spans
-	// represent failed operations.
-	//
-	// Example:
-	//   result, err := database.Query(ctx, query)
-	//   if err != nil {
-	//     span.RecordError(err)
-	//     return nil, err
-	//   }
-	RecordError(err error)
-}
-
 // spanImpl is an internal implementation of the Span interface
 // that wraps an OpenTelemetry span. This type handles the conversion
 // between the simplified API and the underlying OpenTelemetry functionality.
@@ -230,7 +173,7 @@ func (s *spanImpl) RecordError(err error) {
 //
 //	    return result, nil
 //	}
-func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, Span) {
+func (t *TracerClient) StartSpan(ctx context.Context, name string) (context.Context, Span) {
 	tracer := t.tracer.Tracer("")
 	ctx, otSpan := tracer.Start(ctx, name)
 
@@ -285,7 +228,7 @@ func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, S
 //	    // Make the request with trace context included
 //	    return http.DefaultClient.Do(req)
 //	}
-func (t *Tracer) GetCarrier(ctx context.Context) map[string]string {
+func (t *TracerClient) GetCarrier(ctx context.Context) map[string]string {
 	propagator := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 	carrier := propagation.MapCarrier{}
 	propagator.Inject(ctx, carrier)
@@ -338,7 +281,7 @@ func (t *Tracer) GetCarrier(ctx context.Context) map[string]string {
 //	    result, err := processRequest(ctx, r)
 //	    // ...
 //	}
-func (t *Tracer) SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context {
+func (t *TracerClient) SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context {
 	propagator := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 	return propagator.Extract(ctx, propagation.MapCarrier(carrier))
 }

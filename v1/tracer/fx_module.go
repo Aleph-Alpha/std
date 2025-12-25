@@ -11,9 +11,10 @@ import (
 // This module registers the tracer client with the dependency injection system and
 // sets up proper lifecycle management to ensure graceful startup and shutdown of the tracer.
 //
-// The module:
-// 1. Provides the tracer client through the NewClient constructor
-// 2. Registers shutdown hooks to cleanly close tracer resources on application termination
+// The module provides:
+// 1. *TracerClient (concrete type) for direct use
+// 2. Tracer interface for dependency injection
+// 3. Shutdown hooks to cleanly close tracer resources
 //
 // Usage:
 //
@@ -27,7 +28,12 @@ import (
 // throughout your dependency graph without manual wiring.
 var FXModule = fx.Module("tracer",
 	fx.Provide(
-		NewClient,
+		NewClient, // Provides *TracerClient
+		// Also provide the Tracer interface
+		fx.Annotate(
+			func(t *TracerClient) Tracer { return t },
+			fx.As(new(Tracer)),
+		),
 	),
 	fx.Invoke(RegisterTracerLifecycle),
 )
@@ -56,7 +62,7 @@ var FXModule = fx.Module("tracer",
 //	    // 1. The OnStop hook registered by RegisterTracerLifecycle is called
 //	    // 2. The tracer is gracefully shut down, flushing any pending spans
 //	)
-func RegisterTracerLifecycle(lc fx.Lifecycle, tracer *Tracer) {
+func RegisterTracerLifecycle(lc fx.Lifecycle, tracer *TracerClient) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			log.Println("INFO: shutting down tracer...")
