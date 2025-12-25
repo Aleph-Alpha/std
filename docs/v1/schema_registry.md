@@ -10,6 +10,15 @@ Package schema\_registry provides integration with Confluent Schema Registry.
 
 This package enables schema management, validation, and evolution for Apache Kafka messages and other streaming data platforms. It supports multiple serialization formats including Avro, Protobuf, and JSON Schema.
 
+### Architecture
+
+This package follows the "accept interfaces, return structs" design pattern:
+
+- Registry interface: Defines the contract for schema registry operations
+- Client struct: Concrete implementation of the Registry interface
+- NewClient constructor: Returns \*Client \(concrete type\)
+- FX module: Provides both \*Client and Registry interface for dependency injection
+
 Core Features:
 
 - HTTP client for Confluent Schema Registry
@@ -19,13 +28,15 @@ Core Features:
 - Serializers for Avro, Protobuf, and JSON Schema
 - Generic wrapper for custom serializers
 
-Basic Usage:
+### Direct Usage \\\(Without FX\\\)
+
+For simple applications or tests, create a client directly:
 
 ```
 import "github.com/Aleph-Alpha/std/v1/schema_registry"
 
-// Create schema registry client
-registry, err := schema_registry.NewClient(schema_registry.Config{
+// Create schema registry client (returns concrete *Client)
+client, err := schema_registry.NewClient(schema_registry.Config{
     URL:      "http://localhost:8081",
     Username: "user",     // Optional
     Password: "password", // Optional
@@ -45,25 +56,12 @@ avroSchema := `{
     ]
 }`
 
-schemaID, err := registry.RegisterSchema("users-value", avroSchema, "AVRO")
-if err != nil {
-    log.Fatal(err)
-}
-
-// Retrieve a schema
-schema, err := registry.GetSchemaByID(schemaID)
-if err != nil {
-    log.Fatal(err)
-}
-
-// Check compatibility
-compatible, err := registry.CheckCompatibility("users-value", newSchema, "AVRO")
-if !compatible {
-    log.Println("Schema is not compatible!")
-}
+schemaID, err := client.RegisterSchema("users-value", avroSchema, "AVRO")
 ```
 
-Using with FX:
+### FX Module Integration
+
+For production applications using Uber's fx, use the FXModule which provides both the concrete type and interface:
 
 ```
 import (
@@ -72,7 +70,7 @@ import (
 )
 
 app := fx.New(
-    schema_registry.FXModule,
+    schema_registry.FXModule, // Provides *Client and Registry interface
     fx.Provide(
         func() schema_registry.Config {
             return schema_registry.Config{
@@ -83,11 +81,34 @@ app := fx.New(
             }
         },
     ),
-    // Your application code that uses schema_registry.Registry
+    fx.Invoke(func(client *schema_registry.Client) {
+        // Use concrete type directly
+        schemaID, _ := client.RegisterSchema("subject", schema, "AVRO")
+    }),
 )
 ```
 
-Using with Avro:
+### Type Aliases in Consumer Code
+
+To simplify your code and make it registry\-agnostic, use type aliases:
+
+```
+package myapp
+
+import stdRegistry "github.com/Aleph-Alpha/std/v1/schema_registry"
+
+// Use type alias to reference std's interface
+type SchemaRegistry = stdRegistry.Registry
+
+// Now use SchemaRegistry throughout your codebase
+func MyFunction(registry SchemaRegistry) {
+    registry.GetSchemaByID(schemaID)
+}
+```
+
+This eliminates the need for adapters and allows you to switch implementations by only changing the alias definition.
+
+### Schema Operations
 
 ```
 import "github.com/linkedin/goavro/v2"
@@ -101,7 +122,7 @@ if err != nil {
 // Create Avro serializer
 serializer, err := schema_registry.NewAvroSerializer(
     schema_registry.AvroSerializerConfig{
-        Registry: registry,
+        Registry: client,
         Subject:  "users-value",
         Schema:   avroSchema,
         MarshalFunc: func(data interface{}) ([]byte, error) {
@@ -121,7 +142,7 @@ encoded, err := serializer.Serialize(user)
 // Create Avro deserializer
 deserializer, err := schema_registry.NewAvroDeserializer(
     schema_registry.AvroDeserializerConfig{
-        Registry: registry,
+        Registry: client,
         UnmarshalFunc: func(data []byte, target interface{}) error {
             native, _, err := codec.NativeFromBinary(data)
             if err != nil {
@@ -138,7 +159,7 @@ var result map[string]interface{}
 err = deserializer.Deserialize(encoded, &result)
 ```
 
-Using with Protobuf:
+### Using with Protobuf
 
 ```
 import "google.golang.org/protobuf/proto"
@@ -146,7 +167,7 @@ import "google.golang.org/protobuf/proto"
 // Create Protobuf serializer
 serializer, err := schema_registry.NewProtobufSerializer(
     schema_registry.ProtobufSerializerConfig{
-        Registry:    registry,
+        Registry:    client,
         Subject:     "users-value",
         Schema:      protoSchema, // .proto file content as string
         MarshalFunc: proto.Marshal,
@@ -160,7 +181,7 @@ encoded, err := serializer.Serialize(protoMsg)
 // Create Protobuf deserializer
 deserializer, err := schema_registry.NewProtobufDeserializer(
     schema_registry.ProtobufDeserializerConfig{
-        Registry:      registry,
+        Registry:      client,
         UnmarshalFunc: proto.Unmarshal,
     },
 )
@@ -170,13 +191,13 @@ var user pb.User
 err = deserializer.Deserialize(encoded, &user)
 ```
 
-Using with JSON Schema:
+### Using with JSON Schema
 
 ```
 // Create JSON serializer
 serializer, err := schema_registry.NewJSONSerializer(
     schema_registry.JSONSerializerConfig{
-        Registry: registry,
+        Registry: client,
         Subject:  "users-value",
         Schema: `{
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -199,7 +220,7 @@ encoded, err := serializer.Serialize(user)
 // Deserialize
 deserializer, err := schema_registry.NewJSONDeserializer(
     schema_registry.JSONDeserializerConfig{
-        Registry: registry,
+        Registry: client,
     },
 )
 var result struct {
@@ -209,7 +230,7 @@ var result struct {
 err = deserializer.Deserialize(encoded, &result)
 ```
 
-Wire Format:
+### Wire Format
 
 All serializers produce messages in Confluent wire format:
 
@@ -219,7 +240,7 @@ All serializers produce messages in Confluent wire format:
 
 The magic byte is always 0x0, followed by the schema ID, then the serialized payload. This format is compatible with all Confluent tools.
 
-Schema Caching:
+### Schema Caching
 
 The client automatically caches schemas by ID and subject to minimize network calls to the Schema Registry. Caches are thread\-safe and maintained in\-memory for the lifetime of the client.
 
@@ -238,6 +259,8 @@ For more information, see the SCHEMA\_REGISTRY.md documentation file.
   - [func NewAvroSerializer\(config AvroSerializerConfig\) \(\*AvroSerializer, error\)](<#NewAvroSerializer>)
 - [type AvroSerializerConfig](<#AvroSerializerConfig>)
 - [type Client](<#Client>)
+  - [func NewClient\(config Config\) \(\*Client, error\)](<#NewClient>)
+  - [func NewClientWithDI\(params SchemaRegistryParams\) \(\*Client, error\)](<#NewClientWithDI>)
   - [func \(c \*Client\) CheckCompatibility\(subject, schema, schemaType string\) \(bool, error\)](<#Client.CheckCompatibility>)
   - [func \(c \*Client\) GetLatestSchema\(subject string\) \(\*Metadata, error\)](<#Client.GetLatestSchema>)
   - [func \(c \*Client\) GetSchemaByID\(id int\) \(string, error\)](<#Client.GetSchemaByID>)
@@ -258,8 +281,6 @@ For more information, see the SCHEMA\_REGISTRY.md documentation file.
   - [func NewProtobufSerializer\(config ProtobufSerializerConfig\) \(\*ProtobufSerializer, error\)](<#NewProtobufSerializer>)
 - [type ProtobufSerializerConfig](<#ProtobufSerializerConfig>)
 - [type Registry](<#Registry>)
-  - [func NewClient\(config Config\) \(Registry, error\)](<#NewClient>)
-  - [func NewClientWithDI\(params SchemaRegistryParams\) \(Registry, error\)](<#NewClientWithDI>)
 - [type SchemaRegistryLifecycleParams](<#SchemaRegistryLifecycleParams>)
 - [type SchemaRegistryParams](<#SchemaRegistryParams>)
 - [type Serializer](<#Serializer>)
@@ -277,7 +298,7 @@ For more information, see the SCHEMA\_REGISTRY.md documentation file.
 
 <a name="FXModule"></a>FXModule is an fx.Module that provides and configures the Schema Registry client. This module registers the Schema Registry client with the Fx dependency injection framework, making it available to other components in the application.
 
-The module: 1. Provides the Schema Registry client factory function 2. Invokes the lifecycle registration to manage the client's lifecycle
+The module provides: 1. \*Client \(concrete type\) for direct use 2. Registry interface for dependency injection 3. Lifecycle management for proper initialization
 
 Usage:
 
@@ -300,13 +321,18 @@ app := fx.New(
 var FXModule = fx.Module("schema_registry",
     fx.Provide(
         NewClientWithDI,
+
+        fx.Annotate(
+            func(c *Client) Registry { return c },
+            fx.As(new(Registry)),
+        ),
     ),
     fx.Invoke(RegisterSchemaRegistryLifecycle),
 )
 ```
 
 <a name="DecodeSchemaID"></a>
-## func [DecodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L306>)
+## func [DecodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L307>)
 
 ```go
 func DecodeSchemaID(data []byte) (int, []byte, error)
@@ -315,7 +341,7 @@ func DecodeSchemaID(data []byte) (int, []byte, error)
 DecodeSchemaID decodes a schema ID from the Confluent wire format Returns the schema ID and the remaining payload \(after the 5\-byte header\)
 
 <a name="EncodeSchemaID"></a>
-## func [EncodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L297>)
+## func [EncodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L298>)
 
 ```go
 func EncodeSchemaID(schemaID int) []byte
@@ -324,7 +350,7 @@ func EncodeSchemaID(schemaID int) []byte
 EncodeSchemaID encodes a schema ID in the Confluent wire format Format: \[magic\_byte\]\[schema\_id\] \- magic\_byte: 0x0 \(1 byte\) \- schema\_id: 4 bytes \(big\-endian\)
 
 <a name="RegisterSchemaRegistryLifecycle"></a>
-## func [RegisterSchemaRegistryLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L97>)
+## func [RegisterSchemaRegistryLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L105>)
 
 ```go
 func RegisterSchemaRegistryLifecycle(params SchemaRegistryLifecycleParams)
@@ -420,8 +446,54 @@ type Client struct {
 }
 ```
 
+<a name="NewClient"></a>
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L75>)
+
+```go
+func NewClient(config Config) (*Client, error)
+```
+
+NewClient creates a new schema registry client Returns the concrete \*Client type.
+
+<a name="NewClientWithDI"></a>
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L81>)
+
+```go
+func NewClientWithDI(params SchemaRegistryParams) (*Client, error)
+```
+
+NewClientWithDI creates a new Schema Registry client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where dependencies are automatically provided via the SchemaRegistryParams struct.
+
+Returns the concrete \*Client type.
+
+Parameters:
+
+- params: A SchemaRegistryParams struct that contains the Config instance required to initialize the Schema Registry client. This struct embeds fx.In to enable automatic injection of these dependencies.
+
+Returns:
+
+- \*Client: A fully initialized Schema Registry client ready for use.
+
+Example usage with fx:
+
+```
+app := fx.New(
+    schema_registry.FXModule,
+    fx.Provide(
+        func() schema_registry.Config {
+            return schema_registry.Config{
+                URL:      os.Getenv("SCHEMA_REGISTRY_URL"),
+                Username: os.Getenv("SCHEMA_REGISTRY_USER"),
+                Password: os.Getenv("SCHEMA_REGISTRY_PASSWORD"),
+                Timeout:  30 * time.Second,
+            }
+        },
+    ),
+)
+```
+
 <a name="Client.CheckCompatibility"></a>
-### func \(\*Client\) [CheckCompatibility](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L246>)
+### func \(\*Client\) [CheckCompatibility](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L247>)
 
 ```go
 func (c *Client) CheckCompatibility(subject, schema, schemaType string) (bool, error)
@@ -430,7 +502,7 @@ func (c *Client) CheckCompatibility(subject, schema, schemaType string) (bool, e
 CheckCompatibility checks if a schema is compatible with the existing schema for a subject
 
 <a name="Client.GetLatestSchema"></a>
-### func \(\*Client\) [GetLatestSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L145>)
+### func \(\*Client\) [GetLatestSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L146>)
 
 ```go
 func (c *Client) GetLatestSchema(subject string) (*Metadata, error)
@@ -439,7 +511,7 @@ func (c *Client) GetLatestSchema(subject string) (*Metadata, error)
 GetLatestSchema retrieves the latest version of a schema for a subject
 
 <a name="Client.GetSchemaByID"></a>
-### func \(\*Client\) [GetSchemaByID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L96>)
+### func \(\*Client\) [GetSchemaByID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L97>)
 
 ```go
 func (c *Client) GetSchemaByID(id int) (string, error)
@@ -448,7 +520,7 @@ func (c *Client) GetSchemaByID(id int) (string, error)
 GetSchemaByID retrieves a schema from the registry by its ID
 
 <a name="Client.RegisterSchema"></a>
-### func \(\*Client\) [RegisterSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L184>)
+### func \(\*Client\) [RegisterSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L185>)
 
 ```go
 func (c *Client) RegisterSchema(subject, schema, schemaType string) (int, error)
@@ -654,52 +726,8 @@ type Registry interface {
 }
 ```
 
-<a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L74>)
-
-```go
-func NewClient(config Config) (Registry, error)
-```
-
-NewClient creates a new schema registry client
-
-<a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L73>)
-
-```go
-func NewClientWithDI(params SchemaRegistryParams) (Registry, error)
-```
-
-NewClientWithDI creates a new Schema Registry client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where dependencies are automatically provided via the SchemaRegistryParams struct.
-
-Parameters:
-
-- params: A SchemaRegistryParams struct that contains the Config instance required to initialize the Schema Registry client. This struct embeds fx.In to enable automatic injection of these dependencies.
-
-Returns:
-
-- Registry: A fully initialized Schema Registry client ready for use.
-
-Example usage with fx:
-
-```
-app := fx.New(
-    schema_registry.FXModule,
-    fx.Provide(
-        func() schema_registry.Config {
-            return schema_registry.Config{
-                URL:      os.Getenv("SCHEMA_REGISTRY_URL"),
-                Username: os.Getenv("SCHEMA_REGISTRY_USER"),
-                Password: os.Getenv("SCHEMA_REGISTRY_PASSWORD"),
-                Timeout:  30 * time.Second,
-            }
-        },
-    ),
-)
-```
-
 <a name="SchemaRegistryLifecycleParams"></a>
-## type [SchemaRegistryLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L78-L83>)
+## type [SchemaRegistryLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L86-L91>)
 
 SchemaRegistryLifecycleParams groups the dependencies needed for Schema Registry lifecycle management
 
@@ -708,12 +736,12 @@ type SchemaRegistryLifecycleParams struct {
     fx.In
 
     Lifecycle fx.Lifecycle
-    Registry  Registry
+    Client    *Client
 }
 ```
 
 <a name="SchemaRegistryParams"></a>
-## type [SchemaRegistryParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L40-L44>)
+## type [SchemaRegistryParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L46-L50>)
 
 SchemaRegistryParams groups the dependencies needed to create a Schema Registry client
 

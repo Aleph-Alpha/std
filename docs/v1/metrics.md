@@ -117,7 +117,7 @@ Exposed metrics can be visualized in Prometheus, Grafana, or any compatible moni
 
 - [Constants](<#constants>)
 - [Variables](<#variables>)
-- [func RegisterMetricsLifecycle\(lc fx.Lifecycle, m \*Metrics, log \*logger.Logger\)](<#RegisterMetricsLifecycle>)
+- [func RegisterMetricsLifecycle\(lc fx.Lifecycle, m \*Metrics, log \*logger.LoggerClient\)](<#RegisterMetricsLifecycle>)
 - [type Config](<#Config>)
 - [type Metrics](<#Metrics>)
   - [func NewMetrics\(cfg Config\) \*Metrics](<#NewMetrics>)
@@ -175,7 +175,7 @@ var FXModule = fx.Module("metrics",
 ## func [RegisterMetricsLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/metrics/fx_module.go#L61>)
 
 ```go
-func RegisterMetricsLifecycle(lc fx.Lifecycle, m *Metrics, log *logger.Logger)
+func RegisterMetricsLifecycle(lc fx.Lifecycle, m *Metrics, log *logger.LoggerClient)
 ```
 
 RegisterMetricsLifecycle manages the startup and shutdown lifecycle of the Prometheus metrics HTTP server.

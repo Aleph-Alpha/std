@@ -10,6 +10,22 @@ Package kafka provides functionality for interacting with Apache Kafka.
 
 The kafka package offers a simplified interface for working with Kafka message brokers, providing connection management, message publishing, and consuming capabilities with a focus on reliability and ease of use.
 
+### Architecture
+
+The package follows the "accept interfaces, return structs" Go idiom:
+
+- Client interface: Defines the contract for Kafka operations
+- KafkaClient struct: Concrete implementation of the Client interface
+- Message interface: Defines the contract for consumed messages
+- Constructor returns \*KafkaClient \(concrete type\)
+- FX module provides both \*KafkaClient and Client interface
+
+This design allows:
+
+- Direct usage: Use \*KafkaClient for simple cases
+- Interface usage: Depend on Client interface for testability and flexibility
+- Zero adapters needed: Consumer code can use type aliases
+
 Core Features:
 
 - Robust connection management with automatic reconnection
@@ -20,17 +36,16 @@ Core Features:
 - Integration with the Logger package for structured logging
 - Distributed tracing support via message headers
 
-Basic Usage:
+### Basic Usage \\\(Direct\\\)
 
 ```
 import (
 	"github.com/Aleph-Alpha/std/v1/kafka"
-	"github.com/Aleph-Alpha/std/v1/logger"
 	"context"
 	"sync"
 )
 
-// Create a new Kafka client
+// Create a new Kafka client (returns concrete *KafkaClient)
 client, err := kafka.NewClient(kafka.Config{
 	Brokers:    []string{"localhost:9092"},
 	Topic:      "events",
@@ -40,39 +55,94 @@ client, err := kafka.NewClient(kafka.Config{
 	DataType:   "json",       // Automatic JSON serializer (default)
 })
 if err != nil {
-	log.Fatal("Failed to connect to Kafka", err, nil)
+	log.Fatal("Failed to connect to Kafka", err)
 }
-defer client.Close()
+defer client.GracefulShutdown()
 
 // Publish a message (automatically serialized as JSON)
 ctx := context.Background()
 event := map[string]interface{}{"id": "123", "name": "John"}
-err = client.Publish(ctx, "key", event, nil)
+err = client.Publish(ctx, "key", event)
 if err != nil {
-	log.Error("Failed to publish message", err, nil)
+	log.Printf("Failed to publish message: %v", err)
 }
+```
 
-// Consume messages
+### FX Module Integration
+
+The package provides an FX module that injects both concrete and interface types:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/kafka"
+	"go.uber.org/fx"
+)
+
+app := fx.New(
+	kafka.FXModule,
+	fx.Provide(
+		func() kafka.Config {
+			return kafka.Config{
+				Brokers:    []string{"localhost:9092"},
+				Topic:      "events",
+				IsConsumer: false,
+				DataType:   "json",
+			}
+		},
+	),
+	fx.Invoke(func(k kafka.Client) {
+		// Use the Client interface
+		ctx := context.Background()
+		event := map[string]interface{}{"id": "123"}
+		k.Publish(ctx, "key", event)
+	}),
+)
+app.Run()
+```
+
+### Using Type Aliases \\\(Recommended for Consumer Code\\\)
+
+Consumer applications can use type aliases to avoid creating adapters:
+
+```
+// In your application's messaging package
+package messaging
+
+import stdKafka "github.com/Aleph-Alpha/std/v1/kafka"
+
+// Type aliases reference std interfaces directly
+type Client = stdKafka.Client
+type Message = stdKafka.Message
+```
+
+Then use these aliases throughout your application:
+
+```
+func MyService(kafka messaging.Client) {
+	kafka.Publish(ctx, "key", data)
+}
+```
+
+### Consuming Messages
+
+```
 wg := &sync.WaitGroup{}
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
 msgChan := client.Consume(ctx, wg)
 for msg := range msgChan {
-	log.Info("Received message", nil, map[string]interface{}{
-		"body": string(msg.Body()),
-	})
-
 	// Process the message
+	fmt.Printf("Received: %s\n", string(msg.Body()))
 
 	// Commit the message
 	if err := msg.CommitMsg(); err != nil {
-		log.Error("Failed to commit message", err, nil)
+		log.Printf("Failed to commit: %v", err)
 	}
 }
 ```
 
-High\-Throughput Consumption with Parallel Workers:
+### High\\\-Throughput Consumption with Parallel Workers
 
 For high\-volume topics, use ConsumeParallel to process messages concurrently:
 
@@ -89,12 +159,12 @@ for msg := range msgChan {
 
 	// Commit the message
 	if err := msg.CommitMsg(); err != nil {
-		log.Error("Failed to commit message", err, nil)
+		log.Printf("Failed to commit: %v", err)
 	}
 }
 ```
 
-Distributed Tracing with Message Headers:
+### Distributed Tracing with Message Headers
 
 This package supports distributed tracing by allowing you to propagate trace context through message headers, enabling end\-to\-end visibility across services.
 
@@ -628,6 +698,7 @@ All methods on the Kafka type are safe for concurrent use by multiple goroutines
   - [func \(a \*AvroDeserializer\) Deserialize\(data \[\]byte, target interface\{\}\) error](<#AvroDeserializer.Deserialize>)
 - [type AvroSerializer](<#AvroSerializer>)
   - [func \(a \*AvroSerializer\) Serialize\(data interface\{\}\) \(\[\]byte, error\)](<#AvroSerializer.Serialize>)
+- [type Client](<#Client>)
 - [type Config](<#Config>)
 - [type ConsumerMessage](<#ConsumerMessage>)
   - [func \(cm \*ConsumerMessage\) Body\(\) \[\]byte](<#ConsumerMessage.Body>)
@@ -647,22 +718,22 @@ All methods on the Kafka type are safe for concurrent use by multiple goroutines
   - [func \(j \*JSONDeserializer\) Deserialize\(data \[\]byte, target interface\{\}\) error](<#JSONDeserializer.Deserialize>)
 - [type JSONSerializer](<#JSONSerializer>)
   - [func \(j \*JSONSerializer\) Serialize\(data interface\{\}\) \(\[\]byte, error\)](<#JSONSerializer.Serialize>)
-- [type Kafka](<#Kafka>)
-  - [func NewClient\(cfg Config\) \(\*Kafka, error\)](<#NewClient>)
-  - [func NewClientWithDI\(params KafkaParams\) \(\*Kafka, error\)](<#NewClientWithDI>)
-  - [func \(k \*Kafka\) Consume\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#Kafka.Consume>)
-  - [func \(k \*Kafka\) ConsumeParallel\(ctx context.Context, wg \*sync.WaitGroup, numWorkers int\) \<\-chan Message](<#Kafka.ConsumeParallel>)
-  - [func \(k \*Kafka\) Deserialize\(msg Message, target interface\{\}\) error](<#Kafka.Deserialize>)
-  - [func \(k \*Kafka\) GracefulShutdown\(\)](<#Kafka.GracefulShutdown>)
-  - [func \(k \*Kafka\) IsAuthenticationError\(err error\) bool](<#Kafka.IsAuthenticationError>)
-  - [func \(k \*Kafka\) IsPermanentError\(err error\) bool](<#Kafka.IsPermanentError>)
-  - [func \(k \*Kafka\) IsRetryableError\(err error\) bool](<#Kafka.IsRetryableError>)
-  - [func \(k \*Kafka\) IsTemporaryError\(err error\) bool](<#Kafka.IsTemporaryError>)
-  - [func \(k \*Kafka\) Publish\(ctx context.Context, key string, data interface\{\}, headers ...map\[string\]interface\{\}\) error](<#Kafka.Publish>)
-  - [func \(k \*Kafka\) SetDefaultSerializers\(\)](<#Kafka.SetDefaultSerializers>)
-  - [func \(k \*Kafka\) SetDeserializer\(d Deserializer\)](<#Kafka.SetDeserializer>)
-  - [func \(k \*Kafka\) SetSerializer\(s Serializer\)](<#Kafka.SetSerializer>)
-  - [func \(k \*Kafka\) TranslateError\(err error\) error](<#Kafka.TranslateError>)
+- [type KafkaClient](<#KafkaClient>)
+  - [func NewClient\(cfg Config\) \(\*KafkaClient, error\)](<#NewClient>)
+  - [func NewClientWithDI\(params KafkaParams\) \(\*KafkaClient, error\)](<#NewClientWithDI>)
+  - [func \(k \*KafkaClient\) Consume\(ctx context.Context, wg \*sync.WaitGroup\) \<\-chan Message](<#KafkaClient.Consume>)
+  - [func \(k \*KafkaClient\) ConsumeParallel\(ctx context.Context, wg \*sync.WaitGroup, numWorkers int\) \<\-chan Message](<#KafkaClient.ConsumeParallel>)
+  - [func \(k \*KafkaClient\) Deserialize\(msg Message, target interface\{\}\) error](<#KafkaClient.Deserialize>)
+  - [func \(k \*KafkaClient\) GracefulShutdown\(\)](<#KafkaClient.GracefulShutdown>)
+  - [func \(k \*KafkaClient\) IsAuthenticationError\(err error\) bool](<#KafkaClient.IsAuthenticationError>)
+  - [func \(k \*KafkaClient\) IsPermanentError\(err error\) bool](<#KafkaClient.IsPermanentError>)
+  - [func \(k \*KafkaClient\) IsRetryableError\(err error\) bool](<#KafkaClient.IsRetryableError>)
+  - [func \(k \*KafkaClient\) IsTemporaryError\(err error\) bool](<#KafkaClient.IsTemporaryError>)
+  - [func \(k \*KafkaClient\) Publish\(ctx context.Context, key string, data interface\{\}, headers ...map\[string\]interface\{\}\) error](<#KafkaClient.Publish>)
+  - [func \(k \*KafkaClient\) SetDefaultSerializers\(\)](<#KafkaClient.SetDefaultSerializers>)
+  - [func \(k \*KafkaClient\) SetDeserializer\(d Deserializer\)](<#KafkaClient.SetDeserializer>)
+  - [func \(k \*KafkaClient\) SetSerializer\(s Serializer\)](<#KafkaClient.SetSerializer>)
+  - [func \(k \*KafkaClient\) TranslateError\(err error\) error](<#KafkaClient.TranslateError>)
 - [type KafkaLifecycleParams](<#KafkaLifecycleParams>)
 - [type KafkaParams](<#KafkaParams>)
 - [type Logger](<#Logger>)
@@ -893,7 +964,7 @@ var (
 
 <a name="FXModule"></a>FXModule is an fx.Module that provides and configures the Kafka client. This module registers the Kafka client with the Fx dependency injection framework, making it available to other components in the application.
 
-The module: 1. Provides the Kafka client factory function 2. Invokes the lifecycle registration to manage the client's lifecycle
+The module provides: 1. \*KafkaClient \(concrete type\) for direct use 2. Client interface for dependency injection 3. Lifecycle management for graceful startup and shutdown
 
 Usage:
 
@@ -908,13 +979,18 @@ app := fx.New(
 var FXModule = fx.Module("kafka",
     fx.Provide(
         NewClientWithDI,
+
+        fx.Annotate(
+            func(k *KafkaClient) Client { return k },
+            fx.As(new(Client)),
+        ),
     ),
     fx.Invoke(RegisterKafkaLifecycle),
 )
 ```
 
 <a name="RegisterKafkaLifecycle"></a>
-## func [RegisterKafkaLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L124>)
+## func [RegisterKafkaLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L130>)
 
 ```go
 func RegisterKafkaLifecycle(params KafkaLifecycleParams)
@@ -996,6 +1072,61 @@ func (a *AvroSerializer) Serialize(data interface{}) ([]byte, error)
 ```
 
 Serialize converts data to Avro bytes.
+
+<a name="Client"></a>
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/interface.go#L12-L65>)
+
+Client provides a high\-level interface for interacting with Apache Kafka. It abstracts producer and consumer operations with a simplified API.
+
+This interface is implemented by the concrete \*KafkaClient type.
+
+```go
+type Client interface {
+
+    // Publish sends a single message to Kafka with the specified key and body.
+    // The body is serialized using the configured serializer.
+    // Optional headers can be provided as the last parameter.
+    Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error
+
+    // Consume starts consuming messages from Kafka with a single worker.
+    // Returns a channel that delivers consumed messages.
+    Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
+
+    // ConsumeParallel starts consuming messages with multiple concurrent workers.
+    // Provides better throughput for high-volume topics.
+    ConsumeParallel(ctx context.Context, wg *sync.WaitGroup, numWorkers int) <-chan Message
+
+    // Deserialize converts a Message to an object using the configured deserializer.
+    Deserialize(msg Message, target interface{}) error
+
+    // SetSerializer sets the serializer for outgoing messages.
+    SetSerializer(s Serializer)
+
+    // SetDeserializer sets the deserializer for incoming messages.
+    SetDeserializer(d Deserializer)
+
+    // SetDefaultSerializers configures default serializers based on the DataType config.
+    SetDefaultSerializers()
+
+    // TranslateError translates Kafka errors to more user-friendly messages.
+    TranslateError(err error) error
+
+    // IsRetryableError checks if an error can be retried.
+    IsRetryableError(err error) bool
+
+    // IsTemporaryError checks if an error is temporary.
+    IsTemporaryError(err error) bool
+
+    // IsPermanentError checks if an error is permanent.
+    IsPermanentError(err error) bool
+
+    // IsAuthenticationError checks if an error is authentication-related.
+    IsAuthenticationError(err error) bool
+
+    // GracefulShutdown closes all Kafka connections cleanly.
+    GracefulShutdown()
+}
+```
 
 <a name="Config"></a>
 ## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L8-L125>)
@@ -1124,7 +1255,7 @@ type Config struct {
 ```
 
 <a name="ConsumerMessage"></a>
-## type [ConsumerMessage](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L43-L47>)
+## type [ConsumerMessage](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L14-L18>)
 
 ConsumerMessage implements the Message interface and wraps a Kafka message.
 
@@ -1135,7 +1266,7 @@ type ConsumerMessage struct {
 ```
 
 <a name="ConsumerMessage.Body"></a>
-### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L315>)
+### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L286>)
 
 ```go
 func (cm *ConsumerMessage) Body() []byte
@@ -1144,7 +1275,7 @@ func (cm *ConsumerMessage) Body() []byte
 Body returns the message payload as a byte slice.
 
 <a name="ConsumerMessage.BodyAs"></a>
-### func \(\*ConsumerMessage\) [BodyAs](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L334>)
+### func \(\*ConsumerMessage\) [BodyAs](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L305>)
 
 ```go
 func (cm *ConsumerMessage) BodyAs(target interface{}) error
@@ -1168,7 +1299,7 @@ for msg := range msgChan {
 ```
 
 <a name="ConsumerMessage.CommitMsg"></a>
-### func \(\*ConsumerMessage\) [CommitMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L310>)
+### func \(\*ConsumerMessage\) [CommitMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L281>)
 
 ```go
 func (cm *ConsumerMessage) CommitMsg() error
@@ -1179,7 +1310,7 @@ CommitMsg commits the message, informing Kafka that the message has been success
 Returns an error if the commit fails.
 
 <a name="ConsumerMessage.Header"></a>
-### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L351>)
+### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L322>)
 
 ```go
 func (cm *ConsumerMessage) Header() map[string]interface{}
@@ -1188,7 +1319,7 @@ func (cm *ConsumerMessage) Header() map[string]interface{}
 Header returns the headers associated with the message.
 
 <a name="ConsumerMessage.Key"></a>
-### func \(\*ConsumerMessage\) [Key](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L346>)
+### func \(\*ConsumerMessage\) [Key](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L317>)
 
 ```go
 func (cm *ConsumerMessage) Key() string
@@ -1197,7 +1328,7 @@ func (cm *ConsumerMessage) Key() string
 Key returns the message key as a string.
 
 <a name="ConsumerMessage.Offset"></a>
-### func \(\*ConsumerMessage\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L365>)
+### func \(\*ConsumerMessage\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L336>)
 
 ```go
 func (cm *ConsumerMessage) Offset() int64
@@ -1206,7 +1337,7 @@ func (cm *ConsumerMessage) Offset() int64
 Offset returns the offset of this message.
 
 <a name="ConsumerMessage.Partition"></a>
-### func \(\*ConsumerMessage\) [Partition](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L360>)
+### func \(\*ConsumerMessage\) [Partition](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L331>)
 
 ```go
 func (cm *ConsumerMessage) Partition() int
@@ -1315,31 +1446,33 @@ func (j *JSONSerializer) Serialize(data interface{}) ([]byte, error)
 
 Serialize converts data to JSON bytes.
 
-<a name="Kafka"></a>
-## type [Kafka](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L21-L44>)
+<a name="KafkaClient"></a>
+## type [KafkaClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L23-L46>)
 
-Kafka represents a client for interacting with Apache Kafka. It manages connections and provides methods for publishing and consuming messages.
+KafkaClient represents a client for interacting with Apache Kafka. It manages connections and provides methods for publishing and consuming messages.
+
+KafkaClient implements the Client interface.
 
 ```go
-type Kafka struct {
+type KafkaClient struct {
     // contains filtered or unexported fields
 }
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L62>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L64>)
 
 ```go
-func NewClient(cfg Config) (*Kafka, error)
+func NewClient(cfg Config) (*KafkaClient, error)
 ```
 
-NewClient creates and initializes a new Kafka client with the provided configuration. This function sets up the producer and/or consumer based on the configuration.
+NewClient creates and initializes a new KafkaClient with the provided configuration. This function sets up the producer and/or consumer based on the configuration.
 
 Parameters:
 
 - cfg: Configuration for connecting to Kafka
 
-Returns a new Kafka client instance that is ready to use.
+Returns a new KafkaClient instance that is ready to use.
 
 Example:
 
@@ -1349,14 +1482,14 @@ if err != nil {
 	log.Printf("ERROR: failed to create Kafka client: %v", err)
 	return nil, err
 }
-defer client.Close()
+defer client.GracefulShutdown()
 ```
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L74>)
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L80>)
 
 ```go
-func NewClientWithDI(params KafkaParams) (*Kafka, error)
+func NewClientWithDI(params KafkaParams) (*KafkaClient, error)
 ```
 
 NewClientWithDI creates a new Kafka client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where dependencies are automatically provided via the KafkaParams struct.
@@ -1367,7 +1500,7 @@ Parameters:
 
 Returns:
 
-- \*Kafka: A fully initialized Kafka client ready for use.
+- \*KafkaClient: A fully initialized Kafka client ready for use.
 
 Example usage with fx:
 
@@ -1391,11 +1524,11 @@ app := fx.New(
 
 Under the hood, this function injects the optional logger, serializer, and deserializer before delegating to the standard NewClient function.
 
-<a name="Kafka.Consume"></a>
-### func \(\*Kafka\) [Consume](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L82>)
+<a name="KafkaClient.Consume"></a>
+### func \(\*KafkaClient\) [Consume](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L53>)
 
 ```go
-func (k *Kafka) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
+func (k *KafkaClient) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
 ```
 
 Consume starts consuming messages from the topic specified in the configuration. This method provides a channel where consumed messages will be delivered.
@@ -1434,11 +1567,11 @@ for msg := range msgChan {
 }
 ```
 
-<a name="Kafka.ConsumeParallel"></a>
-### func \(\*Kafka\) [ConsumeParallel](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L113>)
+<a name="KafkaClient.ConsumeParallel"></a>
+### func \(\*KafkaClient\) [ConsumeParallel](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L84>)
 
 ```go
-func (k *Kafka) ConsumeParallel(ctx context.Context, wg *sync.WaitGroup, numWorkers int) <-chan Message
+func (k *KafkaClient) ConsumeParallel(ctx context.Context, wg *sync.WaitGroup, numWorkers int) <-chan Message
 ```
 
 ConsumeParallel starts consuming messages from the topic with multiple concurrent goroutines. This method provides better throughput for high\-volume topics by processing messages in parallel.
@@ -1471,11 +1604,11 @@ for msg := range msgChan {
 }
 ```
 
-<a name="Kafka.Deserialize"></a>
-### func \(\*Kafka\) [Deserialize](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L396>)
+<a name="KafkaClient.Deserialize"></a>
+### func \(\*KafkaClient\) [Deserialize](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L367>)
 
 ```go
-func (k *Kafka) Deserialize(msg Message, target interface{}) error
+func (k *KafkaClient) Deserialize(msg Message, target interface{}) error
 ```
 
 Deserialize is a helper method to deserialize a message body. It automatically uses the injected Deserializer or falls back to JSONDeserializer.
@@ -1508,11 +1641,11 @@ for msg := range msgChan {
 }
 ```
 
-<a name="Kafka.GracefulShutdown"></a>
-### func \(\*Kafka\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L149>)
+<a name="KafkaClient.GracefulShutdown"></a>
+### func \(\*KafkaClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L155>)
 
 ```go
-func (k *Kafka) GracefulShutdown()
+func (k *KafkaClient) GracefulShutdown()
 ```
 
 GracefulShutdown closes the Kafka client's connections cleanly. This method ensures that all resources are properly released when the application is shutting down.
@@ -1521,47 +1654,47 @@ The shutdown process: 1. Signals all goroutines to stop by closing the shutdownS
 
 Any errors during shutdown are logged but not propagated, as they typically cannot be handled at this stage of application shutdown.
 
-<a name="Kafka.IsAuthenticationError"></a>
-### func \(\*Kafka\) [IsAuthenticationError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L374>)
+<a name="KafkaClient.IsAuthenticationError"></a>
+### func \(\*KafkaClient\) [IsAuthenticationError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L374>)
 
 ```go
-func (k *Kafka) IsAuthenticationError(err error) bool
+func (k *KafkaClient) IsAuthenticationError(err error) bool
 ```
 
 IsAuthenticationError returns true if the error is authentication\-related
 
-<a name="Kafka.IsPermanentError"></a>
-### func \(\*Kafka\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L352>)
+<a name="KafkaClient.IsPermanentError"></a>
+### func \(\*KafkaClient\) [IsPermanentError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L352>)
 
 ```go
-func (k *Kafka) IsPermanentError(err error) bool
+func (k *KafkaClient) IsPermanentError(err error) bool
 ```
 
 IsPermanentError returns true if the error is permanent and should not be retried
 
-<a name="Kafka.IsRetryableError"></a>
-### func \(\*Kafka\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L325>)
+<a name="KafkaClient.IsRetryableError"></a>
+### func \(\*KafkaClient\) [IsRetryableError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L325>)
 
 ```go
-func (k *Kafka) IsRetryableError(err error) bool
+func (k *KafkaClient) IsRetryableError(err error) bool
 ```
 
 IsRetryableError returns true if the error is retryable
 
-<a name="Kafka.IsTemporaryError"></a>
-### func \(\*Kafka\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L345>)
+<a name="KafkaClient.IsTemporaryError"></a>
+### func \(\*KafkaClient\) [IsTemporaryError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L345>)
 
 ```go
-func (k *Kafka) IsTemporaryError(err error) bool
+func (k *KafkaClient) IsTemporaryError(err error) bool
 ```
 
 IsTemporaryError returns true if the error is temporary
 
-<a name="Kafka.Publish"></a>
-### func \(\*Kafka\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L232>)
+<a name="KafkaClient.Publish"></a>
+### func \(\*KafkaClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L203>)
 
 ```go
-func (k *Kafka) Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error
+func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error
 ```
 
 Publish sends a message to the Kafka topic specified in the configuration. This method is thread\-safe and respects context cancellation.
@@ -1613,38 +1746,38 @@ if err != nil {
 }
 ```
 
-<a name="Kafka.SetDefaultSerializers"></a>
-### func \(\*Kafka\) [SetDefaultSerializers](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/serializer.go#L516>)
+<a name="KafkaClient.SetDefaultSerializers"></a>
+### func \(\*KafkaClient\) [SetDefaultSerializers](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/serializer.go#L516>)
 
 ```go
-func (k *Kafka) SetDefaultSerializers()
+func (k *KafkaClient) SetDefaultSerializers()
 ```
 
 SetDefaultSerializers sets default serializers on the Kafka client based on config DataType This is called automatically during client creation if no serializers are provided
 
-<a name="Kafka.SetDeserializer"></a>
-### func \(\*Kafka\) [SetDeserializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L152>)
+<a name="KafkaClient.SetDeserializer"></a>
+### func \(\*KafkaClient\) [SetDeserializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L154>)
 
 ```go
-func (k *Kafka) SetDeserializer(d Deserializer)
+func (k *KafkaClient) SetDeserializer(d Deserializer)
 ```
 
 SetDeserializer sets the deserializer for the Kafka client. This is typically called by the FX module during initialization.
 
-<a name="Kafka.SetSerializer"></a>
-### func \(\*Kafka\) [SetSerializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L144>)
+<a name="KafkaClient.SetSerializer"></a>
+### func \(\*KafkaClient\) [SetSerializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L146>)
 
 ```go
-func (k *Kafka) SetSerializer(s Serializer)
+func (k *KafkaClient) SetSerializer(s Serializer)
 ```
 
 SetSerializer sets the serializer for the Kafka client. This is typically called by the FX module during initialization.
 
-<a name="Kafka.TranslateError"></a>
-### func \(\*Kafka\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L175>)
+<a name="KafkaClient.TranslateError"></a>
+### func \(\*KafkaClient\) [TranslateError](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/errors.go#L175>)
 
 ```go
-func (k *Kafka) TranslateError(err error) error
+func (k *KafkaClient) TranslateError(err error) error
 ```
 
 TranslateError converts Kafka\-specific errors into standardized application errors. This function provides abstraction from the underlying Kafka implementation details, allowing application code to handle errors in a Kafka\-agnostic way.
@@ -1652,7 +1785,7 @@ TranslateError converts Kafka\-specific errors into standardized application err
 It maps common Kafka errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="KafkaLifecycleParams"></a>
-## type [KafkaLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L104-L109>)
+## type [KafkaLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L110-L115>)
 
 KafkaLifecycleParams groups the dependencies needed for Kafka lifecycle management
 
@@ -1661,12 +1794,12 @@ type KafkaLifecycleParams struct {
     fx.In
 
     Lifecycle fx.Lifecycle
-    Client    *Kafka
+    Client    *KafkaClient
 }
 ```
 
 <a name="KafkaParams"></a>
-## type [KafkaParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L32-L39>)
+## type [KafkaParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L38-L45>)
 
 KafkaParams groups the dependencies needed to create a Kafka client
 
@@ -1693,7 +1826,7 @@ type Logger interface {
 ```
 
 <a name="Message"></a>
-## type [Message](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L16-L40>)
+## type [Message](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/interface.go#L70-L94>)
 
 Message defines the interface for consumed messages from Kafka. This interface abstracts the underlying Kafka message structure and provides methods for committing messages.
 

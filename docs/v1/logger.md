@@ -10,6 +10,15 @@ Package logger provides structured logging functionality for Go applications.
 
 The logger package is designed to provide a standardized logging approach with features such as log levels, contextual logging, distributed tracing integration, and flexible output formatting. It integrates with the fx dependency injection framework for easy incorporation into applications.
 
+### Architecture
+
+This package follows the "accept interfaces, return structs" design pattern:
+
+- Logger interface: Defines the contract for logging operations
+- LoggerClient struct: Concrete implementation of the Logger interface
+- NewLoggerClient constructor: Returns \*LoggerClient \(concrete type\)
+- FX module: Provides both \*LoggerClient and Logger interface for dependency injection
+
 Core Features:
 
 - Structured logging with key\-value pairs
@@ -20,19 +29,21 @@ Core Features:
 - Configurable output formats \(JSON, text\)
 - Integration with common log collection systems
 
-Basic Usage:
+### Direct Usage \\\(Without FX\\\)
+
+For simple applications or tests, create a logger directly:
 
 ```
 import "github.com/Aleph-Alpha/std/v1/logger"
 
-// Create a new logger using factory
+// Create a new logger (returns concrete *LoggerClient)
 log := logger.NewLoggerClient(logger.Config{
 	Level:         "info",
 	EnableTracing: true,
 })
 
 // Log with structured fields (without context)
-log.Info("User logged in", err, map[string]interface{}{
+log.Info("User logged in", nil, map[string]interface{}{
 	"user_id": "12345",
 	"ip":      "192.168.1.1",
 })
@@ -40,34 +51,77 @@ log.Info("User logged in", err, map[string]interface{}{
 // Log with trace context (automatically includes trace_id and span_id)
 log.InfoWithContext(ctx, "Processing request", nil, map[string]interface{}{
 	"request_id": "abc-123",
-	"user_id":    "12345",
 })
+```
 
+### FX Module Integration
+
+For production applications using Uber's fx, use the FXModule which provides both the concrete type and interface:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/logger"
+	"go.uber.org/fx"
+)
+
+app := fx.New(
+	logger.FXModule, // Provides *LoggerClient and logger.Logger interface
+	fx.Provide(func() logger.Config {
+		return logger.Config{
+			Level:         "info",
+			EnableTracing: true,
+			ServiceName:   "my-service",
+		}
+	}),
+	fx.Invoke(func(log *logger.LoggerClient) {
+		// Use concrete type directly
+		log.Info("Service started", nil, nil)
+	}),
+	// ... other modules
+)
+app.Run()
+```
+
+### Type Aliases in Consumer Code
+
+To simplify your code and avoid tight coupling, use type aliases:
+
+```
+package myapp
+
+import stdLogger "github.com/Aleph-Alpha/std/v1/logger"
+
+// Use type alias to reference std's interface
+type Logger = stdLogger.Logger
+
+// Now use Logger throughout your codebase
+func MyFunction(log Logger) {
+	log.Info("Processing", nil, nil)
+}
+```
+
+This eliminates the need for adapters and allows you to switch implementations by only changing the alias definition.
+
+### Logging Levels
+
+```
 // Log different levels
 log.Debug("Debug message", nil, nil) // Only appears if level is Debug
 log.Info("Info message", nil, nil)
 log.Warn("Warning message", nil, nil)
 log.Error("Error message", err, nil)
+```
 
+### Context\\\-Aware Logging
+
+```
 // Context-aware logging methods
 log.DebugWithContext(ctx, "Debug with trace", nil, nil)
 log.WarnWithContext(ctx, "Warning with trace", nil, nil)
 log.ErrorWithContext(ctx, "Error with trace", err, nil)
 ```
 
-FX Module Integration:
-
-This package provides an fx module for easy integration with applications using the fx dependency injection framework:
-
-```
-app := fx.New(
-	logger.Module,
-	// ... other modules
-)
-app.Run()
-```
-
-Configuration:
+### Configuration
 
 The logger can be configured via environment variables:
 
@@ -76,7 +130,7 @@ ZAP_LOGGER_LEVEL=debug          # Log level (debug, info, warning, error)
 LOGGER_ENABLE_TRACING=true      # Enable distributed tracing integration
 ```
 
-Tracing Integration:
+### Tracing Integration
 
 When tracing is enabled \(EnableTracing: true\), the logger will automatically extract trace and span IDs from the context and include them in log entries. This provides correlation between logs and distributed traces in your observability system.
 
@@ -87,11 +141,11 @@ The following fields are automatically added to log entries when tracing is enab
 
 To use tracing, ensure your application has OpenTelemetry configured and pass context with active spans to the \*WithContext logging methods.
 
-Performance Considerations:
+### Performance Considerations
 
 The logger is designed to be performant with minimal allocations. However, be mindful of excessive debug logging in production environments.
 
-Thread Safety:
+### Thread Safety
 
 All methods on the Logger interface are safe for concurrent use by multiple goroutines.
 
@@ -99,20 +153,21 @@ All methods on the Logger interface are safe for concurrent use by multiple goro
 
 - [Constants](<#constants>)
 - [Variables](<#variables>)
-- [func RegisterLoggerLifecycle\(lc fx.Lifecycle, client \*Logger\)](<#RegisterLoggerLifecycle>)
+- [func RegisterLoggerLifecycle\(lc fx.Lifecycle, client \*LoggerClient\)](<#RegisterLoggerLifecycle>)
 - [type Config](<#Config>)
 - [type Logger](<#Logger>)
-  - [func NewLoggerClient\(cfg Config\) \*Logger](<#NewLoggerClient>)
-  - [func \(l \*Logger\) Debug\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Debug>)
-  - [func \(l \*Logger\) DebugWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.DebugWithContext>)
-  - [func \(l \*Logger\) Error\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Error>)
-  - [func \(l \*Logger\) ErrorWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.ErrorWithContext>)
-  - [func \(l \*Logger\) Fatal\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Fatal>)
-  - [func \(l \*Logger\) FatalWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.FatalWithContext>)
-  - [func \(l \*Logger\) Info\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Info>)
-  - [func \(l \*Logger\) InfoWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.InfoWithContext>)
-  - [func \(l \*Logger\) Warn\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.Warn>)
-  - [func \(l \*Logger\) WarnWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#Logger.WarnWithContext>)
+- [type LoggerClient](<#LoggerClient>)
+  - [func NewLoggerClient\(cfg Config\) \*LoggerClient](<#NewLoggerClient>)
+  - [func \(l \*LoggerClient\) Debug\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.Debug>)
+  - [func \(l \*LoggerClient\) DebugWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.DebugWithContext>)
+  - [func \(l \*LoggerClient\) Error\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.Error>)
+  - [func \(l \*LoggerClient\) ErrorWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.ErrorWithContext>)
+  - [func \(l \*LoggerClient\) Fatal\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.Fatal>)
+  - [func \(l \*LoggerClient\) FatalWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.FatalWithContext>)
+  - [func \(l \*LoggerClient\) Info\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.Info>)
+  - [func \(l \*LoggerClient\) InfoWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.InfoWithContext>)
+  - [func \(l \*LoggerClient\) Warn\(msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.Warn>)
+  - [func \(l \*LoggerClient\) WarnWithContext\(ctx context.Context, msg string, err error, fields ...map\[string\]interface\{\}\)](<#LoggerClient.WarnWithContext>)
 
 
 ## Constants
@@ -143,10 +198,7 @@ const (
 
 <a name="FXModule"></a>FXModule defines the Fx module for the logger package. This module integrates the logger into an Fx\-based application by providing the logger factory and registering its lifecycle hooks.
 
-The module:
-
-1. Provides the NewLoggerClient factory function to the dependency injection container, making the logger available to other components
-2. Invokes RegisterLoggerLifecycle to set up proper cleanup during application shutdown
+The module provides: 1. \*LoggerClient \(concrete type\) for direct use 2. Logger interface for dependency injection 3. Lifecycle management for proper cleanup
 
 Usage:
 
@@ -163,16 +215,21 @@ Dependencies required by this module: \- A logger.Config instance must be availa
 var FXModule = fx.Module("logger",
     fx.Provide(
         NewLoggerClient,
+
+        fx.Annotate(
+            func(l *LoggerClient) Logger { return l },
+            fx.As(new(Logger)),
+        ),
     ),
     fx.Invoke(RegisterLoggerLifecycle),
 )
 ```
 
 <a name="RegisterLoggerLifecycle"></a>
-## func [RegisterLoggerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/fx_module.go#L51>)
+## func [RegisterLoggerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/fx_module.go#L56>)
 
 ```go
-func RegisterLoggerLifecycle(lc fx.Lifecycle, client *Logger)
+func RegisterLoggerLifecycle(lc fx.Lifecycle, client *LoggerClient)
 ```
 
 RegisterLoggerLifecycle handles cleanup \(sync\) of the Zap logger. This function registers a shutdown hook with the Fx lifecycle system that ensures any buffered log entries are flushed when the application terminates.
@@ -252,12 +309,56 @@ type Config struct {
 ```
 
 <a name="Logger"></a>
-## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L14-L24>)
+## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/interface.go#L11-L45>)
 
-Logger is a wrapper around Uber's Zap logger. It provides a simplified interface to the underlying Zap logger, with additional functionality specific to the application's needs.
+Logger provides a high\-level interface for structured logging. It wraps Uber's Zap logger with a simplified API and optional tracing integration.
+
+This interface is implemented by the concrete \*LoggerClient type.
 
 ```go
-type Logger struct {
+type Logger interface {
+
+    // Debug logs a debug-level message, useful for development and troubleshooting.
+    Debug(msg string, err error, fields ...map[string]interface{})
+
+    // Info logs an informational message about general application progress.
+    Info(msg string, err error, fields ...map[string]interface{})
+
+    // Warn logs a warning message, indicating potential issues.
+    Warn(msg string, err error, fields ...map[string]interface{})
+
+    // Error logs an error message with details of the error.
+    Error(msg string, err error, fields ...map[string]interface{})
+
+    // Fatal logs a critical error message and terminates the application.
+    Fatal(msg string, err error, fields ...map[string]interface{})
+
+    // DebugWithContext logs a debug-level message with trace context.
+    DebugWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // InfoWithContext logs an informational message with trace context.
+    InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // WarnWithContext logs a warning message with trace context.
+    WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // ErrorWithContext logs an error message with trace context.
+    ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // FatalWithContext logs a critical error message with trace context and terminates the application.
+    FatalWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+}
+```
+
+<a name="LoggerClient"></a>
+## type [LoggerClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L16-L26>)
+
+LoggerClient is a wrapper around Uber's Zap logger. It provides a simplified interface to the underlying Zap logger, with additional functionality specific to the application's needs.
+
+LoggerClient implements the Logger interface.
+
+```go
+type LoggerClient struct {
     // Zap is the underlying zap.Logger instance
     // This is exposed to allow direct access to Zap-specific functionality
     // when needed, but most logging should go through the wrapper methods.
@@ -267,10 +368,10 @@ type Logger struct {
 ```
 
 <a name="NewLoggerClient"></a>
-### func [NewLoggerClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L65>)
+### func [NewLoggerClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/setup.go#L67>)
 
 ```go
-func NewLoggerClient(cfg Config) *Logger
+func NewLoggerClient(cfg Config) *LoggerClient
 ```
 
 NewLoggerClient initializes and returns a new instance of the logger based on configuration. This function creates a configured Zap logger with appropriate encoding, log levels, and output destinations.
@@ -281,7 +382,7 @@ Parameters:
 
 Returns:
 
-- \*Logger: A configured logger instance ready for use
+- \*LoggerClient: A configured logger instance ready for use
 
 The logger is configured with:
 
@@ -318,11 +419,11 @@ loggerConfig := logger.Config{
 log := logger.NewLoggerClient(loggerConfig)
 ```
 
-<a name="Logger.Debug"></a>
-### func \(\*Logger\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L108>)
+<a name="LoggerClient.Debug"></a>
+### func \(\*LoggerClient\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L108>)
 
 ```go
-func (l *Logger) Debug(msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) Debug(msg string, err error, fields ...map[string]interface{})
 ```
 
 Debug logs a debug\-level message, useful for development and troubleshooting. Debug logs are typically more verbose and include information primarily useful during development or when diagnosing issues.
@@ -343,11 +444,11 @@ logger.Debug("Processing request", nil, map[string]interface{}{
 })
 ```
 
-<a name="Logger.DebugWithContext"></a>
-### func \(\*Logger\) [DebugWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L213>)
+<a name="LoggerClient.DebugWithContext"></a>
+### func \(\*LoggerClient\) [DebugWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L213>)
 
 ```go
-func (l *Logger) DebugWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) DebugWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 ```
 
 DebugWithContext logs a debug\-level message with trace context, useful for development and troubleshooting. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.
@@ -369,11 +470,11 @@ logger.DebugWithContext(ctx, "Processing request", nil, map[string]interface{}{
 })
 ```
 
-<a name="Logger.Error"></a>
-### func \(\*Logger\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L149>)
+<a name="LoggerClient.Error"></a>
+### func \(\*LoggerClient\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L149>)
 
 ```go
-func (l *Logger) Error(msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) Error(msg string, err error, fields ...map[string]interface{})
 ```
 
 Error logs an error message, including details of the error and additional context fields. Use Error when something has gone wrong that affects the current operation but doesn't require immediate termination of the application.
@@ -396,11 +497,11 @@ if err != nil {
 }
 ```
 
-<a name="Logger.ErrorWithContext"></a>
-### func \(\*Logger\) [ErrorWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L258>)
+<a name="LoggerClient.ErrorWithContext"></a>
+### func \(\*LoggerClient\) [ErrorWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L258>)
 
 ```go
-func (l *Logger) ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 ```
 
 ErrorWithContext logs an error message with trace context, including details of the error and additional context fields. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.
@@ -424,11 +525,11 @@ if err != nil {
 }
 ```
 
-<a name="Logger.Fatal"></a>
-### func \(\*Logger\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L172>)
+<a name="LoggerClient.Fatal"></a>
+### func \(\*LoggerClient\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L172>)
 
 ```go
-func (l *Logger) Fatal(msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) Fatal(msg string, err error, fields ...map[string]interface{})
 ```
 
 Fatal logs a critical error message and terminates the application. Use Fatal only for errors that make it impossible for the application to continue running. This method will call os.Exit\(1\) after logging the message.
@@ -452,11 +553,11 @@ if configErr != nil {
 
 Note: This function does not return as it terminates the application.
 
-<a name="Logger.FatalWithContext"></a>
-### func \(\*Logger\) [FatalWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L285>)
+<a name="LoggerClient.FatalWithContext"></a>
+### func \(\*LoggerClient\) [FatalWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L285>)
 
 ```go
-func (l *Logger) FatalWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) FatalWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 ```
 
 FatalWithContext logs a critical error message with trace context and terminates the application. This method automatically extracts trace and span IDs from the provided context when tracing is enabled. Use Fatal only for errors that make it impossible for the application to continue running. This method will call os.Exit\(1\) after logging the message.
@@ -481,11 +582,11 @@ if configErr != nil {
 
 Note: This function does not return as it terminates the application.
 
-<a name="Logger.Info"></a>
-### func \(\*Logger\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L88>)
+<a name="LoggerClient.Info"></a>
+### func \(\*LoggerClient\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L88>)
 
 ```go
-func (l *Logger) Info(msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) Info(msg string, err error, fields ...map[string]interface{})
 ```
 
 Info logs an informational message, along with an optional error and structured fields. Use Info for general application progress and successful operations.
@@ -505,11 +606,11 @@ logger.Info("User logged in successfully", nil, map[string]interface{}{
 })
 ```
 
-<a name="Logger.InfoWithContext"></a>
-### func \(\*Logger\) [InfoWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L191>)
+<a name="LoggerClient.InfoWithContext"></a>
+### func \(\*LoggerClient\) [InfoWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L191>)
 
 ```go
-func (l *Logger) InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 ```
 
 InfoWithContext logs an informational message with trace context, along with an optional error and structured fields. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.
@@ -530,11 +631,11 @@ logger.InfoWithContext(ctx, "User logged in successfully", nil, map[string]inter
 })
 ```
 
-<a name="Logger.Warn"></a>
-### func \(\*Logger\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L127>)
+<a name="LoggerClient.Warn"></a>
+### func \(\*LoggerClient\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L127>)
 
 ```go
-func (l *Logger) Warn(msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) Warn(msg string, err error, fields ...map[string]interface{})
 ```
 
 Warn logs a warning message, indicating potential issues that aren't necessarily errors. Warnings indicate situations that aren't failures but might need attention or could lead to problems if not addressed.
@@ -554,11 +655,11 @@ logger.Warn("High resource usage detected", nil, map[string]interface{}{
 })
 ```
 
-<a name="Logger.WarnWithContext"></a>
-### func \(\*Logger\) [WarnWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L234>)
+<a name="LoggerClient.WarnWithContext"></a>
+### func \(\*LoggerClient\) [WarnWithContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/logger/utils.go#L234>)
 
 ```go
-func (l *Logger) WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+func (l *LoggerClient) WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 ```
 
 WarnWithContext logs a warning message with trace context, indicating potential issues that aren't necessarily errors. This method automatically extracts trace and span IDs from the provided context when tracing is enabled.

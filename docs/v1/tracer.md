@@ -10,6 +10,22 @@ Package tracer provides distributed tracing functionality using OpenTelemetry.
 
 The tracer package offers a simplified interface for implementing distributed tracing in Go applications. It abstracts away the complexity of OpenTelemetry to provide a clean, easy\-to\-use API for creating and managing trace spans.
 
+### Architecture
+
+The package follows the "accept interfaces, return structs" Go idiom:
+
+- Tracer interface: Defines the contract for tracing operations
+- TracerClient struct: Concrete implementation of the Tracer interface
+- Span interface: Defines the contract for span operations
+- Constructor returns \*TracerClient \(concrete type\)
+- FX module provides both \*TracerClient and Tracer interface
+
+This design allows:
+
+- Direct usage: Use \*TracerClient for simple cases
+- Interface usage: Depend on Tracer interface for testability and flexibility
+- Zero adapters needed: Consumer code can use type aliases
+
 Core Features:
 
 - Simple span creation and management
@@ -18,24 +34,23 @@ Core Features:
 - Cross\-service trace context propagation
 - Integration with OpenTelemetry backends
 
-Basic Usage:
+### Basic Usage \\\(Direct\\\)
 
 ```
 import (
 	"context"
 	"github.com/Aleph-Alpha/std/v1/tracer"
-	"github.com/Aleph-Alpha/std/v1/logger"
 )
 
-// Create a logger
-log, _ := logger.NewLogger(logger.Config{Level: "info"})
-
-// Create a tracer
-tracerClient := tracer.NewClient(tracer.Config{
+// Create a tracer (returns concrete *TracerClient)
+tracerClient, err := tracer.NewClient(tracer.Config{
 	ServiceName:  "my-service",
 	AppEnv:       "development",
 	EnableExport: true,
-}, log)
+})
+if err != nil {
+	log.Fatal(err)
+}
 
 // Create a span
 ctx, span := tracerClient.StartSpan(ctx, "process-request")
@@ -50,11 +65,65 @@ span.SetAttributes(map[string]interface{}{
 // Record errors
 if err != nil {
 	span.RecordError(err)
-	return nil, err
+	return err
 }
 ```
 
-Distributed Tracing Across Services:
+### FX Module Integration
+
+The package provides an FX module that injects both concrete and interface types:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/tracer"
+	"go.uber.org/fx"
+)
+
+app := fx.New(
+	tracer.FXModule,
+	fx.Provide(
+		func() tracer.Config {
+			return tracer.Config{
+				ServiceName:  "my-service",
+				AppEnv:       "production",
+				EnableExport: true,
+			}
+		},
+	),
+	fx.Invoke(func(t tracer.Tracer) {
+		// Use the Tracer interface
+		ctx, span := t.StartSpan(context.Background(), "app-startup")
+		defer span.End()
+	}),
+)
+app.Run()
+```
+
+### Using Type Aliases \\\(Recommended for Consumer Code\\\)
+
+Consumer applications can use type aliases to avoid creating adapters:
+
+```
+// In your application's observability package
+package observability
+
+import stdTracer "github.com/Aleph-Alpha/std/v1/tracer"
+
+// Type aliases reference std interfaces directly
+type Tracer = stdTracer.Tracer
+type Span = stdTracer.Span
+```
+
+Then use these aliases throughout your application:
+
+```
+func MyService(tracer observability.Tracer) {
+	ctx, span := tracer.StartSpan(ctx, "my-operation")
+	defer span.End()
+}
+```
+
+### Distributed Tracing Across Services
 
 ```
 // In the sending service
@@ -87,20 +156,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-FX Module Integration:
-
-This package provides an fx module for easy integration:
-
-```
-app := fx.New(
-	logger.Module,
-	tracer.Module,
-	// ... other modules
-)
-app.Run()
-```
-
-Best Practices:
+### Best Practices
 
 - Create spans for significant operations in your code
 - Always defer span.End\(\) immediately after creating a span
@@ -108,29 +164,32 @@ Best Practices:
 - Add relevant attributes to provide context
 - Record errors when operations fail
 - Ensure trace context is properly propagated between services
+- Prefer interface types \(tracer.Tracer\) in function signatures
+- Use concrete types \(\*tracer.TracerClient\) when you need specific implementation details
 
-Thread Safety:
+### Thread Safety
 
-All methods on the Tracer type and Span interface are safe for concurrent use by multiple goroutines.
+All methods on the TracerClient type and Span interface are safe for concurrent use by multiple goroutines.
 
 ## Index
 
 - [Variables](<#variables>)
-- [func RegisterTracerLifecycle\(lc fx.Lifecycle, tracer \*Tracer\)](<#RegisterTracerLifecycle>)
+- [func RegisterTracerLifecycle\(lc fx.Lifecycle, tracer \*TracerClient\)](<#RegisterTracerLifecycle>)
 - [type Config](<#Config>)
 - [type Span](<#Span>)
 - [type Tracer](<#Tracer>)
-  - [func NewClient\(cfg Config\) \(\*Tracer, error\)](<#NewClient>)
-  - [func \(t \*Tracer\) GetCarrier\(ctx context.Context\) map\[string\]string](<#Tracer.GetCarrier>)
-  - [func \(t \*Tracer\) SetCarrierOnContext\(ctx context.Context, carrier map\[string\]string\) context.Context](<#Tracer.SetCarrierOnContext>)
-  - [func \(t \*Tracer\) StartSpan\(ctx context.Context, name string\) \(context.Context, Span\)](<#Tracer.StartSpan>)
+- [type TracerClient](<#TracerClient>)
+  - [func NewClient\(cfg Config\) \(\*TracerClient, error\)](<#NewClient>)
+  - [func \(t \*TracerClient\) GetCarrier\(ctx context.Context\) map\[string\]string](<#TracerClient.GetCarrier>)
+  - [func \(t \*TracerClient\) SetCarrierOnContext\(ctx context.Context, carrier map\[string\]string\) context.Context](<#TracerClient.SetCarrierOnContext>)
+  - [func \(t \*TracerClient\) StartSpan\(ctx context.Context, name string\) \(context.Context, Span\)](<#TracerClient.StartSpan>)
 
 
 ## Variables
 
 <a name="FXModule"></a>FXModule provides a Uber FX module that configures distributed tracing for your application. This module registers the tracer client with the dependency injection system and sets up proper lifecycle management to ensure graceful startup and shutdown of the tracer.
 
-The module: 1. Provides the tracer client through the NewClient constructor 2. Registers shutdown hooks to cleanly close tracer resources on application termination
+The module provides: 1. \*TracerClient \(concrete type\) for direct use 2. Tracer interface for dependency injection 3. Shutdown hooks to cleanly close tracer resources
 
 Usage:
 
@@ -148,16 +207,21 @@ This module should be included in your main application to enable distributed tr
 var FXModule = fx.Module("tracer",
     fx.Provide(
         NewClient,
+
+        fx.Annotate(
+            func(t *TracerClient) Tracer { return t },
+            fx.As(new(Tracer)),
+        ),
     ),
     fx.Invoke(RegisterTracerLifecycle),
 )
 ```
 
 <a name="RegisterTracerLifecycle"></a>
-## func [RegisterTracerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/fx_module.go#L59>)
+## func [RegisterTracerLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/fx_module.go#L65>)
 
 ```go
-func RegisterTracerLifecycle(lc fx.Lifecycle, tracer *Tracer)
+func RegisterTracerLifecycle(lc fx.Lifecycle, tracer *TracerClient)
 ```
 
 RegisterTracerLifecycle registers shutdown hooks for the tracer with the FX lifecycle. This function ensures that tracer resources are properly released when the application terminates, preventing resource leaks and ensuring traces are flushed to exporters.
@@ -220,7 +284,7 @@ type Config struct {
 ```
 
 <a name="Span"></a>
-## type [Span](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L31-L68>)
+## type [Span](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/interface.go#L48-L85>)
 
 Span represents a trace span for tracking operations in distributed systems. It provides methods for ending the span, recording errors, and setting attributes.
 
@@ -274,41 +338,67 @@ type Span interface {
 ```
 
 <a name="Tracer"></a>
-## type [Tracer](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/setup.go#L31-L33>)
+## type [Tracer](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/interface.go#L12-L28>)
 
-Tracer provides a simplified API for distributed tracing with OpenTelemetry. It wraps the OpenTelemetry TracerProvider and provides convenient methods for creating spans, recording errors, and propagating trace context across service boundaries.
+Tracer provides distributed tracing capabilities for applications. It wraps OpenTelemetry functionality with a simplified interface for creating spans, recording errors, and propagating trace context.
 
-Tracer handles the complexity of trace context propagation, span creation, and attribute management, making it easier to implement distributed tracing in your applications.
-
-To use Tracer effectively: 1. Create spans for significant operations in your code 2. Record errors when operations fail 3. Add attributes to spans to provide context 4. Extract and inject trace context when crossing service boundaries
-
-The Tracer is designed to be thread\-safe and can be shared across goroutines.
+This interface is implemented by the concrete \*Tracer type.
 
 ```go
-type Tracer struct {
+type Tracer interface {
+    // StartSpan creates a new span with the given name.
+    // The span is automatically attached to the parent span in the context (if any).
+    // Returns a new context with the span and the span itself.
+    // Always call span.End() when the operation completes (typically via defer).
+    StartSpan(ctx context.Context, name string) (context.Context, Span)
+
+    // GetCarrier extracts trace context from the given context as a map of headers.
+    // Use this when making outbound HTTP requests or sending messages to other services
+    // to propagate the trace context.
+    GetCarrier(ctx context.Context) map[string]string
+
+    // SetCarrierOnContext injects trace context from headers into the given context.
+    // Use this when receiving HTTP requests or messages from other services
+    // to continue the trace.
+    SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context
+}
+```
+
+<a name="TracerClient"></a>
+## type [TracerClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/setup.go#L32-L34>)
+
+TracerClient provides a simplified API for distributed tracing with OpenTelemetry. It wraps the OpenTelemetry TracerProvider and provides convenient methods for creating spans, recording errors, and propagating trace context across service boundaries.
+
+TracerClient handles the complexity of trace context propagation, span creation, and attribute management, making it easier to implement distributed tracing in your applications.
+
+To use TracerClient effectively: 1. Create spans for significant operations in your code 2. Record errors when operations fail 3. Add attributes to spans to provide context 4. Extract and inject trace context when crossing service boundaries
+
+The TracerClient is designed to be thread\-safe and can be shared across goroutines. It implements the Tracer interface.
+
+```go
+type TracerClient struct {
     // contains filtered or unexported fields
 }
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/setup.go#L67>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/setup.go#L70>)
 
 ```go
-func NewClient(cfg Config) (*Tracer, error)
+func NewClient(cfg Config) (*TracerClient, error)
 ```
 
-NewClient creates and initializes a new Tracer instance with OpenTelemetry. This function sets up the OpenTelemetry tracer provider with the provided configuration, configures trace exporters if enabled, and sets global OpenTelemetry settings.
+NewClient creates and initializes a new TracerClient instance with OpenTelemetry. This function sets up the OpenTelemetry tracer provider with the provided configuration, configures trace exporters if enabled, and sets global OpenTelemetry settings.
 
 Parameters:
 
 - cfg: Configuration for the tracer, including service name, environment, and export settings
-- logger: Logger for recording initialization events and errors
 
 Returns:
 
-- \*Tracer: A configured Tracer instance ready for creating spans and managing trace context
+- \*TracerClient: A configured TracerClient instance ready for creating spans and managing trace context
 
-If trace export is enabled in the configuration, this function will set up an OTLP HTTP exporter that sends traces to the configured endpoint. If export fails to initialize, it will log a fatal error.
+If trace export is enabled in the configuration, this function will set up an OTLP HTTP exporter that sends traces to the configured endpoint. If export fails to initialize, it will return an error.
 
 The function also configures resource attributes for the service, including:
 
@@ -325,18 +415,21 @@ cfg := tracer.Config{
     EnableExport: true,
 }
 
-tracerClient := tracer.NewClient(cfg, logger)
+tracerClient, err := tracer.NewClient(cfg)
+if err != nil {
+    log.Fatal(err)
+}
 
 // Use the tracer in your application
 ctx, span := tracerClient.StartSpan(context.Background(), "process-request")
 defer span.End()
 ```
 
-<a name="Tracer.GetCarrier"></a>
-### func \(\*Tracer\) [GetCarrier](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L288>)
+<a name="TracerClient.GetCarrier"></a>
+### func \(\*TracerClient\) [GetCarrier](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L231>)
 
 ```go
-func (t *Tracer) GetCarrier(ctx context.Context) map[string]string
+func (t *TracerClient) GetCarrier(ctx context.Context) map[string]string
 ```
 
 GetCarrier extracts the current trace context from a context object and returns it as a map that can be transmitted across service boundaries. This is essential for distributed tracing to maintain trace continuity across different services.
@@ -381,11 +474,11 @@ func makeHttpRequest(ctx context.Context, url string) (*http.Response, error) {
 }
 ```
 
-<a name="Tracer.SetCarrierOnContext"></a>
-### func \(\*Tracer\) [SetCarrierOnContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L341>)
+<a name="TracerClient.SetCarrierOnContext"></a>
+### func \(\*TracerClient\) [SetCarrierOnContext](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L284>)
 
 ```go
-func (t *Tracer) SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context
+func (t *TracerClient) SetCarrierOnContext(ctx context.Context, carrier map[string]string) context.Context
 ```
 
 SetCarrierOnContext extracts trace information from a carrier map and injects it into a context. This is the complement to GetCarrier and is typically used when receiving requests or messages from other services that include trace headers.
@@ -431,11 +524,11 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-<a name="Tracer.StartSpan"></a>
-### func \(\*Tracer\) [StartSpan](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L233>)
+<a name="TracerClient.StartSpan"></a>
+### func \(\*TracerClient\) [StartSpan](<https://github.com/Aleph-Alpha/std/blob/main/v1/tracer/utils.go#L176>)
 
 ```go
-func (t *Tracer) StartSpan(ctx context.Context, name string) (context.Context, Span)
+func (t *TracerClient) StartSpan(ctx context.Context, name string) (context.Context, Span)
 ```
 
 StartSpan creates a new span with the given name and returns an updated context containing the span, along with a Span interface. This is the primary method for creating spans to trace operations in your application.
