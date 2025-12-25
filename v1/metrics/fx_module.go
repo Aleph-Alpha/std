@@ -58,7 +58,7 @@ var FXModule = fx.Module("metrics",
 //
 // Note: This function is automatically invoked by the FXModule and does not need
 // to be called directly in application code.
-func RegisterMetricsLifecycle(lc fx.Lifecycle, m *Metrics, log *logger.Logger) {
+func RegisterMetricsLifecycle(lc fx.Lifecycle, m *Metrics, log *logger.LoggerClient) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			go func() {
