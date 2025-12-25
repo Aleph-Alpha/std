@@ -10,13 +10,21 @@ import (
 )
 
 // FXModule defines the Fx module for the metrics package.
-// This module integrates the Prometheus metrics server into an Fx-based application
-// by providing the Metrics factory and registering its lifecycle hooks.
+// This module integrates two separate Prometheus metrics servers into an Fx-based application
+// by providing the Metrics factory and registering lifecycle hooks for both servers.
 //
 // The module provides:
 // 1. *Metrics (concrete type) for direct use
 // 2. MetricsCollector interface for dependency injection
-// 3. Lifecycle management for the Prometheus HTTP server
+// 3. Lifecycle management for both system and application metrics HTTP servers
+//
+// System Metrics Endpoint (default: :9090):
+//   - Go runtime metrics (goroutines, memory, GC)
+//   - Process metrics (CPU, file descriptors)
+//   - Build info metrics
+//
+// Application Metrics Endpoint (default: :9091):
+//   - User-defined custom metrics created via CreateCounter, CreateGauge, etc.
 //
 // Usage:
 //
@@ -24,12 +32,16 @@ import (
 //	    metrics.FXModule,
 //	    fx.Provide(func() metrics.Config {
 //	        return metrics.Config{
-//	            Address:                ":9090",
-//	            EnableDefaultCollectors: true,
-//	            ServiceName:             "search-store",
+//	            SystemMetricsAddress:      ":9090",
+//	            ApplicationMetricsAddress: ":9091",
+//	            ServiceName:               "search-store",
 //	        }
 //	    }),
-//	    // other modules...
+//	    fx.Invoke(func(m metrics.MetricsCollector) {
+//	        // Create custom metrics
+//	        counter := m.CreateCounter("requests_total", "Total requests", []string{"endpoint"})
+//	        counter.WithLabelValues("/api/search").Inc()
+//	    }),
 //	)
 //
 // Dependencies required by this module:
@@ -48,39 +60,71 @@ var FXModule = fx.Module("metrics",
 )
 
 // RegisterMetricsLifecycle manages the startup and shutdown lifecycle
-// of the Prometheus metrics HTTP server.
+// of both Prometheus metrics HTTP servers (system and application).
 //
 // Parameters:
 //   - lc: The Fx lifecycle controller
-//   - m: The Metrics instance containing the HTTP server
+//   - m: The Metrics instance containing both HTTP servers
 //   - log: The logger instance for structured lifecycle logging (optional)
 //
 // The lifecycle hook:
-//   - OnStart: Launches the Prometheus HTTP server in a background goroutine.
-//   - OnStop: Gracefully shuts down the metrics server.
+//   - OnStart: Launches both metrics servers in background goroutines
+//   - OnStop: Gracefully shuts down both servers
 //
-// This ensures that metrics are available for scraping during the application's lifetime
-// and that the server shuts down cleanly when the application stops.
+// This ensures that both metrics endpoints are available for scraping during
+// the application's lifetime and shut down cleanly when the application stops.
 //
 // Note: This function is automatically invoked by the FXModule and does not need
 // to be called directly in application code.
 func RegisterMetricsLifecycle(lc fx.Lifecycle, m *Metrics, log *logger.LoggerClient) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			go func() {
-				log.Info("Starting Prometheus metrics server", nil, map[string]interface{}{
-					"address": m.Server.Addr,
-				})
+			// Start system metrics server if configured
+			if m.SystemServer != nil {
+				go func() {
+					log.Info("Starting system metrics server", nil, map[string]interface{}{
+						"address": m.SystemServer.Addr,
+					})
 
-				if err := m.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					log.Error("Error starting Prometheus metrics server", err, nil)
-				}
-			}()
+					if err := m.SystemServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+						log.Error("Error starting system metrics server", err, nil)
+					}
+				}()
+			}
+
+			// Start application metrics server if configured
+			if m.ApplicationServer != nil {
+				go func() {
+					log.Info("Starting application metrics server", nil, map[string]interface{}{
+						"address": m.ApplicationServer.Addr,
+					})
+
+					if err := m.ApplicationServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+						log.Error("Error starting application metrics server", err, nil)
+					}
+				}()
+			}
+
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			log.Info("Shutting down Prometheus metrics server", nil, nil)
-			return m.Server.Shutdown(ctx)
+			// Shutdown system metrics server
+			if m.SystemServer != nil {
+				log.Info("Shutting down system metrics server", nil, nil)
+				if err := m.SystemServer.Shutdown(ctx); err != nil {
+					log.Error("Error shutting down system metrics server", err, nil)
+				}
+			}
+
+			// Shutdown application metrics server
+			if m.ApplicationServer != nil {
+				log.Info("Shutting down application metrics server", nil, nil)
+				if err := m.ApplicationServer.Shutdown(ctx); err != nil {
+					log.Error("Error shutting down application metrics server", err, nil)
+				}
+			}
+
+			return nil
 		},
 	})
 }

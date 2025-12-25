@@ -8,109 +8,133 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Metrics encapsulates the Prometheus registry and HTTP server responsible
-// for exposing application metrics.
+// Metrics encapsulates two separate Prometheus registries and HTTP servers:
+// 1. System metrics (Go runtime, process, build info) - exposed on SystemServer
+// 2. Application metrics (user-defined custom metrics) - exposed on ApplicationServer
 //
-// This structure provides the components needed to register metrics collectors
-// and serve them via the /metrics HTTP endpoint for Prometheus scraping.
+// This separation allows different scrape configurations and access controls
+// for system-level vs application-level observability.
 type Metrics struct {
-	// Server defines the HTTP server used to expose the /metrics endpoint.
-	Server *http.Server
+	// SystemServer defines the HTTP server for the /metrics endpoint exposing
+	// Go runtime, process, and build info metrics.
+	// Endpoint: SystemMetricsAddress (default: :9090)
+	SystemServer *http.Server
 
-	// Registry is the Prometheus registry where all metrics are registered.
-	// Each service maintains its own isolated registry to prevent metric name collisions.
-	Registry *prometheus.Registry
+	// ApplicationServer defines the HTTP server for the /metrics endpoint exposing
+	// user-defined application metrics.
+	// Endpoint: ApplicationMetricsAddress (default: :9091)
+	ApplicationServer *http.Server
 
-	// Core built-in metrics
-	requestsTotal   *prometheus.CounterVec
-	requestDuration *prometheus.HistogramVec
-	cpuUsageGauge   *prometheus.GaugeVec
+	// SystemRegistry is the Prometheus registry for system-level metrics
+	// (Go runtime, process collectors, build info).
+	SystemRegistry *prometheus.Registry
+
+	// ApplicationRegistry is the Prometheus registry for user-defined metrics.
+	// All metrics created via CreateCounter, CreateGauge, CreateHistogram, CreateSummary
+	// are registered here.
+	ApplicationRegistry *prometheus.Registry
+
+	// wrappedApplicationRegisterer is the service-label-wrapped registerer used internally
+	// for registering application metrics with automatic service label.
+	wrappedApplicationRegisterer prometheus.Registerer
 }
 
 // NewMetrics initializes and returns a new instance of the Metrics struct.
-// It sets up a dedicated Prometheus registry, registers default system collectors,
-// wraps all metrics with a constant `service` label, and creates an HTTP server
-// exposing the /metrics endpoint.
+// It sets up two separate Prometheus registries and HTTP servers:
+//
+// 1. System Metrics Endpoint (default: :9090):
+//   - Go runtime metrics (goroutines, GC stats, heap usage)
+//   - Process metrics (CPU time, memory, file descriptors)
+//   - Build info metrics
+//
+// 2. Application Metrics Endpoint (default: :9091):
+//   - User-defined metrics created via CreateCounter, CreateGauge, etc.
+//   - No default metrics - fully controlled by the application
 //
 // Parameters:
-//   - cfg: Configuration for the metrics server, including listening address,
-//     service name, and whether to enable default collectors.
+//   - cfg: Configuration for the metrics servers, including addresses and service name
 //
 // Returns:
 //   - *Metrics: A configured Metrics instance ready for lifecycle management
-//     and Fx module integration.
+//     and Fx module integration
 //
-// The setup includes:
-//   - A dedicated Prometheus registry for the service
-//   - Automatic registration of Go, process, and build info collectors
-//   - A global "service" label applied to all metrics for easier aggregation
-//   - An HTTP server exposing the metrics endpoint
+// Both registries automatically wrap all metrics with a constant `service` label
+// for easier aggregation and filtering in multi-service environments.
 //
 // Example:
 //
 //	cfg := metrics.Config{
-//	    Address:              ":9090",
-//	    ServiceName:           "document-index",
-//	    EnableDefaultCollectors: true,
+//	    SystemMetricsAddress:      ":9090",
+//	    ApplicationMetricsAddress: ":9091",
+//	    ServiceName:               "document-index",
 //	}
 //	metricsInstance := metrics.NewMetrics(cfg)
-//	go metricsInstance.Server.ListenAndServe()
+//	go metricsInstance.SystemServer.ListenAndServe()
+//	go metricsInstance.ApplicationServer.ListenAndServe()
 //
-// Access metrics at: http://localhost:9090/metrics
+// Access metrics at:
+//   - System metrics: http://localhost:9090/metrics
+//   - Application metrics: http://localhost:9091/metrics
 func NewMetrics(cfg Config) *Metrics {
-	// Create a new isolated Prometheus registry for this service.
-	// This avoids metric collisions when multiple services run in the same process.
-	registry := prometheus.NewRegistry()
+	m := &Metrics{}
 
-	// Wrap the registry with a constant label for consistent observability.
-	// All metrics emitted by this service will automatically include the label:
-	//   service="<cfg.ServiceName>"
-	wrappedRegistry := prometheus.WrapRegistererWith(
-		prometheus.Labels{"service": cfg.ServiceName},
-		registry,
-	)
-
-	// Initialize the metrics struct
-	m := &Metrics{
-		Registry: registry,
+	// Determine system metrics address
+	var systemAddr string
+	if cfg.SystemMetricsAddress != nil {
+		systemAddr = *cfg.SystemMetricsAddress
+	} else {
+		systemAddr = DefaultSystemMetricsAddress
 	}
 
-	// Define default metrics using helpers
-	m.requestsTotal = createCounterVec("requests_total", "Total number of processed requests", []string{"status"})
-	m.requestDuration = createHistogramVec("request_duration_seconds", "Duration of HTTP requests in seconds", []string{"endpoint"}, prometheus.DefBuckets)
-	m.cpuUsageGauge = createGaugeVec("cpu_usage_percent", "Current CPU usage percentage per core", []string{"core"})
+	// Setup system metrics registry and server (if not explicitly disabled)
+	if systemAddr != "" {
+		systemRegistry := prometheus.NewRegistry()
 
-	// Register the metrics
-	wrappedRegistry.MustRegister(
-		m.requestsTotal,
-		m.requestDuration,
-		m.cpuUsageGauge,
-	)
+		// Wrap with service label
+		wrappedSystemRegistry := prometheus.WrapRegistererWith(
+			prometheus.Labels{"service": cfg.ServiceName},
+			systemRegistry,
+		)
 
-	// Register standard collectors if enabled.
-	// These provide essential runtime metrics for Go processes:
-	//   - GoCollector: Memory usage, goroutines, GC stats
-	//   - ProcessCollector: CPU, file descriptors, memory stats
-	//   - BuildInfoCollector: Binary version/build info
-	if cfg.EnableDefaultCollectors {
-		wrappedRegistry.MustRegister(
+		// Register standard system collectors
+		wrappedSystemRegistry.MustRegister(
 			collectors.NewGoCollector(),
 			collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 			collectors.NewBuildInfoCollector(),
 		)
+
+		m.SystemRegistry = systemRegistry
+		m.SystemServer = &http.Server{
+			Addr:    systemAddr,
+			Handler: promhttp.HandlerFor(systemRegistry, promhttp.HandlerOpts{}),
+		}
 	}
 
-	// Create an HTTP handler that serves metrics from the registry.
-	// The handler exposes metrics at /metrics for Prometheus scraping.
-	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
-
-	// Configure the HTTP server for exposing metrics.
-	server := &http.Server{
-		Addr:    cfg.Address,
-		Handler: handler,
+	// Determine application metrics address
+	var appAddr string
+	if cfg.ApplicationMetricsAddress != nil {
+		appAddr = *cfg.ApplicationMetricsAddress
+	} else {
+		appAddr = DefaultApplicationMetricsAddress
 	}
 
-	// Return the fully configured metrics instance.
-	m.Server = server
+	// Setup application metrics registry and server (if not explicitly disabled)
+	if appAddr != "" {
+		applicationRegistry := prometheus.NewRegistry()
+
+		// Wrap with service label for auto-labeling
+		wrappedApplicationRegisterer := prometheus.WrapRegistererWith(
+			prometheus.Labels{"service": cfg.ServiceName},
+			applicationRegistry,
+		)
+
+		m.ApplicationRegistry = applicationRegistry
+		m.wrappedApplicationRegisterer = wrappedApplicationRegisterer
+		m.ApplicationServer = &http.Server{
+			Addr:    appAddr,
+			Handler: promhttp.HandlerFor(applicationRegistry, promhttp.HandlerOpts{}),
+		}
+	}
+
 	return m
 }

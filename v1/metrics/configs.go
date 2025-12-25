@@ -1,50 +1,55 @@
 package metrics
 
-// Default port for metrics server if none is specified.
-const DefaultMetricsAddress = ":9090"
+// Default addresses for metrics servers if none is specified.
+const (
+	DefaultSystemMetricsAddress      = ":9090"
+	DefaultApplicationMetricsAddress = ":9091"
+)
 
-// Config defines the configuration structure for the Prometheus metrics server.
+// Config defines the configuration structure for the Prometheus metrics servers.
 // It contains settings that control how metrics are exposed and collected.
+//
+// The package provides two separate metrics endpoints:
+// 1. System Metrics Endpoint (default: :9090): Exposes Go runtime, process, and build info metrics
+// 2. Application Metrics Endpoint (default: :9091): Exposes user-defined application-specific metrics
 type Config struct {
-	// Address determines the network address where the Prometheus
-	// metrics HTTP server listens.
+	// SystemMetricsAddress determines the network address where the system
+	// metrics HTTP server listens. This endpoint exposes Go runtime,
+	// process, and build info metrics.
 	//
 	// Example values:
 	//   - ":9090"   → Listen on all interfaces, port 9090
-	//   - "127.0.0.1:9100" → Listen only on localhost, port 9100
+	//   - "127.0.0.1:9090" → Listen only on localhost, port 9090
+	//   - nil (or omitted) → Use default ":9090"
+	//
+	// To disable the system metrics endpoint, use an empty string pointer:
+	//   SystemMetricsAddress: ptr(""),
 	//
 	// This setting can be configured via:
-	//   - YAML configuration with the "address" key
-	//   - Environment variable METRICS_ADDRESS
+	//   - YAML configuration with the "system_metrics_address" key
+	//   - Environment variable METRICS_SYSTEM_ADDRESS
 	//
 	// Default: ":9090"
-	Address string `yaml:"address" envconfig:"METRICS_ADDRESS"`
+	SystemMetricsAddress *string `yaml:"system_metrics_address" envconfig:"METRICS_SYSTEM_ADDRESS"`
 
-	// EnableDefaultCollectors controls whether the built-in Go runtime
-	// and process metrics are automatically registered.
+	// ApplicationMetricsAddress determines the network address where the
+	// application metrics HTTP server listens. This endpoint exposes
+	// user-defined custom metrics created via CreateCounter, CreateGauge, etc.
 	//
-	// When true, metrics such as goroutine count, GC stats, and CPU usage
-	// will be included automatically. Disable only if you want full
-	// manual control over registered collectors.
+	// Example values:
+	//   - ":9091"   → Listen on all interfaces, port 9091
+	//   - "127.0.0.1:9091" → Listen only on localhost, port 9091
+	//   - nil (or omitted) → Use default ":9091"
+	//
+	// To disable the application metrics endpoint, use an empty string pointer:
+	//   ApplicationMetricsAddress: ptr(""),
 	//
 	// This setting can be configured via:
-	//   - YAML configuration with the "enable_default_collectors" key
-	//   - Environment variable METRICS_ENABLE_DEFAULT_COLLECTORS
+	//   - YAML configuration with the "application_metrics_address" key
+	//   - Environment variable METRICS_APPLICATION_ADDRESS
 	//
-	// Default: true
-	EnableDefaultCollectors bool `yaml:"enable_default_collectors" envconfig:"METRICS_ENABLE_DEFAULT_COLLECTORS"`
-
-	// Namespace sets a global prefix for all metrics registered by this service.
-	// Useful when running multiple services in the same Prometheus cluster.
-	//
-	// Example:
-	//   Namespace: "pharia_data"
-	//   → Metric name becomes "pharia_data_http_requests_total"
-	//
-	// This setting can be configured via:
-	//   - YAML configuration with the "namespace" key
-	//   - Environment variable METRICS_NAMESPACE
-	Namespace string `yaml:"namespace" envconfig:"METRICS_NAMESPACE"`
+	// Default: ":9091"
+	ApplicationMetricsAddress *string `yaml:"application_metrics_address" envconfig:"METRICS_APPLICATION_ADDRESS"`
 
 	// ServiceName identifies the service exposing metrics.
 	// This is used as a common label in all metrics to help
@@ -58,4 +63,18 @@ type Config struct {
 	//   - YAML configuration with the "service_name" key
 	//   - Environment variable METRICS_SERVICE_NAME
 	ServiceName string `yaml:"service_name" envconfig:"METRICS_SERVICE_NAME"`
+}
+
+// Ptr returns a pointer to the given string value.
+// Helper function for disabling endpoints in configuration.
+//
+// Example:
+//
+//	cfg := metrics.Config{
+//	    SystemMetricsAddress: metrics.Ptr(""),     // Explicitly disable
+//	    ApplicationMetricsAddress: nil,            // Use default
+//	    ServiceName: "my-service",
+//	}
+func Ptr(s string) *string {
+	return &s
 }
