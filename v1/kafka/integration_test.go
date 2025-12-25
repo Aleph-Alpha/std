@@ -37,7 +37,7 @@ func TestKafkaPublish(t *testing.T) {
 		}
 	}()
 
-	var client *Kafka
+	var client *KafkaClient
 
 	cfg := Config{
 		Brokers:    brokers,
@@ -91,7 +91,7 @@ func TestKafkaConsumeWithCommit(t *testing.T) {
 		IsConsumer: false,
 	}
 
-	var producer *Kafka
+	var producer *KafkaClient
 	producerApp := fx.New(
 		FXModule,
 		fx.Provide(
@@ -114,7 +114,7 @@ func TestKafkaConsumeWithCommit(t *testing.T) {
 		IsConsumer: true,
 	}
 
-	var consumer *Kafka
+	var consumer *KafkaClient
 	consumerApp := fx.New(
 		FXModule,
 		fx.Provide(
@@ -194,7 +194,7 @@ func TestKafkaPublishWithHeaders(t *testing.T) {
 		IsConsumer: false,
 	}
 
-	var producer *Kafka
+	var producer *KafkaClient
 	producerApp := fx.New(
 		FXModule,
 		fx.Provide(
@@ -216,7 +216,7 @@ func TestKafkaPublishWithHeaders(t *testing.T) {
 		IsConsumer: true,
 	}
 
-	var consumer *Kafka
+	var consumer *KafkaClient
 	consumerApp := fx.New(
 		FXModule,
 		fx.Provide(
@@ -302,7 +302,7 @@ func TestKafkaConsumerContextCancellation(t *testing.T) {
 		}
 	}()
 
-	var client *Kafka
+	var client *KafkaClient
 
 	cfg := Config{
 		Brokers:    brokers,
@@ -352,7 +352,7 @@ func TestKafkaConsumerContextCancellation(t *testing.T) {
 
 // TestKafkaErrorTranslation verifies error translation works correctly
 func TestKafkaErrorTranslation(t *testing.T) {
-	k := &Kafka{}
+	k := &KafkaClient{}
 
 	tests := []struct {
 		name     string
@@ -397,7 +397,7 @@ func TestKafkaErrorTranslation(t *testing.T) {
 
 // TestKafkaErrorClassification verifies error classification methods
 func TestKafkaErrorClassification(t *testing.T) {
-	k := &Kafka{}
+	k := &KafkaClient{}
 
 	// Test retryable errors
 	assert.True(t, k.IsRetryableError(ErrConnectionFailed))

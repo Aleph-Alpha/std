@@ -513,7 +513,7 @@ func getDefaultDeserializer(dataType string) Deserializer {
 
 // SetDefaultSerializers sets default serializers on the Kafka client based on config DataType
 // This is called automatically during client creation if no serializers are provided
-func (k *Kafka) SetDefaultSerializers() {
+func (k *KafkaClient) SetDefaultSerializers() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
