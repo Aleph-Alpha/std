@@ -213,5 +213,7 @@
 //
 // Thread Safety:
 //
-// All methods on the Minio type are safe for concurrent use by multiple goroutines.
+// All methods on the MinioClient type are safe for concurrent use by multiple goroutines.
+// The underlying `*minio.Client` and `*minio.Core` pointers are stored in atomic pointers and
+// can be swapped during reconnection without racing with concurrent operations.
 package minio

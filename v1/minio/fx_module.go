@@ -140,8 +140,4 @@ func (m *MinioClient) GracefulShutdown() {
 	m.closeShutdownOnce.Do(func() {
 		close(m.shutdownSignal)
 	})
-
-	m.closeReconnectOnce.Do(func() {
-		close(m.reconnectSignal)
-	})
 }

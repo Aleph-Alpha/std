@@ -35,6 +35,11 @@ import (
 //	    fmt.Printf("Uploaded %d bytes\n", size)
 //	}
 func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error) {
+	c := m.client.Load()
+	if c == nil {
+		return 0, ErrConnectionFailed
+	}
+
 	actualSize := unknownSize
 	// If size was provided, use it
 	if len(size) > 0 && size[0] != 0 {
@@ -44,7 +49,7 @@ func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reade
 	// Extract tracing information from context or generate new IDs
 	traceMetadata := extractTraceMetadataFromContext(ctx)
 
-	response, err := m.Client.PutObject(ctx, m.cfg.Connection.BucketName, objectKey, reader, actualSize, minio.PutObjectOptions{
+	response, err := c.PutObject(ctx, m.cfg.Connection.BucketName, objectKey, reader, actualSize, minio.PutObjectOptions{
 		PartSize:     m.cfg.UploadConfig.MinPartSize,
 		UserMetadata: traceMetadata,
 	})
@@ -79,8 +84,13 @@ func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reade
 //	    ioutil.WriteFile("report.pdf", data, 0644)
 //	}
 func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error) {
+	c := m.client.Load()
+	if c == nil {
+		return nil, ErrConnectionFailed
+	}
+
 	// Get the object with a single call
-	reader, err := m.Client.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
+	reader, err := c.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get object: %w", err)
 	}
@@ -150,7 +160,13 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 		defer close(errCh)
 
 		// Get the object
-		reader, err := m.Client.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
+		c := m.client.Load()
+		if c == nil {
+			errCh <- ErrConnectionFailed
+			return
+		}
+
+		reader, err := c.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
 		if err != nil {
 			errCh <- fmt.Errorf("failed to get object: %w", err)
 			return
@@ -223,6 +239,9 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 //	    fmt.Println("Object successfully deleted")
 //	}
 func (m *MinioClient) Delete(ctx context.Context, objectKey string) error {
-	err := m.Client.RemoveObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.RemoveObjectOptions{})
-	return err
+	c := m.client.Load()
+	if c == nil {
+		return ErrConnectionFailed
+	}
+	return c.RemoveObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.RemoveObjectOptions{})
 }

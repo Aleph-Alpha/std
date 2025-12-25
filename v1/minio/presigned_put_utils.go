@@ -335,6 +335,11 @@ func (m *MinioClient) GenerateMultipartUploadURLs(
 //   - string: The upload ID assigned by MinIO/S3
 //   - error: Any error that occurred during initialization
 func (m *MinioClient) initiateMultipartUpload(ctx context.Context, objectKey, contentType string) (string, error) {
+	core := m.coreClient.Load()
+	if core == nil {
+		return "", ErrConnectionFailed
+	}
+
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -348,7 +353,7 @@ func (m *MinioClient) initiateMultipartUpload(ctx context.Context, objectKey, co
 		UserMetadata: traceMetadata,
 	}
 
-	uploadID, err := m.CoreClient.NewMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, opts)
+	uploadID, err := core.NewMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, opts)
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize multipart upload: %w", err)
 	}
@@ -371,13 +376,18 @@ func (m *MinioClient) initiateMultipartUpload(ctx context.Context, objectKey, co
 //   - string: The presigned URL for uploading the part
 //   - error: Any error that occurred during URL generation
 func (m *MinioClient) generatePartPresignedURL(ctx context.Context, objectKey, uploadID string, partNumber int, expiry time.Duration) (string, error) {
+	c := m.client.Load()
+	if c == nil {
+		return "", ErrConnectionFailed
+	}
+
 	// Create request parameters for part upload
 	reqParams := make(url.Values)
 	reqParams.Set("partNumber", strconv.Itoa(partNumber))
 	reqParams.Set("uploadId", uploadID)
 
 	// Use Presign method for more control over the request
-	presignedURL, err := m.Client.Presign(ctx, "PUT", m.cfg.Connection.BucketName, objectKey, expiry, reqParams)
+	presignedURL, err := c.Presign(ctx, "PUT", m.cfg.Connection.BucketName, objectKey, expiry, reqParams)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate presigned URL for part %d: %w", partNumber, err)
 	}
@@ -409,7 +419,12 @@ func (m *MinioClient) generatePartPresignedURL(ctx context.Context, objectKey, u
 //
 //	err := minioClient.AbortMultipartUpload(ctx, "uploads/myfile.zip", uploadID)
 func (m *MinioClient) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error {
-	err := m.CoreClient.AbortMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, uploadID)
+	core := m.coreClient.Load()
+	if core == nil {
+		return ErrConnectionFailed
+	}
+
+	err := core.AbortMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to abort multipart upload: %w", err)
 	}
@@ -474,7 +489,12 @@ func (m *MinioClient) CompleteMultipartUpload(ctx context.Context, objectKey, up
 	}
 
 	// Complete the multipart upload
-	_, err := m.CoreClient.CompleteMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, uploadID, completeParts, minio.PutObjectOptions{})
+	core := m.coreClient.Load()
+	if core == nil {
+		return ErrConnectionFailed
+	}
+
+	_, err := core.CompleteMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, uploadID, completeParts, minio.PutObjectOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to complete multipart upload: %w", err)
 	}
@@ -506,7 +526,12 @@ func (m *MinioClient) ListIncompleteUploads(ctx context.Context, prefix string) 
 	var incompleteUploads []minio.ObjectMultipartInfo
 
 	// List incomplete uploads
-	objectCh := m.CoreClient.ListIncompleteUploads(ctx, m.cfg.Connection.BucketName, prefix, true)
+	core := m.coreClient.Load()
+	if core == nil {
+		return nil, ErrConnectionFailed
+	}
+
+	objectCh := core.ListIncompleteUploads(ctx, m.cfg.Connection.BucketName, prefix, true)
 
 	for object := range objectCh {
 		if object.Err != nil {
@@ -572,7 +597,12 @@ func (m *MinioClient) CleanupIncompleteUploads(ctx context.Context, prefix strin
 //	    fmt.Printf("Use this URL to check if the object exists: %s\n", url)
 //	}
 func (m *MinioClient) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error) {
-	presignedUrl, err := m.Client.PresignedHeadObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
+	c := m.client.Load()
+	if c == nil {
+		return "", ErrConnectionFailed
+	}
+
+	presignedUrl, err := c.PresignedHeadObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
 	if err != nil {
 		return "", err
 	}
@@ -602,7 +632,12 @@ func (m *MinioClient) PreSignedHeadObject(ctx context.Context, objectKey string)
 //	    fmt.Printf("Upload link: %s\n", url)
 //	}
 func (m *MinioClient) PreSignedPut(ctx context.Context, objectKey string) (string, error) {
-	presignedUrl, err := m.Client.PresignedPutObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration)
+	c := m.client.Load()
+	if c == nil {
+		return "", ErrConnectionFailed
+	}
+
+	presignedUrl, err := c.PresignedPutObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration)
 	if err != nil {
 		return "", err
 	}

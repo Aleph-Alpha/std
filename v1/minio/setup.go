@@ -155,24 +155,25 @@ func (f *fallbackLogger) logWithLevel(level, msg string, err error, fields ...ma
 	f.stdLogger.Print(logMsg)
 }
 
-// Minio represents a MinIO client with additional functionality.
+// MinioClient represents a MinIO client with additional functionality.
 // It wraps the standard MinIO client with features for connection management,
-// reconnection handling, and thread-safety.
+// reconnection handling, and resource monitoring.
 type MinioClient struct {
-	// Client is the standard MinIO client for high-level operations
-	Client *minio.Client
+	// client is the standard MinIO client for high-level operations.
+	// It is stored in an atomic pointer so it can be swapped during reconnection
+	// without racing with concurrent operations.
+	client atomic.Pointer[minio.Client]
 
-	// CoreClient provides access to low-level operations not available in the standard client
-	CoreClient *minio.Core
+	// coreClient provides access to low-level operations not available in the standard client.
+	// It is stored in an atomic pointer so it can be swapped during reconnection
+	// without racing with concurrent operations.
+	coreClient atomic.Pointer[minio.Core]
 
 	// cfg holds the configuration for this MinIO client instance
 	cfg Config
 
 	// logger provides structured logging capabilities
 	logger MinioLogger
-
-	// mu provides thread-safety for client operations
-	mu sync.RWMutex
 
 	// shutdownSignal is used to signal the connection monitor to stop
 	shutdownSignal chan struct{}
@@ -186,8 +187,7 @@ type MinioClient struct {
 	// resourceMonitor tracks resource usage and performance metrics
 	resourceMonitor *ResourceMonitor
 
-	closeShutdownOnce  sync.Once
-	closeReconnectOnce sync.Once
+	closeShutdownOnce sync.Once
 }
 
 // BufferPoolConfig contains configuration for the buffer pool
@@ -690,15 +690,15 @@ func NewClient(config Config, logger MinioLogger) (*MinioClient, error) {
 	resourceMonitor := NewResourceMonitor(bufferPool)
 
 	minioClient := &MinioClient{
-		Client:          client,
-		CoreClient:      coreClient,
 		cfg:             config,
 		logger:          logger,
 		shutdownSignal:  make(chan struct{}),
-		reconnectSignal: make(chan error),
+		reconnectSignal: make(chan error, 1),
 		bufferPool:      bufferPool,
 		resourceMonitor: resourceMonitor,
 	}
+	minioClient.client.Store(client)
+	minioClient.coreClient.Store(coreClient)
 
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -731,9 +731,6 @@ func NewClient(config Config, logger MinioLogger) (*MinioClient, error) {
 // Parameters:
 //   - ctx: Context for controlling the monitor's lifecycle
 func (m *MinioClient) monitorConnection(ctx context.Context) {
-	defer m.closeReconnectOnce.Do(func() {
-		close(m.reconnectSignal)
-	})
 	ticker := time.NewTicker(connectionHealthCheckInterval)
 	defer ticker.Stop()
 
@@ -773,9 +770,6 @@ func (m *MinioClient) monitorConnection(ctx context.Context) {
 // Parameters:
 //   - ctx: Context for controlling the retry loop's lifecycle
 func (m *MinioClient) retryConnection(ctx context.Context) {
-	defer m.closeShutdownOnce.Do(func() {
-		close(m.shutdownSignal)
-	})
 outerLoop:
 	for {
 		select {
@@ -787,7 +781,10 @@ outerLoop:
 			m.logger.Info("Stopping MinIO connection retry loop due to context cancellation", nil, nil)
 			return
 
-		case err := <-m.reconnectSignal:
+		case err, ok := <-m.reconnectSignal:
+			if !ok {
+				return
+			}
 			m.logger.Warn("MinIO connection issue detected, attempting reconnection", err, map[string]any{
 				"endpoint": m.cfg.Connection.Endpoint,
 			})
@@ -830,12 +827,13 @@ outerLoop:
 						continue reconnectLoop
 					}
 
-					// Check if the new connection is healthy
-					m.mu.Lock()
-					m.Client = newClient
-					m.mu.Unlock()
-
-					err = m.validateConnection(ctxReconnect)
+					// Validate the new connection before swapping pointers.
+					// Prefer bucket-scoped validation to avoid requiring ListAllMyBuckets permissions.
+					if bucket := m.cfg.Connection.BucketName; bucket != "" {
+						_, err = newClient.BucketExists(ctxReconnect, bucket)
+					} else {
+						_, err = newClient.ListBuckets(ctxReconnect)
+					}
 					if err != nil {
 						cancel() // Cancel the context to free resources
 						m.logger.Error("MinIO connection validation failed", err, nil)
@@ -844,16 +842,19 @@ outerLoop:
 					}
 
 					// Update the client references
-					m.mu.Lock()
-					m.Client = newClient
-					m.CoreClient = newCoreClient
-					m.mu.Unlock()
+					oldClient := m.client.Load()
+					oldCoreClient := m.coreClient.Load()
+					m.client.Store(newClient)
+					m.coreClient.Store(newCoreClient)
 
 					// Verify bucket existence after reconnection
 					err = m.ensureBucketExists(ctxReconnect)
 					cancel() // Cancel the context to free resources
 
 					if err != nil {
+						// Revert to the previous clients to avoid leaving the instance in a broken state.
+						m.client.Store(oldClient)
+						m.coreClient.Store(oldCoreClient)
 						m.logger.Error("Failed to verify bucket after reconnection", err, nil)
 						time.Sleep(time.Second)
 						continue reconnectLoop
@@ -947,13 +948,20 @@ func (m *MinioClient) validateConnection(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// Check if we can list buckets (requires minimal permissions)
-	_, err := m.Client.ListBuckets(ctx)
-	if err != nil {
+	c := m.client.Load()
+	if c == nil {
+		return ErrConnectionFailed
+	}
+
+	// Prefer bucket-scoped validation so credentials do not need ListAllMyBuckets.
+	if bucket := m.cfg.Connection.BucketName; bucket != "" {
+		_, err := c.BucketExists(ctx, bucket)
 		return err
 	}
 
-	return nil
+	// Fallback: if no bucket configured, validate by listing buckets.
+	_, err := c.ListBuckets(ctx)
+	return err
 }
 
 // ensureBucketExists checks if the configured bucket exists and creates it if necessary.
@@ -974,7 +982,12 @@ func (m *MinioClient) ensureBucketExists(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	exists, err := m.Client.BucketExists(ctx, bucketName)
+	c := m.client.Load()
+	if c == nil {
+		return ErrConnectionFailed
+	}
+
+	exists, err := c.BucketExists(ctx, bucketName)
 	if err != nil {
 		return fmt.Errorf("failed to check if bucket exists, bucket: %v, err: %w", bucketName, err)
 	}
@@ -985,7 +998,7 @@ func (m *MinioClient) ensureBucketExists(ctx context.Context) error {
 			"region": m.cfg.Connection.Region,
 		})
 
-		err = m.Client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{
+		err = c.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{
 			Region: m.cfg.Connection.Region,
 		})
 
