@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/Aleph-Alpha/std/compare/v0.11.1...v0.12.0) (2025-12-25)
+
+
+### Features
+
+* Provide Interfaces in FX Modules ([#38](https://github.com/Aleph-Alpha/std/issues/38)) ([2b25bae](https://github.com/Aleph-Alpha/std/commit/2b25baeea4a3c95b00054e53f3d9b26bdc95e4b0))
+* Refactor Metrics Package: Dual Endpoints + Interface-Based API ([#40](https://github.com/Aleph-Alpha/std/issues/40)) ([3bd349f](https://github.com/Aleph-Alpha/std/commit/3bd349fa1b885ea59918d5592e4ff54e29e0d3b6))
+
 ## [0.11.1](https://github.com/Aleph-Alpha/std/compare/v0.11.0...v0.11.1) (2025-12-24)
 
 
