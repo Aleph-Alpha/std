@@ -168,7 +168,7 @@ func (m *multipartUploadImpl) IsExpired() bool {
 // updateUploadConfig updates the UploadConfig with multipart-specific settings.
 // This method ensures that the upload configuration has appropriate default values
 // if they haven't been explicitly set.
-func (m *Minio) updateUploadConfig() {
+func (m *MinioClient) updateUploadConfig() {
 	// Set default values if not provided
 	if m.cfg.UploadConfig.MaxObjectSize == 0 {
 		m.cfg.UploadConfig.MaxObjectSize = MaxObjectSize
@@ -193,7 +193,7 @@ func (m *Minio) updateUploadConfig() {
 // Returns:
 //   - partSize: Recommended size for each part in bytes
 //   - partCount: Number of parts needed with the recommended part size
-func (m *Minio) calculateOptimalPartSize(fileSize int64) (partSize int64, partCount int) {
+func (m *MinioClient) calculateOptimalPartSize(fileSize int64) (partSize int64, partCount int) {
 	// Default to MinIO minimum (5 MiB)
 	minPartSize := minPartSizeForUpload
 	if m.cfg.UploadConfig.MinPartSize > 0 {
@@ -248,7 +248,7 @@ func (m *Minio) calculateOptimalPartSize(fileSize int64) (partSize int64, partCo
 //	    "application/zip",
 //	    2*time.Hour,
 //	)
-func (m *Minio) GenerateMultipartUploadURLs(
+func (m *MinioClient) GenerateMultipartUploadURLs(
 	ctx context.Context,
 	objectKey string,
 	fileSize int64,
@@ -334,7 +334,7 @@ func (m *Minio) GenerateMultipartUploadURLs(
 // Returns:
 //   - string: The upload ID assigned by MinIO/S3
 //   - error: Any error that occurred during initialization
-func (m *Minio) initiateMultipartUpload(ctx context.Context, objectKey, contentType string) (string, error) {
+func (m *MinioClient) initiateMultipartUpload(ctx context.Context, objectKey, contentType string) (string, error) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -370,7 +370,7 @@ func (m *Minio) initiateMultipartUpload(ctx context.Context, objectKey, contentT
 // Returns:
 //   - string: The presigned URL for uploading the part
 //   - error: Any error that occurred during URL generation
-func (m *Minio) generatePartPresignedURL(ctx context.Context, objectKey, uploadID string, partNumber int, expiry time.Duration) (string, error) {
+func (m *MinioClient) generatePartPresignedURL(ctx context.Context, objectKey, uploadID string, partNumber int, expiry time.Duration) (string, error) {
 	// Create request parameters for part upload
 	reqParams := make(url.Values)
 	reqParams.Set("partNumber", strconv.Itoa(partNumber))
@@ -408,7 +408,7 @@ func (m *Minio) generatePartPresignedURL(ctx context.Context, objectKey, uploadI
 // Example:
 //
 //	err := minioClient.AbortMultipartUpload(ctx, "uploads/myfile.zip", uploadID)
-func (m *Minio) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error {
+func (m *MinioClient) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error {
 	err := m.CoreClient.AbortMultipartUpload(ctx, m.cfg.Connection.BucketName, objectKey, uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to abort multipart upload: %w", err)
@@ -438,7 +438,7 @@ func (m *Minio) AbortMultipartUpload(ctx context.Context, objectKey, uploadID st
 //	    []int{1, 2, 3},
 //	    []string{"etag1", "etag2", "etag3"},
 //	)
-func (m *Minio) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error {
+func (m *MinioClient) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error {
 	if len(partNumbers) == 0 || len(etags) == 0 {
 		return fmt.Errorf("cannot complete multipart upload with no parts")
 	}
@@ -502,7 +502,7 @@ func (m *Minio) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID
 //	        fmt.Printf("Incomplete upload: %s, started: %v\n", upload.Key, upload.Initiated)
 //	    }
 //	}
-func (m *Minio) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error) {
+func (m *MinioClient) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error) {
 	var incompleteUploads []minio.ObjectMultipartInfo
 
 	// List incomplete uploads
@@ -532,7 +532,7 @@ func (m *Minio) ListIncompleteUploads(ctx context.Context, prefix string) ([]min
 //
 //	// Abort all incomplete uploads in the "uploads/" prefix that are older than 24 hours
 //	err := minioClient.CleanupIncompleteUploads(ctx, "uploads/", 24*time.Hour)
-func (m *Minio) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error {
+func (m *MinioClient) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error {
 	uploads, err := m.ListIncompleteUploads(ctx, prefix)
 	if err != nil {
 		return err
@@ -571,7 +571,7 @@ func (m *Minio) CleanupIncompleteUploads(ctx context.Context, prefix string, old
 //	if err == nil {
 //	    fmt.Printf("Use this URL to check if the object exists: %s\n", url)
 //	}
-func (m *Minio) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error) {
+func (m *MinioClient) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error) {
 	presignedUrl, err := m.Client.PresignedHeadObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
 	if err != nil {
 		return "", err
@@ -601,7 +601,7 @@ func (m *Minio) PreSignedHeadObject(ctx context.Context, objectKey string) (stri
 //	if err == nil {
 //	    fmt.Printf("Upload link: %s\n", url)
 //	}
-func (m *Minio) PreSignedPut(ctx context.Context, objectKey string) (string, error) {
+func (m *MinioClient) PreSignedPut(ctx context.Context, objectKey string) (string, error) {
 	presignedUrl, err := m.Client.PresignedPutObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration)
 	if err != nil {
 		return "", err

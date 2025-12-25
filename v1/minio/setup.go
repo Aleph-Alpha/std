@@ -158,7 +158,7 @@ func (f *fallbackLogger) logWithLevel(level, msg string, err error, fields ...ma
 // Minio represents a MinIO client with additional functionality.
 // It wraps the standard MinIO client with features for connection management,
 // reconnection handling, and thread-safety.
-type Minio struct {
+type MinioClient struct {
 	// Client is the standard MinIO client for high-level operations
 	Client *minio.Client
 
@@ -641,7 +641,7 @@ func (rm *ResourceMonitor) ResetStats() {
 //   - config: Configuration for the MinIO client
 //   - logger: Optional logger for recording operations and errors. If nil, a fallback logger will be used.
 //
-// Returns a configured and validated MinIO client or an error if initialization fails.
+// Returns a configured and validated MinioClient or an error if initialization fails.
 //
 // Example:
 //
@@ -656,7 +656,7 @@ func (rm *ResourceMonitor) ResetStats() {
 //	if err != nil {
 //	    return fmt.Errorf("failed to initialize MinIO client: %w", err)
 //	}
-func NewClient(config Config, logger MinioLogger) (*Minio, error) {
+func NewClient(config Config, logger MinioLogger) (*MinioClient, error) {
 	// Use fallback logger if none provided
 	if logger == nil {
 		logger = newFallbackLogger()
@@ -689,7 +689,7 @@ func NewClient(config Config, logger MinioLogger) (*Minio, error) {
 	bufferPool := NewBufferPool()
 	resourceMonitor := NewResourceMonitor(bufferPool)
 
-	minioClient := &Minio{
+	minioClient := &MinioClient{
 		Client:          client,
 		CoreClient:      coreClient,
 		cfg:             config,
@@ -730,7 +730,7 @@ func NewClient(config Config, logger MinioLogger) (*Minio, error) {
 //
 // Parameters:
 //   - ctx: Context for controlling the monitor's lifecycle
-func (m *Minio) monitorConnection(ctx context.Context) {
+func (m *MinioClient) monitorConnection(ctx context.Context) {
 	defer m.closeReconnectOnce.Do(func() {
 		close(m.reconnectSignal)
 	})
@@ -772,7 +772,7 @@ func (m *Minio) monitorConnection(ctx context.Context) {
 //
 // Parameters:
 //   - ctx: Context for controlling the retry loop's lifecycle
-func (m *Minio) retryConnection(ctx context.Context) {
+func (m *MinioClient) retryConnection(ctx context.Context) {
 	defer m.closeShutdownOnce.Do(func() {
 		close(m.shutdownSignal)
 	})
@@ -942,7 +942,7 @@ func connectToMinioCore(cfg Config, logger MinioLogger) (*minio.Core, error) {
 //   - ctx: Context for controlling the validation operation
 //
 // Returns nil if the connection is valid, or an error if the validation fails.
-func (m *Minio) validateConnection(ctx context.Context) error {
+func (m *MinioClient) validateConnection(ctx context.Context) error {
 	// Set a timeout for validation
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -964,7 +964,7 @@ func (m *Minio) validateConnection(ctx context.Context) error {
 //   - ctx: Context for controlling the bucket check/creation operation
 //
 // Returns nil if the bucket exists or was successfully created, or an error if the operation fails.
-func (m *Minio) ensureBucketExists(ctx context.Context) error {
+func (m *MinioClient) ensureBucketExists(ctx context.Context) error {
 	bucketName := m.cfg.Connection.BucketName
 	if bucketName == "" {
 		return fmt.Errorf("bucket name is empty")
@@ -1016,7 +1016,7 @@ func (m *Minio) ensureBucketExists(ctx context.Context) error {
 //	fmt.Printf("Active connections: %d\n", stats.ActiveConnections)
 //	fmt.Printf("Request success rate: %.2f%%\n", stats.RequestSuccessRate*100)
 //	fmt.Printf("Average request duration: %v\n", stats.AverageRequestDuration)
-func (m *Minio) GetResourceStats() ResourceStats {
+func (m *MinioClient) GetResourceStats() ResourceStats {
 	if m.resourceMonitor == nil {
 		return ResourceStats{}
 	}
@@ -1034,7 +1034,7 @@ func (m *Minio) GetResourceStats() ResourceStats {
 //	stats := minioClient.GetBufferPoolStats()
 //	fmt.Printf("Buffer reuse ratio: %.2f%%\n", stats.ReuseRatio*100)
 //	fmt.Printf("Buffers in pool: %d\n", stats.CurrentPoolSize)
-func (m *Minio) GetBufferPoolStats() BufferPoolStats {
+func (m *MinioClient) GetBufferPoolStats() BufferPoolStats {
 	if m.bufferPool == nil {
 		return BufferPoolStats{}
 	}
@@ -1050,7 +1050,7 @@ func (m *Minio) GetBufferPoolStats() BufferPoolStats {
 //	minioClient.ResetResourceStats()
 //	// ... perform operations ...
 //	stats := minioClient.GetResourceStats()
-func (m *Minio) ResetResourceStats() {
+func (m *MinioClient) ResetResourceStats() {
 	if m.resourceMonitor != nil {
 		m.resourceMonitor.ResetStats()
 	}
@@ -1063,7 +1063,7 @@ func (m *Minio) ResetResourceStats() {
 //
 //	// Clean up resources during shutdown
 //	defer minioClient.CleanupResources()
-func (m *Minio) CleanupResources() {
+func (m *MinioClient) CleanupResources() {
 	if m.bufferPool != nil {
 		m.bufferPool.Cleanup()
 	}

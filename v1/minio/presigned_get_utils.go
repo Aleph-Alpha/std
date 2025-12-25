@@ -97,7 +97,7 @@ func newMultipartPresignedGet(info *MultipartPresignedGetInfo) MultipartPresigne
 //	    10*1024*1024, // 10 MiB parts
 //	    2*time.Hour,
 //	)
-func (m *Minio) GenerateMultipartPresignedGetURLs(
+func (m *MinioClient) GenerateMultipartPresignedGetURLs(
 	ctx context.Context,
 	objectKey string,
 	partSize int64,
@@ -257,7 +257,7 @@ func (m *multipartPresignedGetImpl) IsExpired() bool {
 //	if err == nil {
 //	    fmt.Printf("Download link: %s\n", url)
 //	}
-func (m *Minio) PreSignedGet(ctx context.Context, objectKey string) (string, error) {
+func (m *MinioClient) PreSignedGet(ctx context.Context, objectKey string) (string, error) {
 	presignedUrl, err := m.Client.PresignedGetObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
 	if err != nil {
 		return "", err

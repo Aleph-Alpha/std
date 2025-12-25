@@ -34,7 +34,7 @@ import (
 //	if err == nil {
 //	    fmt.Printf("Uploaded %d bytes\n", size)
 //	}
-func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error) {
+func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error) {
 	actualSize := unknownSize
 	// If size was provided, use it
 	if len(size) > 0 && size[0] != 0 {
@@ -78,7 +78,7 @@ func (m *Minio) Put(ctx context.Context, objectKey string, reader io.Reader, siz
 //	    fmt.Printf("Downloaded %d bytes\n", len(data))
 //	    ioutil.WriteFile("report.pdf", data, 0644)
 //	}
-func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error) {
+func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error) {
 	// Get the object with a single call
 	reader, err := m.Client.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
 	if err != nil {
@@ -141,7 +141,7 @@ func (m *Minio) Get(ctx context.Context, objectKey string) ([]byte, error) {
 }
 
 // StreamGet downloads a file from MinIO and sends chunks through a channel
-func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error) {
+func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error) {
 	dataCh := make(chan []byte)
 	errCh := make(chan error, 1) // buffered to avoid goroutine leaks
 
@@ -222,7 +222,7 @@ func (m *Minio) StreamGet(ctx context.Context, objectKey string, chunkSize int) 
 //	if err == nil {
 //	    fmt.Println("Object successfully deleted")
 //	}
-func (m *Minio) Delete(ctx context.Context, objectKey string) error {
+func (m *MinioClient) Delete(ctx context.Context, objectKey string) error {
 	err := m.Client.RemoveObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.RemoveObjectOptions{})
 	return err
 }

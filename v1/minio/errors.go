@@ -172,7 +172,7 @@ var (
 //
 // It maps common MinIO errors to the standardized error types defined above.
 // If an error doesn't match any known type, it's returned unchanged.
-func (m *Minio) TranslateError(err error) error {
+func (m *MinioClient) TranslateError(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -195,7 +195,7 @@ func (m *Minio) TranslateError(err error) error {
 }
 
 // translateMinIOError maps MinIO error responses to custom errors
-func (m *Minio) translateMinIOError(minioErr minio.ErrorResponse) error {
+func (m *MinioClient) translateMinIOError(minioErr minio.ErrorResponse) error {
 	switch minioErr.Code {
 	// 4xx Client Errors
 	case "NoSuchBucket":
@@ -363,7 +363,7 @@ func (m *Minio) translateMinIOError(minioErr minio.ErrorResponse) error {
 }
 
 // translateURLError maps URL errors to custom errors
-func (m *Minio) translateURLError(urlErr *url.Error) error {
+func (m *MinioClient) translateURLError(urlErr *url.Error) error {
 	switch urlErr.Op {
 	case "dial":
 		return ErrConnectionFailed
@@ -386,7 +386,7 @@ func (m *Minio) translateURLError(urlErr *url.Error) error {
 }
 
 // translateByErrorMessage translates errors based on error message patterns (fallback)
-func (m *Minio) translateByErrorMessage(errMsg string, originalErr error) error {
+func (m *MinioClient) translateByErrorMessage(errMsg string, originalErr error) error {
 	switch {
 	// Connection related
 	case strings.Contains(errMsg, "connection refused"):
@@ -568,7 +568,7 @@ const (
 )
 
 // GetErrorCategory returns the category of the given error
-func (m *Minio) GetErrorCategory(err error) ErrorCategory {
+func (m *MinioClient) GetErrorCategory(err error) ErrorCategory {
 	switch {
 	case errors.Is(err, ErrConnectionFailed), errors.Is(err, ErrConnectionLost):
 		return CategoryConnection
@@ -604,7 +604,7 @@ func (m *Minio) GetErrorCategory(err error) ErrorCategory {
 }
 
 // IsRetryableError returns true if the error is retryable
-func (m *Minio) IsRetryableError(err error) bool {
+func (m *MinioClient) IsRetryableError(err error) bool {
 	switch {
 	case errors.Is(err, ErrConnectionFailed),
 		errors.Is(err, ErrConnectionLost),
@@ -621,12 +621,12 @@ func (m *Minio) IsRetryableError(err error) bool {
 }
 
 // IsTemporaryError returns true if the error is temporary
-func (m *Minio) IsTemporaryError(err error) bool {
+func (m *MinioClient) IsTemporaryError(err error) bool {
 	return m.IsRetryableError(err) || errors.Is(err, ErrCredentialsExpired)
 }
 
 // IsPermanentError returns true if the error is permanent and should not be retried
-func (m *Minio) IsPermanentError(err error) bool {
+func (m *MinioClient) IsPermanentError(err error) bool {
 	switch {
 	case errors.Is(err, ErrObjectNotFound),
 		errors.Is(err, ErrBucketNotFound),
