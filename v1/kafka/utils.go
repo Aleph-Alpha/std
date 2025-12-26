@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -116,10 +115,15 @@ func (k *KafkaClient) consumeWorker(ctx context.Context, outChan chan<- Message,
 	for {
 		select {
 		case <-k.shutdownSignal:
-			log.Printf("INFO: Stopping consumer worker %d due to shutdown signal", workerID)
+			k.logInfo(ctx, "Stopping consumer worker due to shutdown signal", map[string]interface{}{
+				"worker_id": workerID,
+			})
 			return
 		case <-ctx.Done():
-			log.Printf("INFO: Stopping consumer worker %d due to context cancellation", workerID)
+			k.logInfo(ctx, "Stopping consumer worker due to context cancellation", map[string]interface{}{
+				"worker_id": workerID,
+				"error":     ctx.Err().Error(),
+			})
 			return
 		default:
 			start := time.Now()
@@ -128,7 +132,9 @@ func (k *KafkaClient) consumeWorker(ctx context.Context, outChan chan<- Message,
 			k.mu.RUnlock()
 
 			if reader == nil {
-				log.Printf("ERROR: Kafka reader is not initialized for worker %d", workerID)
+				k.logError(ctx, "Kafka reader is not initialized", map[string]interface{}{
+					"worker_id": workerID,
+				})
 				return
 			}
 
@@ -143,10 +149,16 @@ func (k *KafkaClient) consumeWorker(ctx context.Context, outChan chan<- Message,
 
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					log.Printf("INFO: Consumer worker %d context cancelled: %v", workerID, err)
+					k.logInfo(ctx, "Consumer worker context cancelled", map[string]interface{}{
+						"worker_id": workerID,
+						"error":     err.Error(),
+					})
 					return
 				}
-				log.Printf("ERROR: Worker %d failed to fetch message: %v", workerID, err)
+				k.logError(ctx, "Worker failed to fetch message", map[string]interface{}{
+					"worker_id": workerID,
+					"error":     err.Error(),
+				})
 				continue
 			}
 
@@ -222,7 +234,6 @@ func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{},
 
 	select {
 	case <-ctx.Done():
-		log.Printf("ERROR: Context error for publishing msg to Kafka: %v", ctx.Err())
 		publishErr = ctx.Err()
 		return publishErr
 	default:
@@ -231,7 +242,6 @@ func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{},
 		k.mu.RUnlock()
 
 		if writer == nil {
-			log.Println("ERROR: Kafka writer is not initialized")
 			publishErr = ErrWriterNotInitialized
 			return publishErr
 		}
@@ -247,13 +257,11 @@ func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{},
 			// Use injected serializer
 			msgBytes, err = k.serializer.Serialize(data)
 			if err != nil {
-				log.Printf("ERROR: Failed to serialize message: %v", err)
 				publishErr = fmt.Errorf("failed to serialize message: %w", err)
 				return publishErr
 			}
 		} else {
 			// No serializer available and data is not []byte
-			log.Printf("ERROR: Cannot publish non-[]byte data without a serializer, got type %T", data)
 			publishErr = fmt.Errorf("cannot publish non-[]byte data without a serializer, got type %T", data)
 			return publishErr
 		}
@@ -292,7 +300,6 @@ func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{},
 
 		err = writer.WriteMessages(ctx, kafkaMsg)
 		if err != nil {
-			log.Printf("ERROR: Failed to publish message: %v", err)
 			publishErr = err
 			return publishErr
 		}

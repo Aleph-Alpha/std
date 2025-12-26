@@ -1,10 +1,10 @@
 package kafka
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 
@@ -27,6 +27,9 @@ type KafkaClient struct {
 
 	// observer provides optional observability hooks for tracking operations
 	observer observability.Observer
+
+	// logger provides optional logging for lifecycle and background operations
+	logger Logger
 
 	// writer is the Kafka writer used for publishing messages
 	writer *kafka.Writer
@@ -106,6 +109,7 @@ func NewClient(cfg Config) (*KafkaClient, error) {
 	k := &KafkaClient{
 		cfg:            cfg,
 		observer:       nil, // No observer by default
+		logger:         nil, // No logger by default
 		shutdownSignal: make(chan struct{}),
 	}
 
@@ -130,14 +134,12 @@ func NewClient(cfg Config) (*KafkaClient, error) {
 
 	// Create writer (producer)
 	if !cfg.IsConsumer {
-		k.writer = createWriter(cfg, tlsConfig, mechanism)
-		log.Println("INFO: Kafka producer initialized")
+		k.writer = createWriter(cfg, tlsConfig, mechanism, k)
 	}
 
 	// Create reader (consumer)
 	if cfg.IsConsumer {
-		k.reader = createReader(cfg, tlsConfig, mechanism)
-		log.Println("INFO: Kafka consumer initialized")
+		k.reader = createReader(cfg, tlsConfig, mechanism, k)
 	}
 
 	// Set default serializers based on DataType if not already set
@@ -169,6 +171,99 @@ func (k *KafkaClient) WithObserver(observer observability.Observer) *KafkaClient
 	return k
 }
 
+// WithLogger attaches a logger to the Kafka client for internal logging.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The logger will be used for lifecycle events, background worker logs, and cleanup errors.
+// This is particularly useful for debugging and monitoring consumer worker behavior.
+//
+// This is useful for non-FX usage where you want to enable logging after
+// creating the client. When using FX, the logger is automatically injected via NewClientWithDI.
+//
+// Example:
+//
+//	client, err := kafka.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithLogger(myLogger)
+//	defer client.GracefulShutdown()
+func (k *KafkaClient) WithLogger(logger Logger) *KafkaClient {
+	k.logger = logger
+	return k
+}
+
+// WithSerializer attaches a serializer to the Kafka client for encoding messages.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The serializer will be used to encode messages before publishing to Kafka.
+// If not set, you can only publish []byte data directly.
+//
+// This is useful for non-FX usage where you want to set serializers after
+// creating the client. When using FX, serializers can be injected via NewClientWithDI.
+//
+// Example:
+//
+//	client, err := kafka.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithSerializer(&kafka.JSONSerializer{})
+//	defer client.GracefulShutdown()
+func (k *KafkaClient) WithSerializer(serializer Serializer) *KafkaClient {
+	k.SetSerializer(serializer)
+	return k
+}
+
+// WithDeserializer attaches a deserializer to the Kafka client for decoding messages.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The deserializer will be used to decode messages when consuming from Kafka.
+// If not set, msg.BodyAs() will use JSONDeserializer as a fallback.
+//
+// This is useful for non-FX usage where you want to set deserializers after
+// creating the client. When using FX, deserializers can be injected via NewClientWithDI.
+//
+// Example:
+//
+//	client, err := kafka.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithDeserializer(&kafka.JSONDeserializer{})
+//	defer client.GracefulShutdown()
+func (k *KafkaClient) WithDeserializer(deserializer Deserializer) *KafkaClient {
+	k.SetDeserializer(deserializer)
+	return k
+}
+
+// logInfo logs an informational message using the configured logger if available.
+// This is used for lifecycle and background operation logging.
+func (k *KafkaClient) logInfo(ctx context.Context, msg string, fields map[string]interface{}) {
+	if k.logger != nil {
+		k.logger.InfoWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logWarn logs a warning message using the configured logger if available.
+// This is used for non-critical issues during shutdown or background operations.
+func (k *KafkaClient) logWarn(ctx context.Context, msg string, fields map[string]interface{}) {
+	if k.logger != nil {
+		k.logger.WarnWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logError logs an error message using the configured logger if available.
+// This is only used for errors in background goroutines that can't be returned to the caller.
+func (k *KafkaClient) logError(ctx context.Context, msg string, fields map[string]interface{}) {
+	if k.logger != nil {
+		k.logger.ErrorWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
 // SetSerializer sets the serializer for the Kafka client.
 // This is typically called by the FX module during initialization.
 func (k *KafkaClient) SetSerializer(s Serializer) {
@@ -185,41 +280,37 @@ func (k *KafkaClient) SetDeserializer(d Deserializer) {
 	k.deserializer = d
 }
 
-// createErrorLogger creates a Kafka error logger from the config
-func createErrorLogger(cfg Config) kafka.LoggerFunc {
-	// Priority 1: Use std/v1/logger if provided
-	if cfg.Logger != nil {
+// createErrorLogger creates a Kafka error logger from the client's logger
+func createErrorLogger(client *KafkaClient) kafka.LoggerFunc {
+	// Use our optional logger if available
+	if client.logger != nil {
 		return kafka.LoggerFunc(func(msg string, args ...interface{}) {
 			formattedMsg := msg
 			if len(args) > 0 {
 				formattedMsg = fmt.Sprintf(msg, args...)
 			}
-			cfg.Logger.Error("Kafka internal error", nil, map[string]interface{}{
+			client.logger.ErrorWithContext(context.Background(), "Kafka internal error", nil, map[string]interface{}{
 				"error": formattedMsg,
 			})
 		})
 	}
 
-	// Priority 2: Use custom error logger function
-	if cfg.ErrorLogger != nil {
-		return kafka.LoggerFunc(cfg.ErrorLogger)
-	}
-
-	// Priority 3: Use standard log package
+	// If no logger, silently ignore (don't use log package)
+	// Kafka library errors will be returned to caller instead
 	return kafka.LoggerFunc(func(msg string, args ...interface{}) {
-		log.Printf("KAFKA ERROR: "+msg, args...)
+		// No-op: silently ignore kafka internal errors if no logger configured
 	})
 }
 
 // createWriter creates a Kafka writer with the given configuration
-func createWriter(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism) *kafka.Writer {
+func createWriter(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism, client *KafkaClient) *kafka.Writer {
 	writerConfig := kafka.WriterConfig{
 		Brokers:      cfg.Brokers,
 		Topic:        cfg.Topic,
 		Balancer:     &kafka.LeastBytes{},
 		MaxAttempts:  cfg.MaxAttempts,
 		WriteTimeout: cfg.WriteTimeout,
-		ErrorLogger:  createErrorLogger(cfg),
+		ErrorLogger:  createErrorLogger(client),
 	}
 
 	// Set required acks
@@ -255,7 +346,7 @@ func createWriter(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism) *
 }
 
 // createReader creates a Kafka reader with the given configuration
-func createReader(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism) *kafka.Reader {
+func createReader(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism, client *KafkaClient) *kafka.Reader {
 	readerConfig := kafka.ReaderConfig{
 		Brokers:     cfg.Brokers,
 		Topic:       cfg.Topic,
@@ -264,7 +355,7 @@ func createReader(cfg Config, tlsConfig *tls.Config, mechanism sasl.Mechanism) *
 		MaxBytes:    cfg.MaxBytes,
 		MaxWait:     cfg.MaxWait,
 		StartOffset: cfg.StartOffset,
-		ErrorLogger: createErrorLogger(cfg),
+		ErrorLogger: createErrorLogger(client),
 	}
 
 	// Configure auto-commit behavior

@@ -2,7 +2,6 @@ package kafka
 
 import (
 	"context"
-	"log"
 
 	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
@@ -83,14 +82,15 @@ type KafkaParams struct {
 // Under the hood, this function injects the optional logger, serializer,
 // deserializer, and observer before delegating to the standard NewClient function.
 func NewClientWithDI(params KafkaParams) (*KafkaClient, error) {
-	// Inject the logger into the config if provided
-	if params.Logger != nil {
-		params.Config.Logger = params.Logger
-	}
-
+	// Create client with config
 	client, err := NewClient(params.Config)
 	if err != nil {
 		return nil, err
+	}
+
+	// Inject logger if provided
+	if params.Logger != nil {
+		client.logger = params.Logger
 	}
 
 	// Inject serializers directly if provided (overrides defaults)
@@ -140,11 +140,11 @@ type KafkaLifecycleParams struct {
 func RegisterKafkaLifecycle(params KafkaLifecycleParams) {
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			log.Println("INFO: Kafka client started")
+			params.Client.logInfo(ctx, "Kafka client started", nil)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			log.Println("INFO: Shutting down Kafka client")
+			params.Client.logInfo(ctx, "Shutting down Kafka client", nil)
 			params.Client.GracefulShutdown()
 			return nil
 		},
@@ -170,17 +170,21 @@ func (k *KafkaClient) GracefulShutdown() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	log.Println("INFO: Closing Kafka client")
+	k.logInfo(context.Background(), "Closing Kafka client", nil)
 
 	if k.writer != nil {
 		if err := k.writer.Close(); err != nil {
-			log.Printf("WARN: Failed to close Kafka writer: %v", err)
+			k.logWarn(context.Background(), "Failed to close Kafka writer", map[string]interface{}{
+				"error": err.Error(),
+			})
 		}
 	}
 
 	if k.reader != nil {
 		if err := k.reader.Close(); err != nil {
-			log.Printf("WARN: Failed to close Kafka reader: %v", err)
+			k.logWarn(context.Background(), "Failed to close Kafka reader", map[string]interface{}{
+				"error": err.Error(),
+			})
 		}
 	}
 }

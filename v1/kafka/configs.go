@@ -1,6 +1,9 @@
 package kafka
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Config defines the top-level configuration structure for the Kafka client.
 // It contains all the necessary configuration sections for establishing connections,
@@ -106,16 +109,6 @@ type Config struct {
 	// SASL contains SASL authentication configuration
 	SASL SASLConfig
 
-	// Logger is an optional logger from std/v1/logger package
-	// If provided, it will be used for internal Kafka error logging
-	// If nil, errors will be logged using the standard log package
-	Logger Logger
-
-	// ErrorLogger is an optional custom error logger function for Kafka internal errors
-	// This is only used if Logger is nil
-	// If both Logger and ErrorLogger are nil, errors will be logged using the standard log package
-	ErrorLogger ErrorLoggerFunc
-
 	// DataType specifies the default data type for automatic serializer selection
 	// When no explicit serializer is provided, the client will use a default serializer
 	// based on this type.
@@ -124,13 +117,18 @@ type Config struct {
 	DataType string
 }
 
-// Logger is an interface that matches the std/v1/logger.Logger
+// Logger is an interface that matches the std/v1/logger.Logger interface.
+// It provides context-aware structured logging with optional error and field parameters.
 type Logger interface {
-	Error(msg string, err error, fields ...map[string]interface{})
-}
+	// InfoWithContext logs an informational message with trace context.
+	InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 
-// ErrorLoggerFunc is a function type for logging Kafka errors
-type ErrorLoggerFunc func(msg string, args ...interface{})
+	// WarnWithContext logs a warning message with trace context.
+	WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+	// ErrorWithContext logs an error message with trace context.
+	ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+}
 
 // TLSConfig contains TLS/SSL configuration parameters.
 type TLSConfig struct {

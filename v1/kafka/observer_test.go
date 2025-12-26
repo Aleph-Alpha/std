@@ -1,6 +1,7 @@
 package kafka
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -391,6 +392,154 @@ func TestWithObserverChaining(t *testing.T) {
 	if client.observer != testObserver {
 		t.Error("Observer was not attached correctly")
 	}
+}
+
+// TestWithLogger tests the WithLogger builder pattern method
+func TestWithLogger(t *testing.T) {
+	mockLogger := &MockLogger{}
+
+	client := &KafkaClient{
+		cfg: Config{
+			Topic: "test-topic",
+		},
+	}
+
+	// Verify no logger initially
+	if client.logger != nil {
+		t.Error("Expected no logger initially")
+	}
+
+	// Attach logger using WithLogger
+	client = client.WithLogger(mockLogger)
+
+	// Verify logger is attached
+	if client.logger == nil {
+		t.Fatal("Expected logger to be attached")
+	}
+
+	// Test that logger is used
+	client.logInfo(context.Background(), "test message", map[string]interface{}{"key": "value"})
+
+	if !mockLogger.InfoCalled {
+		t.Error("Expected logger.Info to be called")
+	}
+}
+
+// TestWithSerializer tests the WithSerializer builder pattern method
+func TestWithSerializer(t *testing.T) {
+	mockSerializer := &MockSerializer{}
+
+	client := &KafkaClient{
+		cfg: Config{
+			Topic: "test-topic",
+		},
+	}
+
+	// Attach serializer using WithSerializer
+	client = client.WithSerializer(mockSerializer)
+
+	// Verify serializer is attached
+	client.mu.RLock()
+	if client.serializer == nil {
+		t.Fatal("Expected serializer to be attached")
+	}
+	client.mu.RUnlock()
+}
+
+// TestWithDeserializer tests the WithDeserializer builder pattern method
+func TestWithDeserializer(t *testing.T) {
+	mockDeserializer := &MockDeserializer{}
+
+	client := &KafkaClient{
+		cfg: Config{
+			Topic: "test-topic",
+		},
+	}
+
+	// Attach deserializer using WithDeserializer
+	client = client.WithDeserializer(mockDeserializer)
+
+	// Verify deserializer is attached
+	client.mu.RLock()
+	if client.deserializer == nil {
+		t.Fatal("Expected deserializer to be attached")
+	}
+	client.mu.RUnlock()
+}
+
+// TestBuilderChaining tests that all builder methods can be chained together
+func TestBuilderChaining(t *testing.T) {
+	testObserver := &TestObserver{}
+	mockLogger := &MockLogger{}
+	mockSerializer := &MockSerializer{}
+	mockDeserializer := &MockDeserializer{}
+
+	client := &KafkaClient{
+		cfg: Config{
+			Topic: "test-topic",
+		},
+	}
+
+	// Chain all builder methods
+	result := client.
+		WithObserver(testObserver).
+		WithLogger(mockLogger).
+		WithSerializer(mockSerializer).
+		WithDeserializer(mockDeserializer)
+
+	// Verify chaining returns same instance
+	if result != client {
+		t.Error("Builder methods should return the same client instance")
+	}
+
+	// Verify all components are attached
+	if client.observer != testObserver {
+		t.Error("Observer was not attached")
+	}
+	if client.logger != mockLogger {
+		t.Error("Logger was not attached")
+	}
+
+	client.mu.RLock()
+	if client.serializer != mockSerializer {
+		t.Error("Serializer was not attached")
+	}
+	if client.deserializer != mockDeserializer {
+		t.Error("Deserializer was not attached")
+	}
+	client.mu.RUnlock()
+}
+
+// Mock implementations for testing
+
+type MockLogger struct {
+	InfoCalled  bool
+	WarnCalled  bool
+	ErrorCalled bool
+}
+
+func (m *MockLogger) InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+	m.InfoCalled = true
+}
+
+func (m *MockLogger) WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+	m.WarnCalled = true
+}
+
+func (m *MockLogger) ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{}) {
+	m.ErrorCalled = true
+}
+
+type MockSerializer struct{}
+
+func (m *MockSerializer) Serialize(data interface{}) ([]byte, error) {
+	return []byte("serialized"), nil
+}
+
+type MockDeserializer struct{}
+
+func (m *MockDeserializer) Deserialize(data []byte, target interface{}) error {
+	return nil
 }
 
 // BenchmarkObserverOverhead benchmarks the overhead of observer calls
