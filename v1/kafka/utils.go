@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -121,6 +122,7 @@ func (k *KafkaClient) consumeWorker(ctx context.Context, outChan chan<- Message,
 			log.Printf("INFO: Stopping consumer worker %d due to context cancellation", workerID)
 			return
 		default:
+			start := time.Now()
 			k.mu.RLock()
 			reader := k.reader
 			k.mu.RUnlock()
@@ -131,6 +133,14 @@ func (k *KafkaClient) consumeWorker(ctx context.Context, outChan chan<- Message,
 			}
 
 			msg, err := reader.FetchMessage(ctx)
+
+			// Observe the consume operation
+			msgSize := int64(0)
+			if err == nil {
+				msgSize = int64(len(msg.Value))
+			}
+			k.observeOperation("consume", k.cfg.Topic, fmt.Sprintf("%d", msg.Partition), time.Since(start), err, msgSize)
+
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					log.Printf("INFO: Consumer worker %d context cancelled: %v", workerID, err)
@@ -201,10 +211,20 @@ func (k *KafkaClient) consumeWorker(ctx context.Context, outChan chan<- Message,
 //	    log.Printf("Failed to publish message: %v", err)
 //	}
 func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error {
+	start := time.Now()
+	var publishErr error
+	var msgSize int64
+
+	defer func() {
+		// Observe the operation after it completes
+		k.observeOperation("produce", k.cfg.Topic, "", time.Since(start), publishErr, msgSize)
+	}()
+
 	select {
 	case <-ctx.Done():
 		log.Printf("ERROR: Context error for publishing msg to Kafka: %v", ctx.Err())
-		return ctx.Err()
+		publishErr = ctx.Err()
+		return publishErr
 	default:
 		k.mu.RLock()
 		writer := k.writer
@@ -212,7 +232,8 @@ func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{},
 
 		if writer == nil {
 			log.Println("ERROR: Kafka writer is not initialized")
-			return ErrWriterNotInitialized
+			publishErr = ErrWriterNotInitialized
+			return publishErr
 		}
 
 		// Serialize the data
@@ -227,13 +248,18 @@ func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{},
 			msgBytes, err = k.serializer.Serialize(data)
 			if err != nil {
 				log.Printf("ERROR: Failed to serialize message: %v", err)
-				return fmt.Errorf("failed to serialize message: %w", err)
+				publishErr = fmt.Errorf("failed to serialize message: %w", err)
+				return publishErr
 			}
 		} else {
 			// No serializer available and data is not []byte
 			log.Printf("ERROR: Cannot publish non-[]byte data without a serializer, got type %T", data)
-			return fmt.Errorf("cannot publish non-[]byte data without a serializer, got type %T", data)
+			publishErr = fmt.Errorf("cannot publish non-[]byte data without a serializer, got type %T", data)
+			return publishErr
 		}
+
+		// Track message size
+		msgSize = int64(len(msgBytes))
 
 		// Build Kafka message
 		kafkaMsg := kafka.Message{
@@ -267,7 +293,8 @@ func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{},
 		err = writer.WriteMessages(ctx, kafkaMsg)
 		if err != nil {
 			log.Printf("ERROR: Failed to publish message: %v", err)
-			return err
+			publishErr = err
+			return publishErr
 		}
 
 		return nil

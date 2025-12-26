@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
 	"github.com/segmentio/kafka-go/sasl"
@@ -23,6 +24,9 @@ import (
 type KafkaClient struct {
 	// cfg stores the configuration for this Kafka client
 	cfg Config
+
+	// observer provides optional observability hooks for tracking operations
+	observer observability.Observer
 
 	// writer is the Kafka writer used for publishing messages
 	writer *kafka.Writer
@@ -101,6 +105,7 @@ func NewClient(cfg Config) (*KafkaClient, error) {
 
 	k := &KafkaClient{
 		cfg:            cfg,
+		observer:       nil, // No observer by default
 		shutdownSignal: make(chan struct{}),
 	}
 
@@ -139,6 +144,29 @@ func NewClient(cfg Config) (*KafkaClient, error) {
 	k.SetDefaultSerializers()
 
 	return k, nil
+}
+
+// WithObserver attaches an observer to the Kafka client for tracking operations.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The observer will be notified of all produce and consume operations, allowing
+// external code to collect metrics, create traces, or log operations.
+//
+// This is useful for non-FX usage where you want to enable observability after
+// creating the client. When using FX, use NewClientWithDI instead, which
+// automatically injects the observer.
+//
+// Example:
+//
+//	client, err := kafka.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver)
+//	defer client.GracefulShutdown()
+func (k *KafkaClient) WithObserver(observer observability.Observer) *KafkaClient {
+	k.observer = observer
+	return k
 }
 
 // SetSerializer sets the serializer for the Kafka client.

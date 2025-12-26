@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
 )
 
@@ -39,9 +40,10 @@ type KafkaParams struct {
 	fx.In
 
 	Config       Config
-	Logger       Logger       `optional:"true"` // Optional logger from std/v1/logger
-	Serializer   Serializer   `optional:"true"` // Optional serializer
-	Deserializer Deserializer `optional:"true"` // Optional deserializer
+	Logger       Logger                 `optional:"true"` // Optional logger from std/v1/logger
+	Serializer   Serializer             `optional:"true"` // Optional serializer
+	Deserializer Deserializer           `optional:"true"` // Optional deserializer
+	Observer     observability.Observer `optional:"true"` // Optional observer for metrics/tracing
 }
 
 // NewClientWithDI creates a new Kafka client using dependency injection.
@@ -50,7 +52,7 @@ type KafkaParams struct {
 //
 // Parameters:
 //   - params: A KafkaParams struct that contains the Config instance
-//     and optionally a Logger, Serializer, and Deserializer instances
+//     and optionally a Logger, Serializer, Deserializer, and Observer instances
 //     required to initialize the Kafka client.
 //     This struct embeds fx.In to enable automatic injection of these dependencies.
 //
@@ -61,7 +63,7 @@ type KafkaParams struct {
 //
 //	app := fx.New(
 //	    kafka.FXModule,
-//	    logger.FXModule, // Optional: provides logger
+//	    logger.FXModule,  // Optional: provides logger
 //	    fx.Provide(
 //	        func() kafka.Config {
 //	            return loadKafkaConfig() // Your config loading function
@@ -72,11 +74,14 @@ type KafkaParams struct {
 //	        func() kafka.Deserializer {
 //	            return &kafka.JSONDeserializer{}
 //	        },
+//	        func(metrics *prometheus.Metrics) observability.Observer {
+//	            return &MyObserver{metrics: metrics}  // Optional observer
+//	        },
 //	    ),
 //	)
 //
 // Under the hood, this function injects the optional logger, serializer,
-// and deserializer before delegating to the standard NewClient function.
+// deserializer, and observer before delegating to the standard NewClient function.
 func NewClientWithDI(params KafkaParams) (*KafkaClient, error) {
 	// Inject the logger into the config if provided
 	if params.Logger != nil {
@@ -101,6 +106,11 @@ func NewClientWithDI(params KafkaParams) (*KafkaClient, error) {
 	// (already called in NewClient, but this is explicit)
 	if params.Serializer == nil && params.Deserializer == nil {
 		client.SetDefaultSerializers()
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
 	}
 
 	return client, nil

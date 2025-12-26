@@ -626,7 +626,239 @@
 //   - NoOpSerializer: Raw []byte passthrough
 //   - MultiFormatSerializer: Multiple formats with dynamic selection
 //
-// Thread Safety:
+// # Observability
+//
+// The Kafka client supports optional observability through the Observer interface from
+// std/v1/observability. This allows external code to track all Kafka operations for
+// metrics, tracing, and logging without tight coupling.
+//
+// # Basic Observability Setup
+//
+// To enable observability, provide an Observer implementation in the configuration:
+//
+//	import "github.com/Aleph-Alpha/std/v1/observability"
+//
+//	// Implement the Observer interface
+//	type MyObserver struct {
+//	    metrics *prometheus.Metrics
+//	}
+//
+//	func (o *MyObserver) ObserveOperation(ctx observability.OperationContext) {
+//	    if ctx.Component == "kafka" {
+//	        switch ctx.Operation {
+//	        case "produce":
+//	            o.metrics.RecordKafkaPublish(
+//	                ctx.Resource,  // topic name
+//	                ctx.Size,      // message bytes
+//	                ctx.Duration,  // operation duration
+//	                ctx.Error,     // error if any
+//	            )
+//	        case "consume":
+//	            o.metrics.RecordKafkaConsume(
+//	                ctx.Resource,    // topic name
+//	                ctx.SubResource, // partition
+//	                ctx.Size,        // message bytes
+//	                ctx.Duration,    // fetch duration
+//	                ctx.Error,       // error if any
+//	            )
+//	        }
+//	    }
+//	}
+//
+//	// Configure Kafka client with observer
+//	observer := &MyObserver{metrics: myMetrics}
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:  []string{"localhost:9092"},
+//	    Topic:    "events",
+//	    Observer: observer, // ← Enable observability
+//	})
+//
+// # Observed Operations
+//
+// The observer is notified of the following operations:
+//
+// Produce Operation:
+//   - Component: "kafka"
+//   - Operation: "produce"
+//   - Resource: Topic name (e.g., "user-events")
+//   - SubResource: "" (empty)
+//   - Duration: Time taken to publish message
+//   - Size: Message size in bytes
+//   - Error: Any error that occurred during publishing
+//   - Metadata: nil (reserved for future use)
+//
+// Consume Operation:
+//   - Component: "kafka"
+//   - Operation: "consume"
+//   - Resource: Topic name (e.g., "user-events")
+//   - SubResource: Partition number (e.g., "3")
+//   - Duration: Time taken to fetch message from Kafka
+//   - Size: Message size in bytes
+//   - Error: Any error that occurred during consumption
+//   - Metadata: nil (reserved for future use)
+//
+// Example OperationContext for Publish:
+//
+//	observability.OperationContext{
+//	    Component:   "kafka",
+//	    Operation:   "produce",
+//	    Resource:    "user-events",
+//	    SubResource: "",
+//	    Duration:    12 * time.Millisecond,
+//	    Size:        2048,
+//	    Error:       nil,
+//	}
+//
+// Example OperationContext for Consume:
+//
+//	observability.OperationContext{
+//	    Component:   "kafka",
+//	    Operation:   "consume",
+//	    Resource:    "user-events",
+//	    SubResource: "3", // partition
+//	    Duration:    8 * time.Millisecond,
+//	    Size:        1024,
+//	    Error:       nil,
+//	}
+//
+// # Integration with Prometheus
+//
+// Example: Track Kafka metrics with Prometheus:
+//
+//	import (
+//	    "github.com/prometheus/client_golang/prometheus"
+//	    "github.com/Aleph-Alpha/std/v1/observability"
+//	)
+//
+//	type KafkaObserver struct {
+//	    publishTotal    *prometheus.CounterVec
+//	    publishDuration *prometheus.HistogramVec
+//	    publishBytes    *prometheus.CounterVec
+//	    consumeTotal    *prometheus.CounterVec
+//	    consumeDuration *prometheus.HistogramVec
+//	    consumeBytes    *prometheus.CounterVec
+//	}
+//
+//	func NewKafkaObserver() *KafkaObserver {
+//	    return &KafkaObserver{
+//	        publishTotal: prometheus.NewCounterVec(
+//	            prometheus.CounterOpts{
+//	                Name: "kafka_messages_published_total",
+//	                Help: "Total number of messages published to Kafka",
+//	            },
+//	            []string{"topic", "status"},
+//	        ),
+//	        publishDuration: prometheus.NewHistogramVec(
+//	            prometheus.HistogramOpts{
+//	                Name:    "kafka_publish_duration_seconds",
+//	                Help:    "Duration of Kafka publish operations",
+//	                Buckets: prometheus.DefBuckets,
+//	            },
+//	            []string{"topic"},
+//	        ),
+//	        publishBytes: prometheus.NewCounterVec(
+//	            prometheus.CounterOpts{
+//	                Name: "kafka_publish_bytes_total",
+//	                Help: "Total bytes published to Kafka",
+//	            },
+//	            []string{"topic"},
+//	        ),
+//	        consumeTotal: prometheus.NewCounterVec(
+//	            prometheus.CounterOpts{
+//	                Name: "kafka_messages_consumed_total",
+//	                Help: "Total number of messages consumed from Kafka",
+//	            },
+//	            []string{"topic", "partition", "status"},
+//	        ),
+//	        consumeDuration: prometheus.NewHistogramVec(
+//	            prometheus.HistogramOpts{
+//	                Name:    "kafka_consume_duration_seconds",
+//	                Help:    "Duration of Kafka consume operations",
+//	                Buckets: prometheus.DefBuckets,
+//	            },
+//	            []string{"topic"},
+//	        ),
+//	        consumeBytes: prometheus.NewCounterVec(
+//	            prometheus.CounterOpts{
+//	                Name: "kafka_consume_bytes_total",
+//	                Help: "Total bytes consumed from Kafka",
+//	            },
+//	            []string{"topic"},
+//	        ),
+//	    }
+//	}
+//
+//	func (o *KafkaObserver) ObserveOperation(ctx observability.OperationContext) {
+//	    if ctx.Component != "kafka" {
+//	        return
+//	    }
+//
+//	    status := "success"
+//	    if ctx.Error != nil {
+//	        status = "error"
+//	    }
+//
+//	    switch ctx.Operation {
+//	    case "produce":
+//	        o.publishTotal.WithLabelValues(ctx.Resource, status).Inc()
+//	        o.publishDuration.WithLabelValues(ctx.Resource).Observe(ctx.Duration.Seconds())
+//	        if ctx.Error == nil {
+//	            o.publishBytes.WithLabelValues(ctx.Resource).Add(float64(ctx.Size))
+//	        }
+//
+//	    case "consume":
+//	        o.consumeTotal.WithLabelValues(ctx.Resource, ctx.SubResource, status).Inc()
+//	        o.consumeDuration.WithLabelValues(ctx.Resource).Observe(ctx.Duration.Seconds())
+//	        if ctx.Error == nil {
+//	            o.consumeBytes.WithLabelValues(ctx.Resource).Add(float64(ctx.Size))
+//	        }
+//	    }
+//	}
+//
+// # FX Module with Observer
+//
+// When using FX, you can inject an observer into the Kafka client:
+//
+//	import (
+//	    "go.uber.org/fx"
+//	    "github.com/Aleph-Alpha/std/v1/kafka"
+//	    "github.com/Aleph-Alpha/std/v1/observability"
+//	)
+//
+//	app := fx.New(
+//	    kafka.FXModule,
+//	    fx.Provide(
+//	        // Provide your observer implementation
+//	        func() observability.Observer {
+//	            return NewKafkaObserver()
+//	        },
+//	        // Provide Kafka config with observer
+//	        func(observer observability.Observer) kafka.Config {
+//	            return kafka.Config{
+//	                Brokers:  []string{"localhost:9092"},
+//	                Topic:    "events",
+//	                Observer: observer, // Inject observer
+//	            }
+//	        },
+//	    ),
+//	)
+//	app.Run()
+//
+// # No-Op Observer
+//
+// If you don't provide an observer, there's zero overhead:
+//
+//	client, err := kafka.NewClient(kafka.Config{
+//	    Brokers:  []string{"localhost:9092"},
+//	    Topic:    "events",
+//	    Observer: nil, // ← No observer, no overhead
+//	})
+//
+// The client checks if Observer is nil before calling it, so there's no performance
+// impact when observability is disabled.
+//
+// # Thread Safety
 //
 // All methods on the Kafka type are safe for concurrent use by multiple
 // goroutines, except for Close() which should only be called once.
