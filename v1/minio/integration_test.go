@@ -234,7 +234,7 @@ func TestMinioWithFXModule(t *testing.T) {
 		cfg := containerInstance.Config
 		cfg.PresignedConfig.BaseURL = "https://cdn.example.com/base"
 
-		c2, err := NewClient(cfg, nil)
+		c2, err := NewClient(cfg)
 		require.NoError(t, err)
 
 		u, err := c2.PreSignedGet(ctx, "it/override.txt")

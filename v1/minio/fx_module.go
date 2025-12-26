@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
 )
 
@@ -37,13 +38,29 @@ var FXModule = fx.Module("minio",
 type MinioParams struct {
 	fx.In
 
-	Config
-	// Logger is optional - if not provided, fallback logger will be used
-	Logger MinioLogger `optional:"true"`
+	Config   Config
+	Logger   Logger                 `optional:"true"`
+	Observer observability.Observer `optional:"true"`
 }
 
 func NewMinioClientWithDI(params MinioParams) (*MinioClient, error) {
-	return NewClient(params.Config, params.Logger)
+	// Create client with config
+	client, err := NewClient(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject logger if provided
+	if params.Logger != nil {
+		client.logger = params.Logger
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }
 
 type MinioLifeCycleParams struct {
@@ -71,9 +88,7 @@ type MinioLifeCycleParams struct {
 func RegisterLifecycle(params MinioLifeCycleParams) {
 
 	if params.Minio == nil {
-		// Use fallback logger since we don't have a MinIO client
-		fallbackLog := newFallbackLogger()
-		fallbackLog.Fatal("MinIO client is nil, cannot register lifecycle hooks", nil, nil)
+		// Cannot register lifecycle hooks without a client
 		return
 	}
 
@@ -97,7 +112,7 @@ func RegisterLifecycle(params MinioLifeCycleParams) {
 		},
 		OnStop: func(ctx context.Context) error {
 
-			params.Minio.logger.Info("closing minio client...", nil, nil)
+			params.Minio.logInfo(ctx, "closing minio client", nil)
 
 			// Clean up resources before shutdown
 			params.Minio.CleanupResources()

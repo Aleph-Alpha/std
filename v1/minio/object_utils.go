@@ -97,7 +97,9 @@ func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error)
 	defer func(reader io.ReadCloser) {
 		err := reader.Close()
 		if err != nil {
-			m.logger.Error("Failed to close object reader", err, nil)
+			m.logError(ctx, "Failed to close object reader", map[string]interface{}{
+				"error": err.Error(),
+			})
 		}
 	}(reader)
 
@@ -173,7 +175,9 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 		}
 		defer func() {
 			if err := reader.Close(); err != nil {
-				m.logger.Error("Failed to close object reader", err, nil)
+				m.logError(ctx, "Failed to close object reader", map[string]interface{}{
+					"error": err.Error(),
+				})
 			}
 		}()
 
