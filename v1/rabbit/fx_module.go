@@ -2,9 +2,9 @@ package rabbit
 
 import (
 	"context"
-	"log"
 	"sync"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/fx"
 )
@@ -40,7 +40,9 @@ var FXModule = fx.Module("rabbit",
 type RabbitParams struct {
 	fx.In
 
-	Config Config
+	Config   Config
+	Logger   Logger                 `optional:"true"`
+	Observer observability.Observer `optional:"true"`
 }
 
 // NewClientWithDI creates a new RabbitMQ client using dependency injection.
@@ -48,9 +50,10 @@ type RabbitParams struct {
 // where dependencies are automatically provided via the RabbitParams struct.
 //
 // Parameters:
-//   - params: A RabbitParams struct that contains the Config and Logger instances
-//     required to initialize the RabbitMQ client. This struct embeds fx.In to enable
-//     automatic injection of these dependencies.
+//   - params: A RabbitParams struct that contains the Config instance
+//     and optionally a Logger and Observer instances
+//     required to initialize the RabbitMQ client.
+//     This struct embeds fx.In to enable automatic injection of these dependencies.
 //
 // Returns:
 //   - *RabbitClient: A fully initialized RabbitMQ client ready for use.
@@ -59,21 +62,37 @@ type RabbitParams struct {
 //
 //	app := fx.New(
 //	    rabbit.FXModule,
+//	    logger.FXModule,  // Optional: provides logger
 //	    fx.Provide(
 //	        func() rabbit.Config {
 //	            return loadRabbitConfig() // Your config loading function
 //	        },
-//	        func() rabbit.Logger {
-//	            return initLogger() // Your logger initialization
+//	        func(metrics *prometheus.Metrics) observability.Observer {
+//	            return &MyObserver{metrics: metrics}  // Optional observer
 //	        },
 //	    ),
 //	)
 //
-// Under the hood, this function simply delegates to the standard NewClient function,
-// making it easier to integrate with dependency injection frameworks while maintaining
-// the same initialization logic.
+// Under the hood, this function creates the client and injects the optional logger
+// and observer before returning.
 func NewClientWithDI(params RabbitParams) (*RabbitClient, error) {
-	return NewClient(params.Config)
+	// Create client with config
+	client, err := NewClient(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject logger if provided
+	if params.Logger != nil {
+		client.logger = params.Logger
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }
 
 // RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
@@ -145,17 +164,21 @@ func (rb *RabbitClient) GracefulShutdown() {
 	})
 	rb.mu.Lock()
 
-	log.Println("INFO: Shutting down RabbitMQ client")
+	rb.logInfo(context.Background(), "Shutting down RabbitMQ client", nil)
 
 	if rb.Channel != nil {
 		if err := rb.Channel.Close(); err != nil {
-			log.Println("WARN: Failed to close rabbit channel")
+			rb.logWarn(context.Background(), "Failed to close rabbit channel", map[string]interface{}{
+				"error": err.Error(),
+			})
 			return
 		}
 	}
 	if rb.conn != nil && !rb.conn.IsClosed() {
 		if err := rb.conn.Close(); err != nil {
-			log.Println("WARN: Failed to close rabbit connection")
+			rb.logWarn(context.Background(), "Failed to close rabbit connection", map[string]interface{}{
+				"error": err.Error(),
+			})
 			return
 		}
 	}

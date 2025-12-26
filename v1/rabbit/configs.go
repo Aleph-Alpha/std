@@ -1,5 +1,7 @@
 package rabbit
 
+import "context"
+
 // Config defines the top-level configuration structure for the RabbitMQ client.
 // It contains all the necessary configuration sections for establishing connections,
 // setting up channels, and configuring dead-letter behavior.
@@ -109,4 +111,17 @@ type DeadLetter struct {
 	// Messages that remain in the queue longer than this TTL will be dead-lettered
 	// A value of 0 means no TTL (messages never expire)
 	Ttl int
+}
+
+// Logger is an interface that matches the std/v1/logger.Logger interface.
+// It provides context-aware structured logging with optional error and field parameters.
+type Logger interface {
+	// InfoWithContext logs an informational message with trace context.
+	InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+	// WarnWithContext logs a warning message with trace context.
+	WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+	// ErrorWithContext logs an error message with trace context.
+	ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 }

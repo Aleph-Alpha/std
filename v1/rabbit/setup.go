@@ -1,14 +1,15 @@
 package rabbit
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -18,6 +19,12 @@ import (
 type RabbitClient struct {
 	// cfg stores the configuration for this RabbitMQ client
 	cfg Config
+
+	// observer provides optional observability hooks for tracking operations
+	observer observability.Observer
+
+	// logger provides optional logging for lifecycle and background operations
+	logger Logger
 
 	// Channel is the main AMQP channel used for publishing and consuming messages.
 	// It's exposed publicly to allow direct operations when needed.
@@ -56,18 +63,18 @@ type RabbitClient struct {
 func NewClient(config Config) (*RabbitClient, error) {
 	con, err := newConnection(config)
 	if err != nil {
-		log.Printf("ERROR: error in connecting to rabbit after all retries: %v", err)
 		return nil, err
 	}
 
 	ch, err := connectToChannel(con, config)
 	if ch == nil || err != nil {
-		log.Printf("ERROR: error in declaring channel: %v", err)
 		return nil, err
 	}
 
 	return &RabbitClient{
 		cfg:            config,
+		observer:       nil, // No observer by default
+		logger:         nil, // No logger by default
 		conn:           con,
 		Channel:        ch,
 		shutdownSignal: make(chan struct{}),
@@ -95,12 +102,10 @@ func NewClient(config Config) (*RabbitClient, error) {
 func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 	ch, err := rb.Channel()
 	if err != nil {
-		log.Printf("ERROR: error in creating channel: %v", err)
 		return nil, fmt.Errorf("failed to create channel: %w", err)
 	}
 
 	if err = ch.Confirm(false); err != nil {
-		log.Printf("ERROR: error in enabling publisher confirms: %v", err)
 		return nil, fmt.Errorf("failed to enable publisher confirms: %w", err)
 	}
 
@@ -119,7 +124,6 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 		nil,   // Arguments
 	)
 	if err != nil {
-		log.Printf("ERROR: error in declaring exchange: %v", err)
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
 
@@ -137,7 +141,6 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 			nil,   // Arguments
 		)
 		if err != nil {
-			log.Printf("ERROR: error in declaring dead letter exchange: %v", err)
 			return nil, fmt.Errorf("failed to declare dead letter exchange: %w", err)
 		}
 
@@ -151,7 +154,6 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 			nil,   // Arguments
 		)
 		if err != nil {
-			log.Printf("ERROR: error in declaring dead letter queue: %v", err)
 			return nil, fmt.Errorf("failed to declare dead letter queue: %w", err)
 		}
 
@@ -164,7 +166,6 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 			nil,   // Arguments
 		)
 		if err != nil {
-			log.Printf("ERROR: error in binding dead letter queue: %v", err)
 			return nil, fmt.Errorf("failed to bind dead letter queue: %w", err)
 		}
 
@@ -186,7 +187,6 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 		queueArgs, // Arguments including dead letter config
 	)
 	if err != nil {
-		log.Printf("ERROR: error in declaring queue: %v", err)
 		return nil, fmt.Errorf("failed to declare queue: %w", err)
 	}
 
@@ -199,7 +199,6 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 		nil,   // Arguments
 	)
 	if err != nil {
-		log.Printf("ERROR: error in binding queue: %v", err)
 		return nil, fmt.Errorf("failed to bind queue: %w", err)
 	}
 
@@ -207,7 +206,6 @@ func connectToChannel(rb *amqp.Connection, cfg Config) (*amqp.Channel, error) {
 	if cfg.Channel.PrefetchCount > 0 {
 		err = ch.Qos(cfg.Channel.PrefetchCount, 0, false)
 		if err != nil {
-			log.Printf("ERROR: error in setting QoS: %v", err)
 			return nil, fmt.Errorf("failed to set QoS: %w", err)
 		}
 	}
@@ -240,21 +238,25 @@ outerLoop:
 
 		select {
 		case <-rb.shutdownSignal:
-			log.Println("INFO: Stopping RetryConnection loop due to shutdown signal")
+			rb.logInfo(context.Background(), "Stopping RetryConnection loop due to shutdown signal", nil)
 			return
 
 		case err := <-errChan:
-			log.Printf("WARNING: RabbitMQ connection closed, retrying... %v", err)
+			rb.logWarn(context.Background(), "RabbitMQ connection closed, retrying", map[string]interface{}{
+				"error": err.Error(),
+			})
 		reconnectLoop:
 			for {
 				select {
 				case <-rb.shutdownSignal:
-					log.Println("INFO: Stopping RetryConnection loop due to shutdown signal")
+					rb.logInfo(context.Background(), "Stopping RetryConnection loop due to shutdown signal", nil)
 					return
 				default:
 					newConn, err := newConnection(cfg)
 					if err != nil {
-						log.Printf("ERROR: RabbitMQ reconnection failed: %v", err)
+						rb.logError(context.Background(), "RabbitMQ reconnection failed", map[string]interface{}{
+							"error": err.Error(),
+						})
 						time.Sleep(time.Second)
 						continue reconnectLoop
 					}
@@ -268,11 +270,13 @@ outerLoop:
 					rb.mu.Unlock()
 
 					if err != nil {
-						log.Printf("ERROR: Failed to re-establish RabbitMQ channel: %v", err)
+						rb.logError(context.Background(), "Failed to re-establish RabbitMQ channel", map[string]interface{}{
+							"error": err.Error(),
+						})
 						continue reconnectLoop
 					}
 
-					log.Println("INFO: Successfully reconnected to RabbitMQ")
+					rb.logInfo(context.Background(), "Successfully reconnected to RabbitMQ", nil)
 					continue outerLoop
 				}
 			}
@@ -303,7 +307,6 @@ func newConnection(cfg Config) (*amqp.Connection, error) {
 		hostURL := fmt.Sprintf("amqps://%v:%v@%v:%v", cfg.Connection.User, cfg.Connection.Password, cfg.Connection.Host, cfg.Connection.Port)
 		caCert, err := os.ReadFile(cfg.Connection.CACertPath)
 		if err != nil {
-			log.Printf("ERROR: failed to read CA cert: %v", err)
 			return nil, err
 		}
 		caCertPool := x509.NewCertPool()
@@ -311,7 +314,6 @@ func newConnection(cfg Config) (*amqp.Connection, error) {
 
 		cert, err := tls.LoadX509KeyPair(cfg.Connection.ClientCertPath, cfg.Connection.ClientKeyPath)
 		if err != nil {
-			log.Printf("ERROR: failed to load client cert: %v", err)
 			return nil, err
 		}
 
@@ -325,31 +327,95 @@ func newConnection(cfg Config) (*amqp.Connection, error) {
 			TLSClientConfig: tlsConfig,
 		})
 		if err == nil {
-			log.Println("INFO: Connected to Rabbit")
 			return conn, nil
 		}
-		log.Printf("ERROR: error in connecting to rabbit: %v", err)
 	} else if !cfg.Connection.IsSSLEnabled {
 		hostURL := fmt.Sprintf("amqp://%v:%v@%v:%v", cfg.Connection.User, cfg.Connection.Password, cfg.Connection.Host, cfg.Connection.Port)
-		//conn, err := amqp.Dial(hostURL)
 		conn, err := amqp.DialConfig(hostURL, amqp.Config{
 			Heartbeat: 2 * time.Second,
 		})
 		if err == nil {
-			log.Println("INFO: Connected to Rabbit")
 			return conn, nil
 		}
-		log.Printf("ERROR: error in connecting to rabbit: %v", err)
 	} else {
 		hostURL := fmt.Sprintf("amqps://%v:%v@%v:%v", cfg.Connection.User, cfg.Connection.Password, cfg.Connection.Host, cfg.Connection.Port)
 		conn, err := amqp.DialConfig(hostURL, amqp.Config{
 			Heartbeat: 2 * time.Second,
 		})
 		if err == nil {
-			log.Println("INFO: Connected to Rabbit")
 			return conn, nil
 		}
-		log.Printf("ERROR: error in connecting to rabbit: %v", err)
 	}
 	return nil, fmt.Errorf("failed to connect to Rabbit")
+}
+
+// WithObserver attaches an observer to the RabbitMQ client for observability hooks.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The observer will be notified of all publish and consume operations, allowing
+// external systems to track metrics, traces, or other observability data.
+//
+// This is useful for non-FX usage where you want to attach an observer after
+// creating the client. When using FX, the observer is automatically injected via NewClientWithDI.
+//
+// Example:
+//
+//	client, err := rabbit.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver)
+//	defer client.GracefulShutdown()
+func (rb *RabbitClient) WithObserver(observer observability.Observer) *RabbitClient {
+	rb.observer = observer
+	return rb
+}
+
+// WithLogger attaches a logger to the RabbitMQ client for internal logging.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The logger will be used for lifecycle events, background worker logs, and cleanup errors.
+// This is particularly useful for debugging and monitoring reconnection behavior.
+//
+// This is useful for non-FX usage where you want to enable logging after
+// creating the client. When using FX, the logger is automatically injected via NewClientWithDI.
+//
+// Example:
+//
+//	client, err := rabbit.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithLogger(myLogger)
+//	defer client.GracefulShutdown()
+func (rb *RabbitClient) WithLogger(logger Logger) *RabbitClient {
+	rb.logger = logger
+	return rb
+}
+
+// logInfo logs an informational message using the configured logger if available.
+// This is used for lifecycle and background operation logging.
+func (rb *RabbitClient) logInfo(ctx context.Context, msg string, fields map[string]interface{}) {
+	if rb.logger != nil {
+		rb.logger.InfoWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logWarn logs a warning message using the configured logger if available.
+// This is used for non-critical issues during shutdown or background operations.
+func (rb *RabbitClient) logWarn(ctx context.Context, msg string, fields map[string]interface{}) {
+	if rb.logger != nil {
+		rb.logger.WarnWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logError logs an error message using the configured logger if available.
+// This is only used for errors in background goroutines that can't be returned to the caller.
+func (rb *RabbitClient) logError(ctx context.Context, msg string, fields map[string]interface{}) {
+	if rb.logger != nil {
+		rb.logger.ErrorWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
 }
