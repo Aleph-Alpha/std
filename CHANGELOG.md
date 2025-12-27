@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/Aleph-Alpha/std/compare/v0.12.0...v0.13.0) (2025-12-27)
+
+
+### Features
+
+* add observability hook ([#41](https://github.com/Aleph-Alpha/std/issues/41)) ([6dc5cf3](https://github.com/Aleph-Alpha/std/commit/6dc5cf3a2842f8f4057c0f01adad68c700fba0bc))
+
 ## [0.12.0](https://github.com/Aleph-Alpha/std/compare/v0.11.1...v0.12.0) (2025-12-25)
 
 
