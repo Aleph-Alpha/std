@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -16,7 +17,9 @@ func (p *Postgres) cloneWithTx(tx *gorm.DB) *Postgres {
 	// Do not share lifecycle channels with the parent to avoid accidental shutdown
 	// if a consumer calls GracefulShutdown() on the tx client.
 	pg := &Postgres{
-		cfg: p.cfg,
+		cfg:      p.cfg,
+		observer: p.observer,
+		logger:   p.logger,
 	}
 	pg.client.Store(tx)
 	return pg
@@ -40,11 +43,14 @@ func (p *Postgres) cloneWithTx(tx *gorm.DB) *Postgres {
 //		return tx.Create(ctx, userProfile)
 //	})
 func (p *Postgres) Transaction(ctx context.Context, fn func(tx Client) error) error {
+	start := time.Now()
 	// Snapshot the current connection; do not hold any package-level locks for the whole
 	// transaction, which can be long-running.
 	db := p.DB().WithContext(ctx)
-	return db.Transaction(func(txDB *gorm.DB) error {
+	err := db.Transaction(func(txDB *gorm.DB) error {
 		pgWithTx := p.cloneWithTx(txDB)
 		return fn(pgWithTx) // Pass as Client interface
 	})
+	p.observeOperation("transaction", "", "", time.Since(start), err, 0, nil)
+	return err
 }

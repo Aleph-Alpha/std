@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
 )
 
@@ -45,15 +46,18 @@ func ProvideClient(pg *Postgres) Client {
 type PostgresParams struct {
 	fx.In
 
-	Config Config
+	Config   Config
+	Logger   Logger                 `optional:"true"`
+	Observer observability.Observer `optional:"true"`
 }
 
 // NewPostgresClientWithDI creates a new Postgres Client using dependency injection.
 // This function is designed to be used with Uber's fx dependency injection framework
-// where the Config and Logger dependencies are automatically provided via the PostgresParams struct.
+// where the Config, Logger, and Observer dependencies are automatically provided via the PostgresParams struct.
 //
 // Parameters:
-//   - params: A PostgresParams struct containing the Config and Logger instances
+//   - params: A PostgresParams struct containing the Config instance
+//     and optionally a Logger and Observer instances
 //     required to initialize the Postgres Client. This struct embeds fx.In to enable
 //     automatic injection of these dependencies.
 //
@@ -65,17 +69,36 @@ type PostgresParams struct {
 //
 //	app := fx.New(
 //	    postgres.FXModule,
+//	    logger.FXModule,  // Optional: provides logger
 //	    fx.Provide(
 //	        func() postgres.Config {
 //	            return loadPostgresConfig() // Your config loading function
 //	        },
+//	        func(metrics *prometheus.Metrics) observability.Observer {
+//	            return &MyObserver{metrics: metrics}  // Optional observer
+//	        },
 //	    ),
 //	)
 //
-// This function delegates to the standard NewPostgres function, maintaining the same
-// initialization logic while enabling seamless integration with dependency injection.
+// This function creates the client and injects the optional logger and observer before returning.
 func NewPostgresClientWithDI(params PostgresParams) (*Postgres, error) {
-	return NewPostgres(params.Config)
+	// Create client with config
+	client, err := NewPostgres(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject logger if provided
+	if params.Logger != nil {
+		client.logger = params.Logger
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }
 
 // PostgresLifeCycleParams groups the dependencies needed for Postgres lifecycle management.

@@ -3,11 +3,11 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -20,6 +20,8 @@ import (
 type Postgres struct {
 	cfg             Config
 	client          atomic.Pointer[gorm.DB]
+	observer        observability.Observer
+	logger          Logger
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
 
@@ -41,6 +43,8 @@ func NewPostgres(cfg Config) (*Postgres, error) {
 
 	pg := &Postgres{
 		cfg:             cfg,
+		observer:        nil, // No observer by default
+		logger:          nil, // No logger by default
 		shutdownSignal:  make(chan struct{}),
 		retryChanSignal: make(chan error, 1),
 	}
@@ -95,8 +99,6 @@ func connectToPostgres(postgresConfig Config) (*gorm.DB, error) {
 	databaseInstance.SetMaxIdleConns(maxIdle)
 	databaseInstance.SetConnMaxLifetime(maxLifetime)
 
-	log.Println("INFO: Successfully connected to PostgresSQL database")
-
 	return database, nil
 }
 
@@ -113,7 +115,7 @@ outerLoop:
 	for {
 		select {
 		case <-p.shutdownSignal:
-			log.Println("INFO: Stopping RetryConnection loop due to shutdown signal")
+			p.logInfo(ctx, "Stopping RetryConnection loop due to shutdown signal", nil)
 			return
 		case <-ctx.Done():
 			return
@@ -128,12 +130,14 @@ outerLoop:
 				default:
 					newConn, err := connectToPostgres(p.cfg)
 					if err != nil {
-						log.Printf("ERROR: PostgresSQL reconnection failed: %v", err)
+						p.logError(ctx, "PostgreSQL reconnection failed", map[string]interface{}{
+							"error": err.Error(),
+						})
 						time.Sleep(time.Second)
 						continue innerLoop
 					}
 					p.client.Store(newConn)
-					log.Println("INFO: Successfully reconnected to PostgresSQL database")
+					p.logInfo(ctx, "Successfully reconnected to PostgreSQL database", nil)
 					continue outerLoop
 				}
 			}
@@ -159,7 +163,7 @@ func (p *Postgres) MonitorConnection(ctx context.Context) {
 	for {
 		select {
 		case <-p.shutdownSignal:
-			log.Println("INFO: Stopping MonitorConnection loop due to shutdown signal")
+			p.logInfo(ctx, "Stopping MonitorConnection loop due to shutdown signal", nil)
 			return
 		case <-ticker.C:
 			err := p.healthCheck()
@@ -200,4 +204,68 @@ func (p *Postgres) healthCheck() error {
 	}
 
 	return nil
+}
+
+// WithObserver attaches an observer to the Postgres client for observability hooks.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The observer will be notified of all database operations, allowing
+// external systems to track metrics, traces, or other observability data.
+//
+// Example:
+//
+//	client, err := postgres.NewPostgres(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver)
+//	defer client.GracefulShutdown()
+func (p *Postgres) WithObserver(observer observability.Observer) *Postgres {
+	p.observer = observer
+	return p
+}
+
+// WithLogger attaches a logger to the Postgres client for internal logging.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The logger will be used for lifecycle events, connection monitoring, and background operations.
+//
+// Example:
+//
+//	client, err := postgres.NewPostgres(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithLogger(myLogger)
+//	defer client.GracefulShutdown()
+func (p *Postgres) WithLogger(logger Logger) *Postgres {
+	p.logger = logger
+	return p
+}
+
+// logInfo logs an informational message using the configured logger if available.
+// This is used for lifecycle and background operation logging.
+func (p *Postgres) logInfo(ctx context.Context, msg string, fields map[string]interface{}) {
+	if p.logger != nil {
+		p.logger.InfoWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logWarn logs a warning message using the configured logger if available.
+// This is used for non-critical issues during connection monitoring.
+func (p *Postgres) logWarn(ctx context.Context, msg string, fields map[string]interface{}) {
+	if p.logger != nil {
+		p.logger.WarnWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logError logs an error message using the configured logger if available.
+// This is only used for errors in background goroutines that can't be returned to the caller.
+func (p *Postgres) logError(ctx context.Context, msg string, fields map[string]interface{}) {
+	if p.logger != nil {
+		p.logger.ErrorWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
 }

@@ -1,6 +1,8 @@
 package postgres
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 )
 
@@ -45,7 +47,16 @@ func (qb *postgresQueryBuilder) QueryRow() RowScanner {
 // Returns a RowsScanner and a GORM error if the query fails.
 func (qb *postgresQueryBuilder) QueryRows() (RowsScanner, error) {
 	defer qb.release()
-	return qb.db.Rows()
+	start := time.Now()
+	rows, err := qb.db.Rows()
+	table := ""
+	if qb.db != nil && qb.db.Statement != nil {
+		table = qb.db.Statement.Table
+	}
+	if qb.pg != nil {
+		qb.pg.observeOperation("rows", table, "", time.Since(start), err, 0, nil)
+	}
+	return rows, err
 }
 
 // ScanRow is a convenience method to scan a single row directly into a struct.
@@ -56,7 +67,16 @@ func (qb *postgresQueryBuilder) QueryRows() (RowsScanner, error) {
 // Returns a GORM error if the scan fails or nil on success.
 func (qb *postgresQueryBuilder) ScanRow(dest interface{}) error {
 	defer qb.release()
-	return qb.db.Scan(dest).Error
+	start := time.Now()
+	result := qb.db.Scan(dest)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.pg != nil {
+		qb.pg.observeOperation("scan_row", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
+	return result.Error
 }
 
 // MapRows executes a query and maps all rows into a destination slice using the provided mapping function.
