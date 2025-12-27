@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
 )
 
@@ -46,7 +47,9 @@ var FXModule = fx.Module("schema_registry",
 type SchemaRegistryParams struct {
 	fx.In
 
-	Config Config
+	Config   Config
+	Logger   Logger                 `optional:"true"`
+	Observer observability.Observer `optional:"true"`
 }
 
 // NewClientWithDI creates a new Schema Registry client using dependency injection.
@@ -79,7 +82,22 @@ type SchemaRegistryParams struct {
 //	    ),
 //	)
 func NewClientWithDI(params SchemaRegistryParams) (*Client, error) {
-	return NewClient(params.Config)
+	client, err := NewClient(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject logger if provided
+	if params.Logger != nil {
+		client.logger = params.Logger
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }
 
 // SchemaRegistryLifecycleParams groups the dependencies needed for Schema Registry lifecycle management
