@@ -115,6 +115,43 @@
 //	)
 //	app.Run()
 //
+// # Observability (Observer Hook)
+//
+// MariaDB supports optional observability through the Observer interface from the observability package.
+// This allows external systems to track operations without coupling the MariaDB package to specific
+// metrics/tracing implementations.
+//
+// Using WithObserver (non-FX usage):
+//
+//	client, err := mariadb.NewMariaDB(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver).WithLogger(myLogger)
+//	defer client.GracefulShutdown()
+//
+// Using FX (automatic injection):
+//
+//	app := fx.New(
+//	    mariadb.FXModule,
+//	    logger.FXModule,  // Optional: provides logger
+//	    fx.Provide(
+//	        func() mariadb.Config { return loadConfig() },
+//	        func() observability.Observer { return myObserver },  // Optional
+//	    ),
+//	)
+//
+// The observer receives events for all database operations:
+//   - Component: "mariadb"
+//   - Operations: "find", "first", "create", "update", "delete", "exec", "count",
+//     "transaction", "scan", "pluck", etc.
+//   - Resource: table name (or database name if table is unknown)
+//   - SubResource: additional context (e.g., migration ID)
+//   - Duration: operation duration
+//   - Error: any error that occurred
+//   - Size: rows affected or count result
+//   - Metadata: operation-specific details (e.g., SQL for exec, column for pluck)
+//
 // Error Handling:
 //
 // All methods in this package return GORM errors directly. This design provides:

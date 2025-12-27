@@ -1,6 +1,9 @@
 package mariadb
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Config represents the complete configuration for a MariaDB/MySQL database connection.
 // It encapsulates both the basic connection parameters and detailed connection pool settings.
@@ -81,4 +84,17 @@ type ConnectionDetails struct {
 	// This helps ensure database-enforced timeouts are respected.
 	// If set to 0, the package default is used.
 	ConnMaxLifetime time.Duration
+}
+
+// Logger is an interface that matches the std/v1/logger.Logger interface.
+// It provides context-aware structured logging with optional error and field parameters.
+type Logger interface {
+	// InfoWithContext logs an informational message with trace context.
+	InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+	// WarnWithContext logs a warning message with trace context.
+	WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+	// ErrorWithContext logs an error message with trace context.
+	ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 }

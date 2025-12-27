@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
 )
 
@@ -45,15 +46,18 @@ func ProvideClient(db *MariaDB) Client {
 type MariaDBParams struct {
 	fx.In
 
-	Config Config
+	Config   Config
+	Logger   Logger                 `optional:"true"`
+	Observer observability.Observer `optional:"true"`
 }
 
 // NewMariaDBClientWithDI creates a new MariaDB Client using dependency injection.
 // This function is designed to be used with Uber's fx dependency injection framework
-// where the Config dependency is automatically provided via the MariaDBParams struct.
+// where the Config, Logger, and Observer dependencies are automatically provided via the MariaDBParams struct.
 //
 // Parameters:
 //   - params: A MariaDBParams struct containing the Config instance
+//     and optionally a Logger and Observer instances
 //     required to initialize the MariaDB Client. This struct embeds fx.In to enable
 //     automatic injection of these dependencies.
 //
@@ -65,17 +69,36 @@ type MariaDBParams struct {
 //
 //	app := fx.New(
 //	    mariadb.FXModule,
+//	    logger.FXModule,  // Optional: provides logger
 //	    fx.Provide(
 //	        func() mariadb.Config {
 //	            return loadMariaDBConfig() // Your config loading function
 //	        },
+//	        func(metrics *prometheus.Metrics) observability.Observer {
+//	            return &MyObserver{metrics: metrics}  // Optional observer
+//	        },
 //	    ),
 //	)
 //
-// This function delegates to the standard NewMariaDB function, maintaining the same
-// initialization logic while enabling seamless integration with dependency injection.
+// This function creates the client and injects the optional logger and observer before returning.
 func NewMariaDBClientWithDI(params MariaDBParams) (*MariaDB, error) {
-	return NewMariaDB(params.Config)
+	// Create client with config
+	client, err := NewMariaDB(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject logger if provided
+	if params.Logger != nil {
+		client.logger = params.Logger
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }
 
 // MariaDBLifeCycleParams groups the dependencies needed for MariaDB lifecycle management.

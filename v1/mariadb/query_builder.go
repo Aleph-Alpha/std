@@ -2,6 +2,7 @@ package mariadb
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -37,6 +38,7 @@ func (m *MariaDB) Query(ctx context.Context) QueryBuilder {
 	// are delayed or forgotten.
 	return &mariadbQueryBuilder{
 		db:      m.DB().WithContext(ctx), // snapshot current connection under an atomic load
+		m:       m,                       // reference to parent for observer
 		release: func() {},               // no-op; kept to preserve the builder structure
 	}
 }
@@ -51,6 +53,9 @@ func (m *MariaDB) Query(ctx context.Context) QueryBuilder {
 type mariadbQueryBuilder struct {
 	// db is the underlying GORM DB instance that handles the actual query execution
 	db *gorm.DB
+
+	// m is a reference to the parent MariaDB for observer calls
+	m *MariaDB
 
 	// release finalizes the builder (currently a no-op).
 	release func()
@@ -327,7 +332,16 @@ func (qb *mariadbQueryBuilder) Model(value interface{}) QueryBuilder {
 //	err := qb.Raw("SELECT COUNT(*) as count FROM users").Scan(&result)
 func (qb *mariadbQueryBuilder) Scan(dest interface{}) error {
 	defer qb.release()
-	return qb.db.Scan(dest).Error
+	start := time.Now()
+	result := qb.db.Scan(dest)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("scan", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
+	return result.Error
 }
 
 // Find finds records that match the query conditions.
@@ -345,7 +359,16 @@ func (qb *mariadbQueryBuilder) Scan(dest interface{}) error {
 //	err := qb.Where("active = ?", true).Find(&users)
 func (qb *mariadbQueryBuilder) Find(dest interface{}) error {
 	defer qb.release()
-	return qb.db.Find(dest).Error
+	start := time.Now()
+	result := qb.db.Find(dest)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("find", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
+	return result.Error
 }
 
 // First finds the first record that matches the query conditions.
@@ -366,7 +389,16 @@ func (qb *mariadbQueryBuilder) Find(dest interface{}) error {
 //	}
 func (qb *mariadbQueryBuilder) First(dest interface{}) error {
 	defer qb.release()
-	return qb.db.First(dest).Error
+	start := time.Now()
+	result := qb.db.First(dest)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("first", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
+	return result.Error
 }
 
 // Last finds the last record that matches the query conditions.
@@ -384,7 +416,16 @@ func (qb *mariadbQueryBuilder) First(dest interface{}) error {
 //	err := qb.Where("department = ?", "Engineering").Order("joined_at ASC").Last(&user)
 func (qb *mariadbQueryBuilder) Last(dest interface{}) error {
 	defer qb.release()
-	return qb.db.Last(dest).Error
+	start := time.Now()
+	result := qb.db.Last(dest)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("last", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
+	return result.Error
 }
 
 // Count counts records that match the query conditions.
@@ -401,7 +442,20 @@ func (qb *mariadbQueryBuilder) Last(dest interface{}) error {
 //	err := qb.Where("active = ?", true).Count(&count)
 func (qb *mariadbQueryBuilder) Count(count *int64) error {
 	defer qb.release()
-	return qb.db.Count(count).Error
+	start := time.Now()
+	result := qb.db.Count(count)
+	size := int64(0)
+	if count != nil {
+		size = *count
+	}
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("count", table, "", time.Since(start), result.Error, size, nil)
+	}
+	return result.Error
 }
 
 // Updates updates records that match the query conditions.
@@ -423,9 +477,15 @@ func (qb *mariadbQueryBuilder) Count(count *int64) error {
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (qb *mariadbQueryBuilder) Updates(values interface{}) (int64, error) {
 	defer qb.release()
-
+	start := time.Now()
 	result := qb.db.Updates(values)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("update", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
 	return result.RowsAffected, result.Error
 }
 
@@ -448,9 +508,15 @@ func (qb *mariadbQueryBuilder) Updates(values interface{}) (int64, error) {
 //	fmt.Printf("Deleted %d rows\n", rowsAffected)
 func (qb *mariadbQueryBuilder) Delete(value interface{}) (int64, error) {
 	defer qb.release()
-
+	start := time.Now()
 	result := qb.db.Delete(value)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("delete", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
 	return result.RowsAffected, result.Error
 }
 
@@ -475,9 +541,17 @@ func (qb *mariadbQueryBuilder) Delete(value interface{}) (int64, error) {
 //	fmt.Printf("Found %d email addresses\n", rowsFound)
 func (qb *mariadbQueryBuilder) Pluck(column string, dest interface{}) (int64, error) {
 	defer qb.release()
-
+	start := time.Now()
 	result := qb.db.Pluck(column, dest)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("pluck", table, "", time.Since(start), result.Error, result.RowsAffected, map[string]interface{}{
+			"column": column,
+		})
+	}
 	return result.RowsAffected, result.Error
 }
 
@@ -746,9 +820,15 @@ func (qb *mariadbQueryBuilder) Clauses(conds ...interface{}) QueryBuilder {
 //	}
 func (qb *mariadbQueryBuilder) Create(value interface{}) (int64, error) {
 	defer qb.release()
-
+	start := time.Now()
 	result := qb.db.Create(value)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("create", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
 	return result.RowsAffected, result.Error
 }
 
@@ -773,9 +853,17 @@ func (qb *mariadbQueryBuilder) Create(value interface{}) (int64, error) {
 //	fmt.Printf("Created %d records\n", rowsAffected)
 func (qb *mariadbQueryBuilder) CreateInBatches(value interface{}, batchSize int) (int64, error) {
 	defer qb.release()
-
+	start := time.Now()
 	result := qb.db.CreateInBatches(value, batchSize)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("create_in_batches", table, "", time.Since(start), result.Error, result.RowsAffected, map[string]interface{}{
+			"batch_size": batchSize,
+		})
+	}
 	return result.RowsAffected, result.Error
 }
 
@@ -794,7 +882,16 @@ func (qb *mariadbQueryBuilder) CreateInBatches(value interface{}, batchSize int)
 //	err := qb.Where("email = ?", "user@example.com").FirstOrInit(&user)
 func (qb *mariadbQueryBuilder) FirstOrInit(dest interface{}, conds ...interface{}) error {
 	defer qb.release()
-	return qb.db.FirstOrInit(dest, conds...).Error
+	start := time.Now()
+	result := qb.db.FirstOrInit(dest, conds...)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("first_or_init", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
+	return result.Error
 }
 
 // FirstOrCreate finds the first record matching the conditions, or creates
@@ -812,7 +909,16 @@ func (qb *mariadbQueryBuilder) FirstOrInit(dest interface{}, conds ...interface{
 //	err := qb.Where("email = ?", "user@example.com").FirstOrCreate(&user)
 func (qb *mariadbQueryBuilder) FirstOrCreate(dest interface{}, conds ...interface{}) error {
 	defer qb.release()
-	return qb.db.FirstOrCreate(dest, conds...).Error
+	start := time.Now()
+	result := qb.db.FirstOrCreate(dest, conds...)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	if qb.m != nil {
+		qb.m.observeOperation("first_or_create", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	}
+	return result.Error
 }
 
 // Done finalizes the builder without executing a terminal operation.
