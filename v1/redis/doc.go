@@ -80,6 +80,43 @@
 //	)
 //	app.Run()
 //
+// # Observability (Observer Hook)
+//
+// Redis supports optional observability through the Observer interface from the observability package.
+// This allows external systems to track Redis operations without coupling the package to specific
+// metrics/tracing implementations.
+//
+// Using WithObserver (non-FX usage):
+//
+//	client, err := redis.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver).WithLogger(myLogger)
+//	defer client.Close()
+//
+// Using FX (automatic injection):
+//
+//	app := fx.New(
+//	    redis.FXModule,
+//	    logger.FXModule,  // Optional: provides logger
+//	    fx.Provide(
+//	        func() redis.Config { return loadConfig() },
+//	        func() observability.Observer { return myObserver },  // Optional
+//	    ),
+//	)
+//
+// The observer receives events for Redis operations:
+//   - Component: "redis"
+//   - Operations: "get", "set", "setnx", "delete", "mget", "mset",
+//     "hget", "hset", "hgetall", "lpush", "lrange", "publish"
+//   - Resource: key name (or first key for multi-key operations)
+//   - SubResource: field name (for hash operations) or channel name
+//   - Duration: operation duration
+//   - Error: any error that occurred
+//   - Size: bytes or count returned/affected
+//   - Metadata: operation-specific details (e.g., ttl, key_count, field_count)
+//
 // # Type Aliases in Consumer Code
 //
 // To simplify your code and make it database-agnostic, use type aliases:

@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -25,6 +26,9 @@ type RedisClient struct {
 
 	// logger is used for structured logging
 	logger Logger
+
+	// observer provides optional observability hooks for tracking operations
+	observer observability.Observer
 
 	// mu protects concurrent access to client
 	mu sync.RWMutex
@@ -372,4 +376,26 @@ func (r *RedisClient) Close() error {
 	}
 
 	return nil
+}
+
+// WithObserver sets the observer for this client and returns the client for method chaining.
+// The observer receives events about Redis operations (e.g., get, set, delete).
+//
+// Example:
+//
+//	client := client.WithObserver(myObserver).WithLogger(myLogger)
+func (r *RedisClient) WithObserver(observer observability.Observer) *RedisClient {
+	r.observer = observer
+	return r
+}
+
+// WithLogger sets the logger for this client and returns the client for method chaining.
+// The logger is used for structured logging of client operations and errors.
+//
+// Example:
+//
+//	client := client.WithObserver(myObserver).WithLogger(myLogger)
+func (r *RedisClient) WithLogger(logger Logger) *RedisClient {
+	r.logger = logger
+	return r
 }

@@ -30,28 +30,45 @@ func (r *RedisClient) PoolStats() *redis.PoolStats {
 // Get retrieves the value associated with the given key.
 // Returns ErrNil if the key does not exist.
 func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.Get(ctx, key).Result()
+	result, err := r.client.Get(ctx, key).Result()
+	r.observeOperation("get", key, "", time.Since(start), err, int64(len(result)), nil)
+	return result, err
 }
 
 // Set sets the value for the given key with an optional TTL.
 // If ttl is 0, the key will not expire.
 func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.Set(ctx, key, value, ttl).Err()
+	err := r.client.Set(ctx, key, value, ttl).Err()
+	metadata := map[string]interface{}{}
+	if ttl > 0 {
+		metadata["ttl"] = ttl.String()
+	}
+	r.observeOperation("set", key, "", time.Since(start), err, 0, metadata)
+	return err
 }
 
 // SetNX sets the value for the given key only if the key does not exist.
 // Returns true if the key was set, false if it already existed.
 func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.SetNX(ctx, key, value, ttl).Result()
+	result, err := r.client.SetNX(ctx, key, value, ttl).Result()
+	metadata := map[string]interface{}{"was_set": result}
+	if ttl > 0 {
+		metadata["ttl"] = ttl.String()
+	}
+	r.observeOperation("setnx", key, "", time.Since(start), err, 0, metadata)
+	return result, err
 }
 
 // SetEX sets the value for the given key with a TTL (shorthand for Set with TTL).
@@ -71,28 +88,51 @@ func (r *RedisClient) GetSet(ctx context.Context, key string, value interface{})
 // Returns a slice of values in the same order as the keys.
 // If a key doesn't exist, its value will be nil.
 func (r *RedisClient) MGet(ctx context.Context, keys ...string) ([]interface{}, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.MGet(ctx, keys...).Result()
+	result, err := r.client.MGet(ctx, keys...).Result()
+	resource := ""
+	if len(keys) > 0 {
+		resource = keys[0]
+	}
+	r.observeOperation("mget", resource, "", time.Since(start), err, int64(len(result)), map[string]interface{}{
+		"key_count": len(keys),
+	})
+	return result, err
 }
 
 // MSet sets multiple key-value pairs at once.
 // The values parameter should be in the format: key1, value1, key2, value2, ...
 func (r *RedisClient) MSet(ctx context.Context, values ...interface{}) error {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.MSet(ctx, values...).Err()
+	err := r.client.MSet(ctx, values...).Err()
+	r.observeOperation("mset", "", "", time.Since(start), err, 0, map[string]interface{}{
+		"pair_count": len(values) / 2,
+	})
+	return err
 }
 
 // Delete deletes one or more keys.
 // Returns the number of keys that were deleted.
 func (r *RedisClient) Delete(ctx context.Context, keys ...string) (int64, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.Del(ctx, keys...).Result()
+	result, err := r.client.Del(ctx, keys...).Result()
+	resource := ""
+	if len(keys) > 0 {
+		resource = keys[0]
+	}
+	r.observeOperation("delete", resource, "", time.Since(start), err, result, map[string]interface{}{
+		"key_count": len(keys),
+	})
+	return result, err
 }
 
 // Exists checks if one or more keys exist.
@@ -213,26 +253,37 @@ func (r *RedisClient) Type(ctx context.Context, key string) (string, error) {
 // HSet sets field in the hash stored at key to value.
 // If the key doesn't exist, a new hash is created.
 func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{}) (int64, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.HSet(ctx, key, values...).Result()
+	result, err := r.client.HSet(ctx, key, values...).Result()
+	r.observeOperation("hset", key, "", time.Since(start), err, result, map[string]interface{}{
+		"field_count": len(values) / 2,
+	})
+	return result, err
 }
 
 // HGet returns the value associated with field in the hash stored at key.
 func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.HGet(ctx, key, field).Result()
+	result, err := r.client.HGet(ctx, key, field).Result()
+	r.observeOperation("hget", key, field, time.Since(start), err, int64(len(result)), nil)
+	return result, err
 }
 
 // HGetAll returns all fields and values in the hash stored at key.
 func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.HGetAll(ctx, key).Result()
+	result, err := r.client.HGetAll(ctx, key).Result()
+	r.observeOperation("hgetall", key, "", time.Since(start), err, int64(len(result)), nil)
+	return result, err
 }
 
 // HMGet returns the values associated with the specified fields in the hash.
@@ -303,10 +354,15 @@ func (r *RedisClient) HIncrByFloat(ctx context.Context, key, field string, incr 
 
 // LPush inserts all the specified values at the head of the list stored at key.
 func (r *RedisClient) LPush(ctx context.Context, key string, values ...interface{}) (int64, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.LPush(ctx, key, values...).Result()
+	result, err := r.client.LPush(ctx, key, values...).Result()
+	r.observeOperation("lpush", key, "", time.Since(start), err, result, map[string]interface{}{
+		"value_count": len(values),
+	})
+	return result, err
 }
 
 // RPush inserts all the specified values at the tail of the list stored at key.
@@ -337,10 +393,16 @@ func (r *RedisClient) RPop(ctx context.Context, key string) (string, error) {
 // The offsets start and stop are zero-based indexes.
 // Use -1 for the last element, -2 for the second last, etc.
 func (r *RedisClient) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	startTime := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.LRange(ctx, key, start, stop).Result()
+	result, err := r.client.LRange(ctx, key, start, stop).Result()
+	r.observeOperation("lrange", key, "", time.Since(startTime), err, int64(len(result)), map[string]interface{}{
+		"start": start,
+		"stop":  stop,
+	})
+	return result, err
 }
 
 // LLen returns the length of the list stored at key.
@@ -618,10 +680,13 @@ func (r *RedisClient) ZRevRank(ctx context.Context, key, member string) (int64, 
 // Publish posts a message to the given channel.
 // Returns the number of clients that received the message.
 func (r *RedisClient) Publish(ctx context.Context, channel string, message interface{}) (int64, error) {
+	start := time.Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.client.Publish(ctx, channel, message).Result()
+	result, err := r.client.Publish(ctx, channel, message).Result()
+	r.observeOperation("publish", channel, "", time.Since(start), err, result, nil)
+	return result, err
 }
 
 // Subscribe subscribes to the given channels.
