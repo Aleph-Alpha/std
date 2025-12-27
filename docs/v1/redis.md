@@ -90,6 +90,45 @@ app := fx.New(
 app.Run()
 ```
 
+### Observability \\\(Observer Hook\\\)
+
+Redis supports optional observability through the Observer interface from the observability package. This allows external systems to track Redis operations without coupling the package to specific metrics/tracing implementations.
+
+Using WithObserver \(non\-FX usage\):
+
+```
+client, err := redis.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver).WithLogger(myLogger)
+defer client.Close()
+```
+
+Using FX \(automatic injection\):
+
+```
+app := fx.New(
+    redis.FXModule,
+    logger.FXModule,  // Optional: provides logger
+    fx.Provide(
+        func() redis.Config { return loadConfig() },
+        func() observability.Observer { return myObserver },  // Optional
+    ),
+)
+```
+
+The observer receives events for Redis operations:
+
+- Component: "redis"
+- Operations: "get", "set", "setnx", "delete", "mget", "mset", "hget", "hset", "hgetall", "lpush", "lrange", "publish"
+- Resource: key name \(or first key for multi\-key operations\)
+- SubResource: field name \(for hash operations\) or channel name
+- Duration: operation duration
+- Error: any error that occurred
+- Size: bytes or count returned/affected
+- Metadata: operation\-specific details \(e.g., ttl, key\_count, field\_count\)
+
 ### Type Aliases in Consumer Code
 
 To simplify your code and make it database\-agnostic, use type aliases:
@@ -560,6 +599,8 @@ All methods on the Redis client are safe for concurrent use by multiple goroutin
   - [func \(r \*RedisClient\) TxPipeline\(\) redis.Pipeliner](<#RedisClient.TxPipeline>)
   - [func \(r \*RedisClient\) Type\(ctx context.Context, key string\) \(string, error\)](<#RedisClient.Type>)
   - [func \(r \*RedisClient\) Watch\(ctx context.Context, fn func\(\*redis.Tx\) error, keys ...string\) error](<#RedisClient.Watch>)
+  - [func \(r \*RedisClient\) WithLogger\(logger Logger\) \*RedisClient](<#RedisClient.WithLogger>)
+  - [func \(r \*RedisClient\) WithObserver\(observer observability.Observer\) \*RedisClient](<#RedisClient.WithObserver>)
   - [func \(r \*RedisClient\) ZAdd\(ctx context.Context, key string, members ...redis.Z\) \(int64, error\)](<#RedisClient.ZAdd>)
   - [func \(r \*RedisClient\) ZCard\(ctx context.Context, key string\) \(int64, error\)](<#RedisClient.ZCard>)
   - [func \(r \*RedisClient\) ZCount\(ctx context.Context, key, min, max string\) \(int64, error\)](<#RedisClient.ZCount>)
@@ -703,7 +744,7 @@ func IsPoolTimeoutError(err error) bool
 IsPoolTimeoutError checks if the error is a pool timeout error.
 
 <a name="RegisterRedisLifecycle"></a>
-## func [RegisterRedisLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L95>)
+## func [RegisterRedisLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L107>)
 
 ```go
 func RegisterRedisLifecycle(params RedisLifecycleParams)
@@ -925,7 +966,7 @@ type ClusterConfig struct {
 ```
 
 <a name="ClusterRedisParams"></a>
-## type [ClusterRedisParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L122-L127>)
+## type [ClusterRedisParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L134-L140>)
 
 ClusterRedisParams groups the dependencies needed to create a Redis Cluster client
 
@@ -933,8 +974,9 @@ ClusterRedisParams groups the dependencies needed to create a Redis Cluster clie
 type ClusterRedisParams struct {
     fx.In
 
-    Config ClusterConfig
-    Logger Logger `optional:"true"`
+    Config   ClusterConfig
+    Logger   Logger                 `optional:"true"`
+    Observer observability.Observer `optional:"true"`
 }
 ```
 
@@ -1117,7 +1159,7 @@ type FailoverConfig struct {
 ```
 
 <a name="FailoverRedisParams"></a>
-## type [FailoverRedisParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L148-L153>)
+## type [FailoverRedisParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L171-L177>)
 
 FailoverRedisParams groups the dependencies needed to create a Redis Sentinel client
 
@@ -1125,13 +1167,14 @@ FailoverRedisParams groups the dependencies needed to create a Redis Sentinel cl
 type FailoverRedisParams struct {
     fx.In
 
-    Config FailoverConfig
-    Logger Logger `optional:"true"`
+    Config   FailoverConfig
+    Logger   Logger                 `optional:"true"`
+    Observer observability.Observer `optional:"true"`
 }
 ```
 
 <a name="Lock"></a>
-## type [Lock](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L702-L707>)
+## type [Lock](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L767-L772>)
 
 Lock represents a distributed lock.
 
@@ -1142,7 +1185,7 @@ type Lock struct {
 ```
 
 <a name="Lock.Refresh"></a>
-### func \(\*Lock\) [Refresh](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L751>)
+### func \(\*Lock\) [Refresh](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L816>)
 
 ```go
 func (l *Lock) Refresh(ctx context.Context) error
@@ -1151,7 +1194,7 @@ func (l *Lock) Refresh(ctx context.Context) error
 Refresh extends the TTL of the lock.
 
 <a name="Lock.Release"></a>
-### func \(\*Lock\) [Release](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L733>)
+### func \(\*Lock\) [Release](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L798>)
 
 ```go
 func (l *Lock) Release(ctx context.Context) error
@@ -1173,7 +1216,7 @@ type Logger interface {
 ```
 
 <a name="RedisClient"></a>
-## type [RedisClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L19-L36>)
+## type [RedisClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L20-L40>)
 
 RedisClient represents a client for interacting with Redis. It wraps the go\-redis client and provides a simplified interface with connection management and helper methods.
 
@@ -1186,7 +1229,7 @@ type RedisClient struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L59>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L63>)
 
 ```go
 func NewClient(cfg Config) (*RedisClient, error)
@@ -1217,7 +1260,7 @@ defer client.Close()
 ```
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L65>)
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L67>)
 
 ```go
 func NewClientWithDI(params RedisParams) (*RedisClient, error)
@@ -1250,7 +1293,7 @@ app := fx.New(
 Under the hood, this function injects the optional logger before delegating to the standard NewClient function.
 
 <a name="NewClusterClient"></a>
-### func [NewClusterClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L150>)
+### func [NewClusterClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L154>)
 
 ```go
 func NewClusterClient(cfg ClusterConfig) (*RedisClient, error)
@@ -1278,7 +1321,7 @@ client, err := redis.NewClusterClient(redis.ClusterConfig{
 ```
 
 <a name="NewClusterClientWithDI"></a>
-### func [NewClusterClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L130>)
+### func [NewClusterClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L143>)
 
 ```go
 func NewClusterClientWithDI(params ClusterRedisParams) (*RedisClient, error)
@@ -1287,7 +1330,7 @@ func NewClusterClientWithDI(params ClusterRedisParams) (*RedisClient, error)
 NewClusterClientWithDI creates a new Redis Cluster client using dependency injection.
 
 <a name="NewFailoverClient"></a>
-### func [NewFailoverClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L240>)
+### func [NewFailoverClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L244>)
 
 ```go
 func NewFailoverClient(cfg FailoverConfig) (*RedisClient, error)
@@ -1317,7 +1360,7 @@ client, err := redis.NewFailoverClient(redis.FailoverConfig{
 ```
 
 <a name="NewFailoverClientWithDI"></a>
-### func [NewFailoverClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L156>)
+### func [NewFailoverClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L180>)
 
 ```go
 func NewFailoverClientWithDI(params FailoverRedisParams) (*RedisClient, error)
@@ -1326,7 +1369,7 @@ func NewFailoverClientWithDI(params FailoverRedisParams) (*RedisClient, error)
 NewFailoverClientWithDI creates a new Redis Sentinel client using dependency injection.
 
 <a name="RedisClient.AcquireLock"></a>
-### func \(\*RedisClient\) [AcquireLock](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L711>)
+### func \(\*RedisClient\) [AcquireLock](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L776>)
 
 ```go
 func (r *RedisClient) AcquireLock(ctx context.Context, key string, ttl time.Duration) (*Lock, error)
@@ -1335,7 +1378,7 @@ func (r *RedisClient) AcquireLock(ctx context.Context, key string, ttl time.Dura
 AcquireLock attempts to acquire a distributed lock. Returns a Lock instance if successful, or an error if the lock is already held.
 
 <a name="RedisClient.BLPop"></a>
-### func \(\*RedisClient\) [BLPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L388>)
+### func \(\*RedisClient\) [BLPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L450>)
 
 ```go
 func (r *RedisClient) BLPop(ctx context.Context, timeout time.Duration, keys ...string) ([]string, error)
@@ -1344,7 +1387,7 @@ func (r *RedisClient) BLPop(ctx context.Context, timeout time.Duration, keys ...
 BLPop is a blocking version of LPop with a timeout. It blocks until an element is available or the timeout is reached.
 
 <a name="RedisClient.BRPop"></a>
-### func \(\*RedisClient\) [BRPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L396>)
+### func \(\*RedisClient\) [BRPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L458>)
 
 ```go
 func (r *RedisClient) BRPop(ctx context.Context, timeout time.Duration, keys ...string) ([]string, error)
@@ -1353,7 +1396,7 @@ func (r *RedisClient) BRPop(ctx context.Context, timeout time.Duration, keys ...
 BRPop is a blocking version of RPop with a timeout.
 
 <a name="RedisClient.Client"></a>
-### func \(\*RedisClient\) [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L349>)
+### func \(\*RedisClient\) [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L353>)
 
 ```go
 func (r *RedisClient) Client() redis.UniversalClient
@@ -1362,7 +1405,7 @@ func (r *RedisClient) Client() redis.UniversalClient
 Client returns the underlying go\-redis client for advanced operations. This allows users to access the full go\-redis API when needed.
 
 <a name="RedisClient.Close"></a>
-### func \(\*RedisClient\) [Close](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L357>)
+### func \(\*RedisClient\) [Close](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L361>)
 
 ```go
 func (r *RedisClient) Close() error
@@ -1371,7 +1414,7 @@ func (r *RedisClient) Close() error
 Close closes the Redis client and releases all resources. This should be called when the client is no longer needed.
 
 <a name="RedisClient.Decr"></a>
-### func \(\*RedisClient\) [Decr](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L169>)
+### func \(\*RedisClient\) [Decr](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L209>)
 
 ```go
 func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error)
@@ -1380,7 +1423,7 @@ func (r *RedisClient) Decr(ctx context.Context, key string) (int64, error)
 Decr decrements the integer value of a key by one.
 
 <a name="RedisClient.DecrBy"></a>
-### func \(\*RedisClient\) [DecrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L177>)
+### func \(\*RedisClient\) [DecrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L217>)
 
 ```go
 func (r *RedisClient) DecrBy(ctx context.Context, key string, value int64) (int64, error)
@@ -1389,7 +1432,7 @@ func (r *RedisClient) DecrBy(ctx context.Context, key string, value int64) (int6
 DecrBy decrements the integer value of a key by the given amount.
 
 <a name="RedisClient.Delete"></a>
-### func \(\*RedisClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L91>)
+### func \(\*RedisClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L122>)
 
 ```go
 func (r *RedisClient) Delete(ctx context.Context, keys ...string) (int64, error)
@@ -1398,7 +1441,7 @@ func (r *RedisClient) Delete(ctx context.Context, keys ...string) (int64, error)
 Delete deletes one or more keys. Returns the number of keys that were deleted.
 
 <a name="RedisClient.Exists"></a>
-### func \(\*RedisClient\) [Exists](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L100>)
+### func \(\*RedisClient\) [Exists](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L140>)
 
 ```go
 func (r *RedisClient) Exists(ctx context.Context, keys ...string) (int64, error)
@@ -1407,7 +1450,7 @@ func (r *RedisClient) Exists(ctx context.Context, keys ...string) (int64, error)
 Exists checks if one or more keys exist. Returns the number of keys that exist.
 
 <a name="RedisClient.Expire"></a>
-### func \(\*RedisClient\) [Expire](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L109>)
+### func \(\*RedisClient\) [Expire](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L149>)
 
 ```go
 func (r *RedisClient) Expire(ctx context.Context, key string, ttl time.Duration) (bool, error)
@@ -1416,7 +1459,7 @@ func (r *RedisClient) Expire(ctx context.Context, key string, ttl time.Duration)
 Expire sets a timeout on a key. After the timeout has expired, the key will be automatically deleted.
 
 <a name="RedisClient.ExpireAt"></a>
-### func \(\*RedisClient\) [ExpireAt](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L118>)
+### func \(\*RedisClient\) [ExpireAt](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L158>)
 
 ```go
 func (r *RedisClient) ExpireAt(ctx context.Context, key string, tm time.Time) (bool, error)
@@ -1434,7 +1477,7 @@ func (r *RedisClient) Get(ctx context.Context, key string) (string, error)
 Get retrieves the value associated with the given key. Returns ErrNil if the key does not exist.
 
 <a name="RedisClient.GetJSON"></a>
-### func \(\*RedisClient\) [GetJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L686>)
+### func \(\*RedisClient\) [GetJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L751>)
 
 ```go
 func (r *RedisClient) GetJSON(ctx context.Context, key string, dest interface{}) error
@@ -1443,7 +1486,7 @@ func (r *RedisClient) GetJSON(ctx context.Context, key string, dest interface{})
 GetJSON retrieves the value from Redis and deserializes it from JSON.
 
 <a name="RedisClient.GetSet"></a>
-### func \(\*RedisClient\) [GetSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L63>)
+### func \(\*RedisClient\) [GetSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L80>)
 
 ```go
 func (r *RedisClient) GetSet(ctx context.Context, key string, value interface{}) (string, error)
@@ -1452,7 +1495,7 @@ func (r *RedisClient) GetSet(ctx context.Context, key string, value interface{})
 GetSet sets the value for the given key and returns the old value.
 
 <a name="RedisClient.HDel"></a>
-### func \(\*RedisClient\) [HDel](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L255>)
+### func \(\*RedisClient\) [HDel](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L306>)
 
 ```go
 func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) (int64, error)
@@ -1461,7 +1504,7 @@ func (r *RedisClient) HDel(ctx context.Context, key string, fields ...string) (i
 HDel deletes one or more hash fields.
 
 <a name="RedisClient.HExists"></a>
-### func \(\*RedisClient\) [HExists](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L247>)
+### func \(\*RedisClient\) [HExists](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L298>)
 
 ```go
 func (r *RedisClient) HExists(ctx context.Context, key, field string) (bool, error)
@@ -1470,7 +1513,7 @@ func (r *RedisClient) HExists(ctx context.Context, key, field string) (bool, err
 HExists checks if a field exists in the hash stored at key.
 
 <a name="RedisClient.HGet"></a>
-### func \(\*RedisClient\) [HGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L223>)
+### func \(\*RedisClient\) [HGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L268>)
 
 ```go
 func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, error)
@@ -1479,7 +1522,7 @@ func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, erro
 HGet returns the value associated with field in the hash stored at key.
 
 <a name="RedisClient.HGetAll"></a>
-### func \(\*RedisClient\) [HGetAll](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L231>)
+### func \(\*RedisClient\) [HGetAll](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L279>)
 
 ```go
 func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error)
@@ -1488,7 +1531,7 @@ func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]strin
 HGetAll returns all fields and values in the hash stored at key.
 
 <a name="RedisClient.HIncrBy"></a>
-### func \(\*RedisClient\) [HIncrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L287>)
+### func \(\*RedisClient\) [HIncrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L338>)
 
 ```go
 func (r *RedisClient) HIncrBy(ctx context.Context, key, field string, incr int64) (int64, error)
@@ -1497,7 +1540,7 @@ func (r *RedisClient) HIncrBy(ctx context.Context, key, field string, incr int64
 HIncrBy increments the integer value of a hash field by the given number.
 
 <a name="RedisClient.HIncrByFloat"></a>
-### func \(\*RedisClient\) [HIncrByFloat](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L295>)
+### func \(\*RedisClient\) [HIncrByFloat](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L346>)
 
 ```go
 func (r *RedisClient) HIncrByFloat(ctx context.Context, key, field string, incr float64) (float64, error)
@@ -1506,7 +1549,7 @@ func (r *RedisClient) HIncrByFloat(ctx context.Context, key, field string, incr 
 HIncrByFloat increments the float value of a hash field by the given amount.
 
 <a name="RedisClient.HKeys"></a>
-### func \(\*RedisClient\) [HKeys](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L271>)
+### func \(\*RedisClient\) [HKeys](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L322>)
 
 ```go
 func (r *RedisClient) HKeys(ctx context.Context, key string) ([]string, error)
@@ -1515,7 +1558,7 @@ func (r *RedisClient) HKeys(ctx context.Context, key string) ([]string, error)
 HKeys returns all field names in the hash stored at key.
 
 <a name="RedisClient.HLen"></a>
-### func \(\*RedisClient\) [HLen](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L263>)
+### func \(\*RedisClient\) [HLen](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L314>)
 
 ```go
 func (r *RedisClient) HLen(ctx context.Context, key string) (int64, error)
@@ -1524,7 +1567,7 @@ func (r *RedisClient) HLen(ctx context.Context, key string) (int64, error)
 HLen returns the number of fields in the hash stored at key.
 
 <a name="RedisClient.HMGet"></a>
-### func \(\*RedisClient\) [HMGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L239>)
+### func \(\*RedisClient\) [HMGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L290>)
 
 ```go
 func (r *RedisClient) HMGet(ctx context.Context, key string, fields ...string) ([]interface{}, error)
@@ -1533,7 +1576,7 @@ func (r *RedisClient) HMGet(ctx context.Context, key string, fields ...string) (
 HMGet returns the values associated with the specified fields in the hash.
 
 <a name="RedisClient.HSet"></a>
-### func \(\*RedisClient\) [HSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L215>)
+### func \(\*RedisClient\) [HSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L255>)
 
 ```go
 func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{}) (int64, error)
@@ -1542,7 +1585,7 @@ func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{
 HSet sets field in the hash stored at key to value. If the key doesn't exist, a new hash is created.
 
 <a name="RedisClient.HVals"></a>
-### func \(\*RedisClient\) [HVals](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L279>)
+### func \(\*RedisClient\) [HVals](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L330>)
 
 ```go
 func (r *RedisClient) HVals(ctx context.Context, key string) ([]string, error)
@@ -1551,7 +1594,7 @@ func (r *RedisClient) HVals(ctx context.Context, key string) ([]string, error)
 HVals returns all values in the hash stored at key.
 
 <a name="RedisClient.Incr"></a>
-### func \(\*RedisClient\) [Incr](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L145>)
+### func \(\*RedisClient\) [Incr](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L185>)
 
 ```go
 func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error)
@@ -1560,7 +1603,7 @@ func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error)
 Incr increments the integer value of a key by one. If the key does not exist, it is set to 0 before performing the operation.
 
 <a name="RedisClient.IncrBy"></a>
-### func \(\*RedisClient\) [IncrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L153>)
+### func \(\*RedisClient\) [IncrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L193>)
 
 ```go
 func (r *RedisClient) IncrBy(ctx context.Context, key string, value int64) (int64, error)
@@ -1569,7 +1612,7 @@ func (r *RedisClient) IncrBy(ctx context.Context, key string, value int64) (int6
 IncrBy increments the integer value of a key by the given amount.
 
 <a name="RedisClient.IncrByFloat"></a>
-### func \(\*RedisClient\) [IncrByFloat](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L161>)
+### func \(\*RedisClient\) [IncrByFloat](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L201>)
 
 ```go
 func (r *RedisClient) IncrByFloat(ctx context.Context, key string, value float64) (float64, error)
@@ -1578,7 +1621,7 @@ func (r *RedisClient) IncrByFloat(ctx context.Context, key string, value float64
 IncrByFloat increments the float value of a key by the given amount.
 
 <a name="RedisClient.Keys"></a>
-### func \(\*RedisClient\) [Keys](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L187>)
+### func \(\*RedisClient\) [Keys](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L227>)
 
 ```go
 func (r *RedisClient) Keys(ctx context.Context, pattern string) ([]string, error)
@@ -1587,7 +1630,7 @@ func (r *RedisClient) Keys(ctx context.Context, pattern string) ([]string, error
 Keys returns all keys matching the given pattern. WARNING: Use with caution in production as it can be slow on large datasets. Consider using Scan instead.
 
 <a name="RedisClient.LIndex"></a>
-### func \(\*RedisClient\) [LIndex](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L371>)
+### func \(\*RedisClient\) [LIndex](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L433>)
 
 ```go
 func (r *RedisClient) LIndex(ctx context.Context, key string, index int64) (string, error)
@@ -1596,7 +1639,7 @@ func (r *RedisClient) LIndex(ctx context.Context, key string, index int64) (stri
 LIndex returns the element at index in the list stored at key.
 
 <a name="RedisClient.LLen"></a>
-### func \(\*RedisClient\) [LLen](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L347>)
+### func \(\*RedisClient\) [LLen](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L409>)
 
 ```go
 func (r *RedisClient) LLen(ctx context.Context, key string) (int64, error)
@@ -1605,7 +1648,7 @@ func (r *RedisClient) LLen(ctx context.Context, key string) (int64, error)
 LLen returns the length of the list stored at key.
 
 <a name="RedisClient.LPop"></a>
-### func \(\*RedisClient\) [LPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L321>)
+### func \(\*RedisClient\) [LPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L377>)
 
 ```go
 func (r *RedisClient) LPop(ctx context.Context, key string) (string, error)
@@ -1614,7 +1657,7 @@ func (r *RedisClient) LPop(ctx context.Context, key string) (string, error)
 LPop removes and returns the first element of the list stored at key.
 
 <a name="RedisClient.LPush"></a>
-### func \(\*RedisClient\) [LPush](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L305>)
+### func \(\*RedisClient\) [LPush](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L356>)
 
 ```go
 func (r *RedisClient) LPush(ctx context.Context, key string, values ...interface{}) (int64, error)
@@ -1623,7 +1666,7 @@ func (r *RedisClient) LPush(ctx context.Context, key string, values ...interface
 LPush inserts all the specified values at the head of the list stored at key.
 
 <a name="RedisClient.LRange"></a>
-### func \(\*RedisClient\) [LRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L339>)
+### func \(\*RedisClient\) [LRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L395>)
 
 ```go
 func (r *RedisClient) LRange(ctx context.Context, key string, start, stop int64) ([]string, error)
@@ -1632,7 +1675,7 @@ func (r *RedisClient) LRange(ctx context.Context, key string, start, stop int64)
 LRange returns the specified elements of the list stored at key. The offsets start and stop are zero\-based indexes. Use \-1 for the last element, \-2 for the second last, etc.
 
 <a name="RedisClient.LRem"></a>
-### func \(\*RedisClient\) [LRem](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L355>)
+### func \(\*RedisClient\) [LRem](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L417>)
 
 ```go
 func (r *RedisClient) LRem(ctx context.Context, key string, count int64, value interface{}) (int64, error)
@@ -1641,7 +1684,7 @@ func (r *RedisClient) LRem(ctx context.Context, key string, count int64, value i
 LRem removes the first count occurrences of elements equal to value from the list.
 
 <a name="RedisClient.LSet"></a>
-### func \(\*RedisClient\) [LSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L379>)
+### func \(\*RedisClient\) [LSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L441>)
 
 ```go
 func (r *RedisClient) LSet(ctx context.Context, key string, index int64, value interface{}) error
@@ -1650,7 +1693,7 @@ func (r *RedisClient) LSet(ctx context.Context, key string, index int64, value i
 LSet sets the list element at index to value.
 
 <a name="RedisClient.LTrim"></a>
-### func \(\*RedisClient\) [LTrim](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L363>)
+### func \(\*RedisClient\) [LTrim](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L425>)
 
 ```go
 func (r *RedisClient) LTrim(ctx context.Context, key string, start, stop int64) error
@@ -1659,7 +1702,7 @@ func (r *RedisClient) LTrim(ctx context.Context, key string, start, stop int64) 
 LTrim trims the list to the specified range.
 
 <a name="RedisClient.MGet"></a>
-### func \(\*RedisClient\) [MGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L73>)
+### func \(\*RedisClient\) [MGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L90>)
 
 ```go
 func (r *RedisClient) MGet(ctx context.Context, keys ...string) ([]interface{}, error)
@@ -1668,7 +1711,7 @@ func (r *RedisClient) MGet(ctx context.Context, keys ...string) ([]interface{}, 
 MGet retrieves the values of multiple keys at once. Returns a slice of values in the same order as the keys. If a key doesn't exist, its value will be nil.
 
 <a name="RedisClient.MSet"></a>
-### func \(\*RedisClient\) [MSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L82>)
+### func \(\*RedisClient\) [MSet](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L108>)
 
 ```go
 func (r *RedisClient) MSet(ctx context.Context, values ...interface{}) error
@@ -1677,7 +1720,7 @@ func (r *RedisClient) MSet(ctx context.Context, values ...interface{}) error
 MSet sets multiple key\-value pairs at once. The values parameter should be in the format: key1, value1, key2, value2, ...
 
 <a name="RedisClient.PSubscribe"></a>
-### func \(\*RedisClient\) [PSubscribe](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L637>)
+### func \(\*RedisClient\) [PSubscribe](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L702>)
 
 ```go
 func (r *RedisClient) PSubscribe(ctx context.Context, patterns ...string) *redis.PubSub
@@ -1686,7 +1729,7 @@ func (r *RedisClient) PSubscribe(ctx context.Context, patterns ...string) *redis
 PSubscribe subscribes to channels matching the given patterns.
 
 <a name="RedisClient.Persist"></a>
-### func \(\*RedisClient\) [Persist](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L136>)
+### func \(\*RedisClient\) [Persist](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L176>)
 
 ```go
 func (r *RedisClient) Persist(ctx context.Context, key string) (bool, error)
@@ -1704,7 +1747,7 @@ func (r *RedisClient) Ping(ctx context.Context) error
 Ping checks if the Redis server is reachable and responsive. It returns an error if the connection fails.
 
 <a name="RedisClient.Pipeline"></a>
-### func \(\*RedisClient\) [Pipeline](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L648>)
+### func \(\*RedisClient\) [Pipeline](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L713>)
 
 ```go
 func (r *RedisClient) Pipeline() redis.Pipeliner
@@ -1722,7 +1765,7 @@ func (r *RedisClient) PoolStats() *redis.PoolStats
 PoolStats returns connection pool statistics. Useful for monitoring connection pool health.
 
 <a name="RedisClient.Publish"></a>
-### func \(\*RedisClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L620>)
+### func \(\*RedisClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L682>)
 
 ```go
 func (r *RedisClient) Publish(ctx context.Context, channel string, message interface{}) (int64, error)
@@ -1731,7 +1774,7 @@ func (r *RedisClient) Publish(ctx context.Context, channel string, message inter
 Publish posts a message to the given channel. Returns the number of clients that received the message.
 
 <a name="RedisClient.RPop"></a>
-### func \(\*RedisClient\) [RPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L329>)
+### func \(\*RedisClient\) [RPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L385>)
 
 ```go
 func (r *RedisClient) RPop(ctx context.Context, key string) (string, error)
@@ -1740,7 +1783,7 @@ func (r *RedisClient) RPop(ctx context.Context, key string) (string, error)
 RPop removes and returns the last element of the list stored at key.
 
 <a name="RedisClient.RPush"></a>
-### func \(\*RedisClient\) [RPush](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L313>)
+### func \(\*RedisClient\) [RPush](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L369>)
 
 ```go
 func (r *RedisClient) RPush(ctx context.Context, key string, values ...interface{}) (int64, error)
@@ -1749,7 +1792,7 @@ func (r *RedisClient) RPush(ctx context.Context, key string, values ...interface
 RPush inserts all the specified values at the tail of the list stored at key.
 
 <a name="RedisClient.RateLimit"></a>
-### func \(\*RedisClient\) [RateLimit](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L772>)
+### func \(\*RedisClient\) [RateLimit](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L837>)
 
 ```go
 func (r *RedisClient) RateLimit(ctx context.Context, key string, limit int64, window time.Duration) (bool, error)
@@ -1758,7 +1801,7 @@ func (r *RedisClient) RateLimit(ctx context.Context, key string, limit int64, wi
 RateLimit implements a simple rate limiter using Redis. Returns true if the operation is allowed, false if rate limit is exceeded.
 
 <a name="RedisClient.SAdd"></a>
-### func \(\*RedisClient\) [SAdd](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L406>)
+### func \(\*RedisClient\) [SAdd](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L468>)
 
 ```go
 func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface{}) (int64, error)
@@ -1767,7 +1810,7 @@ func (r *RedisClient) SAdd(ctx context.Context, key string, members ...interface
 SAdd adds the specified members to the set stored at key.
 
 <a name="RedisClient.SCard"></a>
-### func \(\*RedisClient\) [SCard](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L438>)
+### func \(\*RedisClient\) [SCard](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L500>)
 
 ```go
 func (r *RedisClient) SCard(ctx context.Context, key string) (int64, error)
@@ -1776,7 +1819,7 @@ func (r *RedisClient) SCard(ctx context.Context, key string) (int64, error)
 SCard returns the number of elements in the set stored at key.
 
 <a name="RedisClient.SDiff"></a>
-### func \(\*RedisClient\) [SDiff](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L494>)
+### func \(\*RedisClient\) [SDiff](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L556>)
 
 ```go
 func (r *RedisClient) SDiff(ctx context.Context, keys ...string) ([]string, error)
@@ -1785,7 +1828,7 @@ func (r *RedisClient) SDiff(ctx context.Context, keys ...string) ([]string, erro
 SDiff returns the members of the set resulting from the difference between the first set and all the successive sets.
 
 <a name="RedisClient.SInter"></a>
-### func \(\*RedisClient\) [SInter](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L478>)
+### func \(\*RedisClient\) [SInter](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L540>)
 
 ```go
 func (r *RedisClient) SInter(ctx context.Context, keys ...string) ([]string, error)
@@ -1794,7 +1837,7 @@ func (r *RedisClient) SInter(ctx context.Context, keys ...string) ([]string, err
 SInter returns the members of the set resulting from the intersection of all the given sets.
 
 <a name="RedisClient.SIsMember"></a>
-### func \(\*RedisClient\) [SIsMember](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L430>)
+### func \(\*RedisClient\) [SIsMember](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L492>)
 
 ```go
 func (r *RedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error)
@@ -1803,7 +1846,7 @@ func (r *RedisClient) SIsMember(ctx context.Context, key string, member interfac
 SIsMember checks if member is a member of the set stored at key.
 
 <a name="RedisClient.SMembers"></a>
-### func \(\*RedisClient\) [SMembers](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L422>)
+### func \(\*RedisClient\) [SMembers](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L484>)
 
 ```go
 func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error)
@@ -1812,7 +1855,7 @@ func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error
 SMembers returns all the members of the set stored at key.
 
 <a name="RedisClient.SPop"></a>
-### func \(\*RedisClient\) [SPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L446>)
+### func \(\*RedisClient\) [SPop](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L508>)
 
 ```go
 func (r *RedisClient) SPop(ctx context.Context, key string) (string, error)
@@ -1821,7 +1864,7 @@ func (r *RedisClient) SPop(ctx context.Context, key string) (string, error)
 SPop removes and returns one or more random members from the set.
 
 <a name="RedisClient.SPopN"></a>
-### func \(\*RedisClient\) [SPopN](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L454>)
+### func \(\*RedisClient\) [SPopN](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L516>)
 
 ```go
 func (r *RedisClient) SPopN(ctx context.Context, key string, count int64) ([]string, error)
@@ -1830,7 +1873,7 @@ func (r *RedisClient) SPopN(ctx context.Context, key string, count int64) ([]str
 SPopN removes and returns count random members from the set.
 
 <a name="RedisClient.SRandMember"></a>
-### func \(\*RedisClient\) [SRandMember](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L462>)
+### func \(\*RedisClient\) [SRandMember](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L524>)
 
 ```go
 func (r *RedisClient) SRandMember(ctx context.Context, key string) (string, error)
@@ -1839,7 +1882,7 @@ func (r *RedisClient) SRandMember(ctx context.Context, key string) (string, erro
 SRandMember returns one or more random members from the set without removing them.
 
 <a name="RedisClient.SRandMemberN"></a>
-### func \(\*RedisClient\) [SRandMemberN](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L470>)
+### func \(\*RedisClient\) [SRandMemberN](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L532>)
 
 ```go
 func (r *RedisClient) SRandMemberN(ctx context.Context, key string, count int64) ([]string, error)
@@ -1848,7 +1891,7 @@ func (r *RedisClient) SRandMemberN(ctx context.Context, key string, count int64)
 SRandMemberN returns count random members from the set without removing them.
 
 <a name="RedisClient.SRem"></a>
-### func \(\*RedisClient\) [SRem](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L414>)
+### func \(\*RedisClient\) [SRem](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L476>)
 
 ```go
 func (r *RedisClient) SRem(ctx context.Context, key string, members ...interface{}) (int64, error)
@@ -1857,7 +1900,7 @@ func (r *RedisClient) SRem(ctx context.Context, key string, members ...interface
 SRem removes the specified members from the set stored at key.
 
 <a name="RedisClient.SUnion"></a>
-### func \(\*RedisClient\) [SUnion](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L486>)
+### func \(\*RedisClient\) [SUnion](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L548>)
 
 ```go
 func (r *RedisClient) SUnion(ctx context.Context, keys ...string) ([]string, error)
@@ -1866,7 +1909,7 @@ func (r *RedisClient) SUnion(ctx context.Context, keys ...string) ([]string, err
 SUnion returns the members of the set resulting from the union of all the given sets.
 
 <a name="RedisClient.Scan"></a>
-### func \(\*RedisClient\) [Scan](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L196>)
+### func \(\*RedisClient\) [Scan](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L236>)
 
 ```go
 func (r *RedisClient) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanIterator
@@ -1875,7 +1918,7 @@ func (r *RedisClient) Scan(ctx context.Context, cursor uint64, match string, cou
 Scan iterates over keys in the database using a cursor. This is safer than Keys for large datasets as it doesn't block.
 
 <a name="RedisClient.Set"></a>
-### func \(\*RedisClient\) [Set](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L41>)
+### func \(\*RedisClient\) [Set](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L44>)
 
 ```go
 func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
@@ -1884,7 +1927,7 @@ func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, tt
 Set sets the value for the given key with an optional TTL. If ttl is 0, the key will not expire.
 
 <a name="RedisClient.SetEX"></a>
-### func \(\*RedisClient\) [SetEX](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L58>)
+### func \(\*RedisClient\) [SetEX](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L75>)
 
 ```go
 func (r *RedisClient) SetEX(ctx context.Context, key string, value interface{}, ttl time.Duration) error
@@ -1893,7 +1936,7 @@ func (r *RedisClient) SetEX(ctx context.Context, key string, value interface{}, 
 SetEX sets the value for the given key with a TTL \(shorthand for Set with TTL\).
 
 <a name="RedisClient.SetJSON"></a>
-### func \(\*RedisClient\) [SetJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L676>)
+### func \(\*RedisClient\) [SetJSON](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L741>)
 
 ```go
 func (r *RedisClient) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error
@@ -1902,7 +1945,7 @@ func (r *RedisClient) SetJSON(ctx context.Context, key string, value interface{}
 SetJSON serializes the value to JSON and stores it in Redis.
 
 <a name="RedisClient.SetNX"></a>
-### func \(\*RedisClient\) [SetNX](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L50>)
+### func \(\*RedisClient\) [SetNX](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L60>)
 
 ```go
 func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error)
@@ -1911,7 +1954,7 @@ func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, 
 SetNX sets the value for the given key only if the key does not exist. Returns true if the key was set, false if it already existed.
 
 <a name="RedisClient.Subscribe"></a>
-### func \(\*RedisClient\) [Subscribe](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L629>)
+### func \(\*RedisClient\) [Subscribe](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L694>)
 
 ```go
 func (r *RedisClient) Subscribe(ctx context.Context, channels ...string) *redis.PubSub
@@ -1920,7 +1963,7 @@ func (r *RedisClient) Subscribe(ctx context.Context, channels ...string) *redis.
 Subscribe subscribes to the given channels. Returns a PubSub instance that can be used to receive messages.
 
 <a name="RedisClient.TTL"></a>
-### func \(\*RedisClient\) [TTL](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L128>)
+### func \(\*RedisClient\) [TTL](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L168>)
 
 ```go
 func (r *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error)
@@ -1929,7 +1972,7 @@ func (r *RedisClient) TTL(ctx context.Context, key string) (time.Duration, error
 TTL returns the remaining time to live of a key that has a timeout. Returns \-1 if the key exists but has no associated expire. Returns \-2 if the key does not exist.
 
 <a name="RedisClient.TxPipeline"></a>
-### func \(\*RedisClient\) [TxPipeline](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L657>)
+### func \(\*RedisClient\) [TxPipeline](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L722>)
 
 ```go
 func (r *RedisClient) TxPipeline() redis.Pipeliner
@@ -1938,7 +1981,7 @@ func (r *RedisClient) TxPipeline() redis.Pipeliner
 TxPipeline returns a new transaction pipeline. Commands in a transaction pipeline are wrapped in MULTI/EXEC.
 
 <a name="RedisClient.Type"></a>
-### func \(\*RedisClient\) [Type](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L204>)
+### func \(\*RedisClient\) [Type](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L244>)
 
 ```go
 func (r *RedisClient) Type(ctx context.Context, key string) (string, error)
@@ -1947,7 +1990,7 @@ func (r *RedisClient) Type(ctx context.Context, key string) (string, error)
 Type returns the type of value stored at key.
 
 <a name="RedisClient.Watch"></a>
-### func \(\*RedisClient\) [Watch](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L666>)
+### func \(\*RedisClient\) [Watch](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L731>)
 
 ```go
 func (r *RedisClient) Watch(ctx context.Context, fn func(*redis.Tx) error, keys ...string) error
@@ -1955,8 +1998,38 @@ func (r *RedisClient) Watch(ctx context.Context, fn func(*redis.Tx) error, keys 
 
 Watch watches the given keys for changes. If any of the watched keys are modified before EXEC, the transaction will fail.
 
+<a name="RedisClient.WithLogger"></a>
+### func \(\*RedisClient\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L398>)
+
+```go
+func (r *RedisClient) WithLogger(logger Logger) *RedisClient
+```
+
+WithLogger sets the logger for this client and returns the client for method chaining. The logger is used for structured logging of client operations and errors.
+
+Example:
+
+```
+client := client.WithObserver(myObserver).WithLogger(myLogger)
+```
+
+<a name="RedisClient.WithObserver"></a>
+### func \(\*RedisClient\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/setup.go#L387>)
+
+```go
+func (r *RedisClient) WithObserver(observer observability.Observer) *RedisClient
+```
+
+WithObserver sets the observer for this client and returns the client for method chaining. The observer receives events about Redis operations \(e.g., get, set, delete\).
+
+Example:
+
+```
+client := client.WithObserver(myObserver).WithLogger(myLogger)
+```
+
 <a name="RedisClient.ZAdd"></a>
-### func \(\*RedisClient\) [ZAdd](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L504>)
+### func \(\*RedisClient\) [ZAdd](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L566>)
 
 ```go
 func (r *RedisClient) ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error)
@@ -1965,7 +2038,7 @@ func (r *RedisClient) ZAdd(ctx context.Context, key string, members ...redis.Z) 
 ZAdd adds all the specified members with the specified scores to the sorted set stored at key.
 
 <a name="RedisClient.ZCard"></a>
-### func \(\*RedisClient\) [ZCard](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L577>)
+### func \(\*RedisClient\) [ZCard](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L639>)
 
 ```go
 func (r *RedisClient) ZCard(ctx context.Context, key string) (int64, error)
@@ -1974,7 +2047,7 @@ func (r *RedisClient) ZCard(ctx context.Context, key string) (int64, error)
 ZCard returns the number of elements in the sorted set stored at key.
 
 <a name="RedisClient.ZCount"></a>
-### func \(\*RedisClient\) [ZCount](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L585>)
+### func \(\*RedisClient\) [ZCount](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L647>)
 
 ```go
 func (r *RedisClient) ZCount(ctx context.Context, key, min, max string) (int64, error)
@@ -1983,7 +2056,7 @@ func (r *RedisClient) ZCount(ctx context.Context, key, min, max string) (int64, 
 ZCount returns the number of elements in the sorted set with a score between min and max.
 
 <a name="RedisClient.ZIncrBy"></a>
-### func \(\*RedisClient\) [ZIncrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L593>)
+### func \(\*RedisClient\) [ZIncrBy](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L655>)
 
 ```go
 func (r *RedisClient) ZIncrBy(ctx context.Context, key string, increment float64, member string) (float64, error)
@@ -1992,7 +2065,7 @@ func (r *RedisClient) ZIncrBy(ctx context.Context, key string, increment float64
 ZIncrBy increments the score of member in the sorted set by increment.
 
 <a name="RedisClient.ZRange"></a>
-### func \(\*RedisClient\) [ZRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L521>)
+### func \(\*RedisClient\) [ZRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L583>)
 
 ```go
 func (r *RedisClient) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error)
@@ -2001,7 +2074,7 @@ func (r *RedisClient) ZRange(ctx context.Context, key string, start, stop int64)
 ZRange returns the specified range of elements in the sorted set stored at key. The elements are ordered from the lowest to the highest score.
 
 <a name="RedisClient.ZRangeByScore"></a>
-### func \(\*RedisClient\) [ZRangeByScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L553>)
+### func \(\*RedisClient\) [ZRangeByScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L615>)
 
 ```go
 func (r *RedisClient) ZRangeByScore(ctx context.Context, key string, opt *redis.ZRangeBy) ([]string, error)
@@ -2010,7 +2083,7 @@ func (r *RedisClient) ZRangeByScore(ctx context.Context, key string, opt *redis.
 ZRangeByScore returns all elements in the sorted set with a score between min and max.
 
 <a name="RedisClient.ZRangeWithScores"></a>
-### func \(\*RedisClient\) [ZRangeWithScores](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L529>)
+### func \(\*RedisClient\) [ZRangeWithScores](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L591>)
 
 ```go
 func (r *RedisClient) ZRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error)
@@ -2019,7 +2092,7 @@ func (r *RedisClient) ZRangeWithScores(ctx context.Context, key string, start, s
 ZRangeWithScores returns the specified range with scores.
 
 <a name="RedisClient.ZRank"></a>
-### func \(\*RedisClient\) [ZRank](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L601>)
+### func \(\*RedisClient\) [ZRank](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L663>)
 
 ```go
 func (r *RedisClient) ZRank(ctx context.Context, key, member string) (int64, error)
@@ -2028,7 +2101,7 @@ func (r *RedisClient) ZRank(ctx context.Context, key, member string) (int64, err
 ZRank returns the rank of member in the sorted set \(0\-based, lowest score first\).
 
 <a name="RedisClient.ZRem"></a>
-### func \(\*RedisClient\) [ZRem](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L512>)
+### func \(\*RedisClient\) [ZRem](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L574>)
 
 ```go
 func (r *RedisClient) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error)
@@ -2037,7 +2110,7 @@ func (r *RedisClient) ZRem(ctx context.Context, key string, members ...interface
 ZRem removes the specified members from the sorted set stored at key.
 
 <a name="RedisClient.ZRevRange"></a>
-### func \(\*RedisClient\) [ZRevRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L537>)
+### func \(\*RedisClient\) [ZRevRange](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L599>)
 
 ```go
 func (r *RedisClient) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error)
@@ -2046,7 +2119,7 @@ func (r *RedisClient) ZRevRange(ctx context.Context, key string, start, stop int
 ZRevRange returns the specified range in reverse order \(highest to lowest score\).
 
 <a name="RedisClient.ZRevRangeByScore"></a>
-### func \(\*RedisClient\) [ZRevRangeByScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L561>)
+### func \(\*RedisClient\) [ZRevRangeByScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L623>)
 
 ```go
 func (r *RedisClient) ZRevRangeByScore(ctx context.Context, key string, opt *redis.ZRangeBy) ([]string, error)
@@ -2055,7 +2128,7 @@ func (r *RedisClient) ZRevRangeByScore(ctx context.Context, key string, opt *red
 ZRevRangeByScore returns all elements in the sorted set with scores between max and min \(in reverse order\).
 
 <a name="RedisClient.ZRevRangeWithScores"></a>
-### func \(\*RedisClient\) [ZRevRangeWithScores](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L545>)
+### func \(\*RedisClient\) [ZRevRangeWithScores](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L607>)
 
 ```go
 func (r *RedisClient) ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error)
@@ -2064,7 +2137,7 @@ func (r *RedisClient) ZRevRangeWithScores(ctx context.Context, key string, start
 ZRevRangeWithScores returns the specified range in reverse order with scores.
 
 <a name="RedisClient.ZRevRank"></a>
-### func \(\*RedisClient\) [ZRevRank](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L609>)
+### func \(\*RedisClient\) [ZRevRank](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L671>)
 
 ```go
 func (r *RedisClient) ZRevRank(ctx context.Context, key, member string) (int64, error)
@@ -2073,7 +2146,7 @@ func (r *RedisClient) ZRevRank(ctx context.Context, key, member string) (int64, 
 ZRevRank returns the rank of member in the sorted set \(highest score first\).
 
 <a name="RedisClient.ZScore"></a>
-### func \(\*RedisClient\) [ZScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L569>)
+### func \(\*RedisClient\) [ZScore](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/utils.go#L631>)
 
 ```go
 func (r *RedisClient) ZScore(ctx context.Context, key, member string) (float64, error)
@@ -2082,7 +2155,7 @@ func (r *RedisClient) ZScore(ctx context.Context, key, member string) (float64, 
 ZScore returns the score of member in the sorted set stored at key.
 
 <a name="RedisLifecycleParams"></a>
-## type [RedisLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L75-L80>)
+## type [RedisLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L87-L92>)
 
 RedisLifecycleParams groups the dependencies needed for Redis lifecycle management
 
@@ -2096,7 +2169,7 @@ type RedisLifecycleParams struct {
 ```
 
 <a name="RedisParams"></a>
-## type [RedisParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L32-L37>)
+## type [RedisParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/redis/fx_module.go#L33-L39>)
 
 RedisParams groups the dependencies needed to create a Redis client
 
@@ -2104,8 +2177,9 @@ RedisParams groups the dependencies needed to create a Redis client
 type RedisParams struct {
     fx.In
 
-    Config Config
-    Logger Logger `optional:"true"` // Optional logger from std/v1/logger
+    Config   Config
+    Logger   Logger                 `optional:"true"` // Optional logger from std/v1/logger
+    Observer observability.Observer `optional:"true"` // Optional observer from std/v1/observability
 }
 ```
 
