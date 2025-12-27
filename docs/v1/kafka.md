@@ -684,7 +684,250 @@ Built\-in Serializers:
 - NoOpSerializer: Raw \[\]byte passthrough
 - MultiFormatSerializer: Multiple formats with dynamic selection
 
-Thread Safety:
+### Observability
+
+The Kafka client supports optional observability through the Observer interface from std/v1/observability. This allows external code to track all Kafka operations for metrics, tracing, and logging without tight coupling.
+
+### Basic Observability Setup
+
+To enable observability, provide an Observer implementation in the configuration:
+
+```
+import "github.com/Aleph-Alpha/std/v1/observability"
+
+// Implement the Observer interface
+type MyObserver struct {
+    metrics *prometheus.Metrics
+}
+
+func (o *MyObserver) ObserveOperation(ctx observability.OperationContext) {
+    if ctx.Component == "kafka" {
+        switch ctx.Operation {
+        case "produce":
+            o.metrics.RecordKafkaPublish(
+                ctx.Resource,  // topic name
+                ctx.Size,      // message bytes
+                ctx.Duration,  // operation duration
+                ctx.Error,     // error if any
+            )
+        case "consume":
+            o.metrics.RecordKafkaConsume(
+                ctx.Resource,    // topic name
+                ctx.SubResource, // partition
+                ctx.Size,        // message bytes
+                ctx.Duration,    // fetch duration
+                ctx.Error,       // error if any
+            )
+        }
+    }
+}
+
+// Configure Kafka client with observer
+observer := &MyObserver{metrics: myMetrics}
+
+client, err := kafka.NewClient(kafka.Config{
+    Brokers:  []string{"localhost:9092"},
+    Topic:    "events",
+    Observer: observer, // ← Enable observability
+})
+```
+
+### Observed Operations
+
+The observer is notified of the following operations:
+
+Produce Operation:
+
+- Component: "kafka"
+- Operation: "produce"
+- Resource: Topic name \(e.g., "user\-events"\)
+- SubResource: "" \(empty\)
+- Duration: Time taken to publish message
+- Size: Message size in bytes
+- Error: Any error that occurred during publishing
+- Metadata: nil \(reserved for future use\)
+
+Consume Operation:
+
+- Component: "kafka"
+- Operation: "consume"
+- Resource: Topic name \(e.g., "user\-events"\)
+- SubResource: Partition number \(e.g., "3"\)
+- Duration: Time taken to fetch message from Kafka
+- Size: Message size in bytes
+- Error: Any error that occurred during consumption
+- Metadata: nil \(reserved for future use\)
+
+Example OperationContext for Publish:
+
+```
+observability.OperationContext{
+    Component:   "kafka",
+    Operation:   "produce",
+    Resource:    "user-events",
+    SubResource: "",
+    Duration:    12 * time.Millisecond,
+    Size:        2048,
+    Error:       nil,
+}
+```
+
+Example OperationContext for Consume:
+
+```
+observability.OperationContext{
+    Component:   "kafka",
+    Operation:   "consume",
+    Resource:    "user-events",
+    SubResource: "3", // partition
+    Duration:    8 * time.Millisecond,
+    Size:        1024,
+    Error:       nil,
+}
+```
+
+### Integration with Prometheus
+
+Example: Track Kafka metrics with Prometheus:
+
+```
+import (
+    "github.com/prometheus/client_golang/prometheus"
+    "github.com/Aleph-Alpha/std/v1/observability"
+)
+
+type KafkaObserver struct {
+    publishTotal    *prometheus.CounterVec
+    publishDuration *prometheus.HistogramVec
+    publishBytes    *prometheus.CounterVec
+    consumeTotal    *prometheus.CounterVec
+    consumeDuration *prometheus.HistogramVec
+    consumeBytes    *prometheus.CounterVec
+}
+
+func NewKafkaObserver() *KafkaObserver {
+    return &KafkaObserver{
+        publishTotal: prometheus.NewCounterVec(
+            prometheus.CounterOpts{
+                Name: "kafka_messages_published_total",
+                Help: "Total number of messages published to Kafka",
+            },
+            []string{"topic", "status"},
+        ),
+        publishDuration: prometheus.NewHistogramVec(
+            prometheus.HistogramOpts{
+                Name:    "kafka_publish_duration_seconds",
+                Help:    "Duration of Kafka publish operations",
+                Buckets: prometheus.DefBuckets,
+            },
+            []string{"topic"},
+        ),
+        publishBytes: prometheus.NewCounterVec(
+            prometheus.CounterOpts{
+                Name: "kafka_publish_bytes_total",
+                Help: "Total bytes published to Kafka",
+            },
+            []string{"topic"},
+        ),
+        consumeTotal: prometheus.NewCounterVec(
+            prometheus.CounterOpts{
+                Name: "kafka_messages_consumed_total",
+                Help: "Total number of messages consumed from Kafka",
+            },
+            []string{"topic", "partition", "status"},
+        ),
+        consumeDuration: prometheus.NewHistogramVec(
+            prometheus.HistogramOpts{
+                Name:    "kafka_consume_duration_seconds",
+                Help:    "Duration of Kafka consume operations",
+                Buckets: prometheus.DefBuckets,
+            },
+            []string{"topic"},
+        ),
+        consumeBytes: prometheus.NewCounterVec(
+            prometheus.CounterOpts{
+                Name: "kafka_consume_bytes_total",
+                Help: "Total bytes consumed from Kafka",
+            },
+            []string{"topic"},
+        ),
+    }
+}
+
+func (o *KafkaObserver) ObserveOperation(ctx observability.OperationContext) {
+    if ctx.Component != "kafka" {
+        return
+    }
+
+    status := "success"
+    if ctx.Error != nil {
+        status = "error"
+    }
+
+    switch ctx.Operation {
+    case "produce":
+        o.publishTotal.WithLabelValues(ctx.Resource, status).Inc()
+        o.publishDuration.WithLabelValues(ctx.Resource).Observe(ctx.Duration.Seconds())
+        if ctx.Error == nil {
+            o.publishBytes.WithLabelValues(ctx.Resource).Add(float64(ctx.Size))
+        }
+
+    case "consume":
+        o.consumeTotal.WithLabelValues(ctx.Resource, ctx.SubResource, status).Inc()
+        o.consumeDuration.WithLabelValues(ctx.Resource).Observe(ctx.Duration.Seconds())
+        if ctx.Error == nil {
+            o.consumeBytes.WithLabelValues(ctx.Resource).Add(float64(ctx.Size))
+        }
+    }
+}
+```
+
+### FX Module with Observer
+
+When using FX, you can inject an observer into the Kafka client:
+
+```
+import (
+    "go.uber.org/fx"
+    "github.com/Aleph-Alpha/std/v1/kafka"
+    "github.com/Aleph-Alpha/std/v1/observability"
+)
+
+app := fx.New(
+    kafka.FXModule,
+    fx.Provide(
+        // Provide your observer implementation
+        func() observability.Observer {
+            return NewKafkaObserver()
+        },
+        // Provide Kafka config with observer
+        func(observer observability.Observer) kafka.Config {
+            return kafka.Config{
+                Brokers:  []string{"localhost:9092"},
+                Topic:    "events",
+                Observer: observer, // Inject observer
+            }
+        },
+    ),
+)
+app.Run()
+```
+
+### No\\\-Op Observer
+
+If you don't provide an observer, there's zero overhead:
+
+```
+client, err := kafka.NewClient(kafka.Config{
+    Brokers:  []string{"localhost:9092"},
+    Topic:    "events",
+    Observer: nil, // ← No observer, no overhead
+})
+```
+
+The client checks if Observer is nil before calling it, so there's no performance impact when observability is disabled.
+
+### Thread Safety
 
 All methods on the Kafka type are safe for concurrent use by multiple goroutines, except for Close\(\) which should only be called once.
 
@@ -709,7 +952,6 @@ All methods on the Kafka type are safe for concurrent use by multiple goroutines
   - [func \(cm \*ConsumerMessage\) Offset\(\) int64](<#ConsumerMessage.Offset>)
   - [func \(cm \*ConsumerMessage\) Partition\(\) int](<#ConsumerMessage.Partition>)
 - [type Deserializer](<#Deserializer>)
-- [type ErrorLoggerFunc](<#ErrorLoggerFunc>)
 - [type GobDeserializer](<#GobDeserializer>)
   - [func \(g \*GobDeserializer\) Deserialize\(data \[\]byte, target interface\{\}\) error](<#GobDeserializer.Deserialize>)
 - [type GobSerializer](<#GobSerializer>)
@@ -734,6 +976,10 @@ All methods on the Kafka type are safe for concurrent use by multiple goroutines
   - [func \(k \*KafkaClient\) SetDeserializer\(d Deserializer\)](<#KafkaClient.SetDeserializer>)
   - [func \(k \*KafkaClient\) SetSerializer\(s Serializer\)](<#KafkaClient.SetSerializer>)
   - [func \(k \*KafkaClient\) TranslateError\(err error\) error](<#KafkaClient.TranslateError>)
+  - [func \(k \*KafkaClient\) WithDeserializer\(deserializer Deserializer\) \*KafkaClient](<#KafkaClient.WithDeserializer>)
+  - [func \(k \*KafkaClient\) WithLogger\(logger Logger\) \*KafkaClient](<#KafkaClient.WithLogger>)
+  - [func \(k \*KafkaClient\) WithObserver\(observer observability.Observer\) \*KafkaClient](<#KafkaClient.WithObserver>)
+  - [func \(k \*KafkaClient\) WithSerializer\(serializer Serializer\) \*KafkaClient](<#KafkaClient.WithSerializer>)
 - [type KafkaLifecycleParams](<#KafkaLifecycleParams>)
 - [type KafkaParams](<#KafkaParams>)
 - [type Logger](<#Logger>)
@@ -990,7 +1236,7 @@ var FXModule = fx.Module("kafka",
 ```
 
 <a name="RegisterKafkaLifecycle"></a>
-## func [RegisterKafkaLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L130>)
+## func [RegisterKafkaLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L140>)
 
 ```go
 func RegisterKafkaLifecycle(params KafkaLifecycleParams)
@@ -1129,7 +1375,7 @@ type Client interface {
 ```
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L8-L125>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L11-L118>)
 
 Config defines the top\-level configuration structure for the Kafka client. It contains all the necessary configuration sections for establishing connections, setting up producers and consumers.
 
@@ -1235,16 +1481,6 @@ type Config struct {
     // SASL contains SASL authentication configuration
     SASL SASLConfig
 
-    // Logger is an optional logger from std/v1/logger package
-    // If provided, it will be used for internal Kafka error logging
-    // If nil, errors will be logged using the standard log package
-    Logger Logger
-
-    // ErrorLogger is an optional custom error logger function for Kafka internal errors
-    // This is only used if Logger is nil
-    // If both Logger and ErrorLogger are nil, errors will be logged using the standard log package
-    ErrorLogger ErrorLoggerFunc
-
     // DataType specifies the default data type for automatic serializer selection
     // When no explicit serializer is provided, the client will use a default serializer
     // based on this type.
@@ -1266,7 +1502,7 @@ type ConsumerMessage struct {
 ```
 
 <a name="ConsumerMessage.Body"></a>
-### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L286>)
+### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L320>)
 
 ```go
 func (cm *ConsumerMessage) Body() []byte
@@ -1275,7 +1511,7 @@ func (cm *ConsumerMessage) Body() []byte
 Body returns the message payload as a byte slice.
 
 <a name="ConsumerMessage.BodyAs"></a>
-### func \(\*ConsumerMessage\) [BodyAs](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L305>)
+### func \(\*ConsumerMessage\) [BodyAs](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L339>)
 
 ```go
 func (cm *ConsumerMessage) BodyAs(target interface{}) error
@@ -1299,7 +1535,7 @@ for msg := range msgChan {
 ```
 
 <a name="ConsumerMessage.CommitMsg"></a>
-### func \(\*ConsumerMessage\) [CommitMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L281>)
+### func \(\*ConsumerMessage\) [CommitMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L315>)
 
 ```go
 func (cm *ConsumerMessage) CommitMsg() error
@@ -1310,7 +1546,7 @@ CommitMsg commits the message, informing Kafka that the message has been success
 Returns an error if the commit fails.
 
 <a name="ConsumerMessage.Header"></a>
-### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L322>)
+### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L356>)
 
 ```go
 func (cm *ConsumerMessage) Header() map[string]interface{}
@@ -1319,7 +1555,7 @@ func (cm *ConsumerMessage) Header() map[string]interface{}
 Header returns the headers associated with the message.
 
 <a name="ConsumerMessage.Key"></a>
-### func \(\*ConsumerMessage\) [Key](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L317>)
+### func \(\*ConsumerMessage\) [Key](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L351>)
 
 ```go
 func (cm *ConsumerMessage) Key() string
@@ -1328,7 +1564,7 @@ func (cm *ConsumerMessage) Key() string
 Key returns the message key as a string.
 
 <a name="ConsumerMessage.Offset"></a>
-### func \(\*ConsumerMessage\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L336>)
+### func \(\*ConsumerMessage\) [Offset](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L370>)
 
 ```go
 func (cm *ConsumerMessage) Offset() int64
@@ -1337,7 +1573,7 @@ func (cm *ConsumerMessage) Offset() int64
 Offset returns the offset of this message.
 
 <a name="ConsumerMessage.Partition"></a>
-### func \(\*ConsumerMessage\) [Partition](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L331>)
+### func \(\*ConsumerMessage\) [Partition](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L365>)
 
 ```go
 func (cm *ConsumerMessage) Partition() int
@@ -1355,15 +1591,6 @@ type Deserializer interface {
     // Deserialize converts a byte slice into the target data structure
     Deserialize(data []byte, target interface{}) error
 }
-```
-
-<a name="ErrorLoggerFunc"></a>
-## type [ErrorLoggerFunc](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L133>)
-
-ErrorLoggerFunc is a function type for logging Kafka errors
-
-```go
-type ErrorLoggerFunc func(msg string, args ...interface{})
 ```
 
 <a name="GobDeserializer"></a>
@@ -1447,7 +1674,7 @@ func (j *JSONSerializer) Serialize(data interface{}) ([]byte, error)
 Serialize converts data to JSON bytes.
 
 <a name="KafkaClient"></a>
-## type [KafkaClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L23-L46>)
+## type [KafkaClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L24-L53>)
 
 KafkaClient represents a client for interacting with Apache Kafka. It manages connections and provides methods for publishing and consuming messages.
 
@@ -1460,7 +1687,7 @@ type KafkaClient struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L64>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L71>)
 
 ```go
 func NewClient(cfg Config) (*KafkaClient, error)
@@ -1486,7 +1713,7 @@ defer client.GracefulShutdown()
 ```
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L80>)
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L84>)
 
 ```go
 func NewClientWithDI(params KafkaParams) (*KafkaClient, error)
@@ -1496,7 +1723,7 @@ NewClientWithDI creates a new Kafka client using dependency injection. This func
 
 Parameters:
 
-- params: A KafkaParams struct that contains the Config instance and optionally a Logger, Serializer, and Deserializer instances required to initialize the Kafka client. This struct embeds fx.In to enable automatic injection of these dependencies.
+- params: A KafkaParams struct that contains the Config instance and optionally a Logger, Serializer, Deserializer, and Observer instances required to initialize the Kafka client. This struct embeds fx.In to enable automatic injection of these dependencies.
 
 Returns:
 
@@ -1507,7 +1734,7 @@ Example usage with fx:
 ```
 app := fx.New(
     kafka.FXModule,
-    logger.FXModule, // Optional: provides logger
+    logger.FXModule,  // Optional: provides logger
     fx.Provide(
         func() kafka.Config {
             return loadKafkaConfig() // Your config loading function
@@ -1518,11 +1745,14 @@ app := fx.New(
         func() kafka.Deserializer {
             return &kafka.JSONDeserializer{}
         },
+        func(metrics *prometheus.Metrics) observability.Observer {
+            return &MyObserver{metrics: metrics}  // Optional observer
+        },
     ),
 )
 ```
 
-Under the hood, this function injects the optional logger, serializer, and deserializer before delegating to the standard NewClient function.
+Under the hood, this function injects the optional logger, serializer, deserializer, and observer before delegating to the standard NewClient function.
 
 <a name="KafkaClient.Consume"></a>
 ### func \(\*KafkaClient\) [Consume](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L53>)
@@ -1605,7 +1835,7 @@ for msg := range msgChan {
 ```
 
 <a name="KafkaClient.Deserialize"></a>
-### func \(\*KafkaClient\) [Deserialize](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L367>)
+### func \(\*KafkaClient\) [Deserialize](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L401>)
 
 ```go
 func (k *KafkaClient) Deserialize(msg Message, target interface{}) error
@@ -1642,7 +1872,7 @@ for msg := range msgChan {
 ```
 
 <a name="KafkaClient.GracefulShutdown"></a>
-### func \(\*KafkaClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L155>)
+### func \(\*KafkaClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L165>)
 
 ```go
 func (k *KafkaClient) GracefulShutdown()
@@ -1691,7 +1921,7 @@ func (k *KafkaClient) IsTemporaryError(err error) bool
 IsTemporaryError returns true if the error is temporary
 
 <a name="KafkaClient.Publish"></a>
-### func \(\*KafkaClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L203>)
+### func \(\*KafkaClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/utils.go#L225>)
 
 ```go
 func (k *KafkaClient) Publish(ctx context.Context, key string, data interface{}, headers ...map[string]interface{}) error
@@ -1756,7 +1986,7 @@ func (k *KafkaClient) SetDefaultSerializers()
 SetDefaultSerializers sets default serializers on the Kafka client based on config DataType This is called automatically during client creation if no serializers are provided
 
 <a name="KafkaClient.SetDeserializer"></a>
-### func \(\*KafkaClient\) [SetDeserializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L154>)
+### func \(\*KafkaClient\) [SetDeserializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L277>)
 
 ```go
 func (k *KafkaClient) SetDeserializer(d Deserializer)
@@ -1765,7 +1995,7 @@ func (k *KafkaClient) SetDeserializer(d Deserializer)
 SetDeserializer sets the deserializer for the Kafka client. This is typically called by the FX module during initialization.
 
 <a name="KafkaClient.SetSerializer"></a>
-### func \(\*KafkaClient\) [SetSerializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L146>)
+### func \(\*KafkaClient\) [SetSerializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L269>)
 
 ```go
 func (k *KafkaClient) SetSerializer(s Serializer)
@@ -1784,8 +2014,104 @@ TranslateError converts Kafka\-specific errors into standardized application err
 
 It maps common Kafka errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
+<a name="KafkaClient.WithDeserializer"></a>
+### func \(\*KafkaClient\) [WithDeserializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L235>)
+
+```go
+func (k *KafkaClient) WithDeserializer(deserializer Deserializer) *KafkaClient
+```
+
+WithDeserializer attaches a deserializer to the Kafka client for decoding messages. This method uses the builder pattern and returns the client for method chaining.
+
+The deserializer will be used to decode messages when consuming from Kafka. If not set, msg.BodyAs\(\) will use JSONDeserializer as a fallback.
+
+This is useful for non\-FX usage where you want to set deserializers after creating the client. When using FX, deserializers can be injected via NewClientWithDI.
+
+Example:
+
+```
+client, err := kafka.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithDeserializer(&kafka.JSONDeserializer{})
+defer client.GracefulShutdown()
+```
+
+<a name="KafkaClient.WithLogger"></a>
+### func \(\*KafkaClient\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L191>)
+
+```go
+func (k *KafkaClient) WithLogger(logger Logger) *KafkaClient
+```
+
+WithLogger attaches a logger to the Kafka client for internal logging. This method uses the builder pattern and returns the client for method chaining.
+
+The logger will be used for lifecycle events, background worker logs, and cleanup errors. This is particularly useful for debugging and monitoring consumer worker behavior.
+
+This is useful for non\-FX usage where you want to enable logging after creating the client. When using FX, the logger is automatically injected via NewClientWithDI.
+
+Example:
+
+```
+client, err := kafka.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithLogger(myLogger)
+defer client.GracefulShutdown()
+```
+
+<a name="KafkaClient.WithObserver"></a>
+### func \(\*KafkaClient\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L169>)
+
+```go
+func (k *KafkaClient) WithObserver(observer observability.Observer) *KafkaClient
+```
+
+WithObserver attaches an observer to the Kafka client for tracking operations. This method uses the builder pattern and returns the client for method chaining.
+
+The observer will be notified of all produce and consume operations, allowing external code to collect metrics, create traces, or log operations.
+
+This is useful for non\-FX usage where you want to enable observability after creating the client. When using FX, use NewClientWithDI instead, which automatically injects the observer.
+
+Example:
+
+```
+client, err := kafka.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver)
+defer client.GracefulShutdown()
+```
+
+<a name="KafkaClient.WithSerializer"></a>
+### func \(\*KafkaClient\) [WithSerializer](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/setup.go#L213>)
+
+```go
+func (k *KafkaClient) WithSerializer(serializer Serializer) *KafkaClient
+```
+
+WithSerializer attaches a serializer to the Kafka client for encoding messages. This method uses the builder pattern and returns the client for method chaining.
+
+The serializer will be used to encode messages before publishing to Kafka. If not set, you can only publish \[\]byte data directly.
+
+This is useful for non\-FX usage where you want to set serializers after creating the client. When using FX, serializers can be injected via NewClientWithDI.
+
+Example:
+
+```
+client, err := kafka.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithSerializer(&kafka.JSONSerializer{})
+defer client.GracefulShutdown()
+```
+
 <a name="KafkaLifecycleParams"></a>
-## type [KafkaLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L110-L115>)
+## type [KafkaLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L120-L125>)
 
 KafkaLifecycleParams groups the dependencies needed for Kafka lifecycle management
 
@@ -1799,7 +2125,7 @@ type KafkaLifecycleParams struct {
 ```
 
 <a name="KafkaParams"></a>
-## type [KafkaParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L38-L45>)
+## type [KafkaParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/fx_module.go#L38-L46>)
 
 KafkaParams groups the dependencies needed to create a Kafka client
 
@@ -1808,20 +2134,28 @@ type KafkaParams struct {
     fx.In
 
     Config       Config
-    Logger       Logger       `optional:"true"` // Optional logger from std/v1/logger
-    Serializer   Serializer   `optional:"true"` // Optional serializer
-    Deserializer Deserializer `optional:"true"` // Optional deserializer
+    Logger       Logger                 `optional:"true"` // Optional logger from std/v1/logger
+    Serializer   Serializer             `optional:"true"` // Optional serializer
+    Deserializer Deserializer           `optional:"true"` // Optional deserializer
+    Observer     observability.Observer `optional:"true"` // Optional observer for metrics/tracing
 }
 ```
 
 <a name="Logger"></a>
-## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L128-L130>)
+## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L122-L131>)
 
-Logger is an interface that matches the std/v1/logger.Logger
+Logger is an interface that matches the std/v1/logger.Logger interface. It provides context\-aware structured logging with optional error and field parameters.
 
 ```go
 type Logger interface {
-    Error(msg string, err error, fields ...map[string]interface{})
+    // InfoWithContext logs an informational message with trace context.
+    InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // WarnWithContext logs a warning message with trace context.
+    WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // ErrorWithContext logs an error message with trace context.
+    ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 }
 ```
 
@@ -2113,7 +2447,7 @@ func (p *ProtobufSerializer) Serialize(data interface{}) ([]byte, error)
 Serialize converts a protobuf message to bytes.
 
 <a name="SASLConfig"></a>
-## type [SASLConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L155-L168>)
+## type [SASLConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L153-L166>)
 
 SASLConfig contains SASL authentication configuration parameters.
 
@@ -2186,7 +2520,7 @@ func (s *StringSerializer) Serialize(data interface{}) ([]byte, error)
 Serialize converts data to bytes.
 
 <a name="TLSConfig"></a>
-## type [TLSConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L136-L152>)
+## type [TLSConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/kafka/configs.go#L134-L150>)
 
 TLSConfig contains TLS/SSL configuration parameters.
 

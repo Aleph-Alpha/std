@@ -92,6 +92,45 @@ app := fx.New(
 app.Run()
 ```
 
+### Observability \\\(Observer Hook\\\)
+
+MinIO supports optional observability through the Observer interface from the observability package. This allows external systems to track operations without coupling the MinIO package to specific metrics/tracing implementations.
+
+Using WithObserver \(non\-FX usage\):
+
+```
+client, err := minio.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver).WithLogger(myLogger)
+defer client.GracefulShutdown()
+```
+
+Using FX \(automatic injection\):
+
+```
+app := fx.New(
+    minio.FXModule,
+    logger.FXModule,  // Optional: provides logger
+    fx.Provide(
+        func() minio.Config { return loadConfig() },
+        func() observability.Observer { return myObserver },  // Optional
+    ),
+)
+```
+
+The observer receives events for all storage operations:
+
+- Component: "minio"
+- Operations: "put", "get", "stream\_get", "delete", "presigned\_get", "presigned\_put", "presigned\_head"
+- Resource: bucket name
+- SubResource: object key
+- Duration: operation duration
+- Error: any error that occurred
+- Size: bytes transferred \(for put/get operations\)
+- Metadata: operation\-specific details \(e.g., chunk\_size for stream\_get\)
+
 ### Type Aliases in Consumer Code
 
 To simplify your code and make it storage\-agnostic, use type aliases:
@@ -237,8 +276,6 @@ Thread Safety:
 
 All methods on the MinioClient type are safe for concurrent use by multiple goroutines. The underlying \`\*minio.Client\` and \`\*minio.Core\` pointers are stored in atomic pointers and can be swapped during reconnection without racing with concurrent operations.
 
-Package minio is a generated GoMock package.
-
 ## Index
 
 - [Constants](<#constants>)
@@ -265,15 +302,10 @@ Package minio is a generated GoMock package.
 - [type ErrorCategory](<#ErrorCategory>)
 - [type KafkaNotification](<#KafkaNotification>)
 - [type KafkaSASLAuth](<#KafkaSASLAuth>)
-- [type LoggerAdapter](<#LoggerAdapter>)
-  - [func \(la \*LoggerAdapter\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Debug>)
-  - [func \(la \*LoggerAdapter\) Error\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Error>)
-  - [func \(la \*LoggerAdapter\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Fatal>)
-  - [func \(la \*LoggerAdapter\) Info\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Info>)
-  - [func \(la \*LoggerAdapter\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#LoggerAdapter.Warn>)
+- [type Logger](<#Logger>)
 - [type MQTTNotification](<#MQTTNotification>)
 - [type MinioClient](<#MinioClient>)
-  - [func NewClient\(config Config, logger MinioLogger\) \(\*MinioClient, error\)](<#NewClient>)
+  - [func NewClient\(config Config\) \(\*MinioClient, error\)](<#NewClient>)
   - [func NewMinioClientWithDI\(params MinioParams\) \(\*MinioClient, error\)](<#NewMinioClientWithDI>)
   - [func \(m \*MinioClient\) AbortMultipartUpload\(ctx context.Context, objectKey, uploadID string\) error](<#MinioClient.AbortMultipartUpload>)
   - [func \(m \*MinioClient\) CleanupIncompleteUploads\(ctx context.Context, prefix string, olderThan time.Duration\) error](<#MinioClient.CleanupIncompleteUploads>)
@@ -285,7 +317,6 @@ Package minio is a generated GoMock package.
   - [func \(m \*MinioClient\) Get\(ctx context.Context, objectKey string\) \(\[\]byte, error\)](<#MinioClient.Get>)
   - [func \(m \*MinioClient\) GetBufferPoolStats\(\) BufferPoolStats](<#MinioClient.GetBufferPoolStats>)
   - [func \(m \*MinioClient\) GetErrorCategory\(err error\) ErrorCategory](<#MinioClient.GetErrorCategory>)
-  - [func \(m \*MinioClient\) GetResourceStats\(\) ResourceStats](<#MinioClient.GetResourceStats>)
   - [func \(m \*MinioClient\) GracefulShutdown\(\)](<#MinioClient.GracefulShutdown>)
   - [func \(m \*MinioClient\) IsPermanentError\(err error\) bool](<#MinioClient.IsPermanentError>)
   - [func \(m \*MinioClient\) IsRetryableError\(err error\) bool](<#MinioClient.IsRetryableError>)
@@ -295,33 +326,12 @@ Package minio is a generated GoMock package.
   - [func \(m \*MinioClient\) PreSignedHeadObject\(ctx context.Context, objectKey string\) \(string, error\)](<#MinioClient.PreSignedHeadObject>)
   - [func \(m \*MinioClient\) PreSignedPut\(ctx context.Context, objectKey string\) \(string, error\)](<#MinioClient.PreSignedPut>)
   - [func \(m \*MinioClient\) Put\(ctx context.Context, objectKey string, reader io.Reader, size ...int64\) \(int64, error\)](<#MinioClient.Put>)
-  - [func \(m \*MinioClient\) ResetResourceStats\(\)](<#MinioClient.ResetResourceStats>)
   - [func \(m \*MinioClient\) StreamGet\(ctx context.Context, objectKey string, chunkSize int\) \(\<\-chan \[\]byte, \<\-chan error\)](<#MinioClient.StreamGet>)
   - [func \(m \*MinioClient\) TranslateError\(err error\) error](<#MinioClient.TranslateError>)
+  - [func \(m \*MinioClient\) WithLogger\(logger Logger\) \*MinioClient](<#MinioClient.WithLogger>)
+  - [func \(m \*MinioClient\) WithObserver\(observer observability.Observer\) \*MinioClient](<#MinioClient.WithObserver>)
 - [type MinioLifeCycleParams](<#MinioLifeCycleParams>)
-- [type MinioLogger](<#MinioLogger>)
-  - [func NewLoggerAdapter\(logger interface \{
-    Debug\(msg string, err error, fields ...map\[string\]interface\{\}\)
-    Info\(msg string, err error, fields ...map\[string\]interface\{\}\)
-    Warn\(msg string, err error, fields ...map\[string\]interface\{\}\)
-    Error\(msg string, err error, fields ...map\[string\]interface\{\}\)
-    Fatal\(msg string, err error, fields ...map\[string\]interface\{\}\)
-\}\) MinioLogger](<#NewLoggerAdapter>)
 - [type MinioParams](<#MinioParams>)
-- [type MockLogger](<#MockLogger>)
-  - [func NewMockLogger\(ctrl \*gomock.Controller\) \*MockLogger](<#NewMockLogger>)
-  - [func \(m \*MockLogger\) Debug\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Debug>)
-  - [func \(m \*MockLogger\) EXPECT\(\) \*MockLoggerMockRecorder](<#MockLogger.EXPECT>)
-  - [func \(m \*MockLogger\) Error\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Error>)
-  - [func \(m \*MockLogger\) Fatal\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Fatal>)
-  - [func \(m \*MockLogger\) Info\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Info>)
-  - [func \(m \*MockLogger\) Warn\(msg string, err error, fields ...map\[string\]any\)](<#MockLogger.Warn>)
-- [type MockLoggerMockRecorder](<#MockLoggerMockRecorder>)
-  - [func \(mr \*MockLoggerMockRecorder\) Debug\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Debug>)
-  - [func \(mr \*MockLoggerMockRecorder\) Error\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Error>)
-  - [func \(mr \*MockLoggerMockRecorder\) Fatal\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Fatal>)
-  - [func \(mr \*MockLoggerMockRecorder\) Info\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Info>)
-  - [func \(mr \*MockLoggerMockRecorder\) Warn\(msg, err any, fields ...any\) \*gomock.Call](<#MockLoggerMockRecorder.Warn>)
 - [type MultipartPresignedGet](<#MultipartPresignedGet>)
 - [type MultipartPresignedGetInfo](<#MultipartPresignedGetInfo>)
 - [type MultipartUpload](<#MultipartUpload>)
@@ -329,17 +339,6 @@ Package minio is a generated GoMock package.
 - [type NotificationConfig](<#NotificationConfig>)
 - [type PresignedConfig](<#PresignedConfig>)
 - [type RedisNotification](<#RedisNotification>)
-- [type ResourceMonitor](<#ResourceMonitor>)
-  - [func NewResourceMonitor\(bufferPool \*BufferPool\) \*ResourceMonitor](<#NewResourceMonitor>)
-  - [func \(rm \*ResourceMonitor\) GetStats\(\) ResourceStats](<#ResourceMonitor.GetStats>)
-  - [func \(rm \*ResourceMonitor\) RecordConnectionAttempt\(\)](<#ResourceMonitor.RecordConnectionAttempt>)
-  - [func \(rm \*ResourceMonitor\) RecordConnectionClosure\(\)](<#ResourceMonitor.RecordConnectionClosure>)
-  - [func \(rm \*ResourceMonitor\) RecordConnectionFailure\(\)](<#ResourceMonitor.RecordConnectionFailure>)
-  - [func \(rm \*ResourceMonitor\) RecordConnectionSuccess\(\)](<#ResourceMonitor.RecordConnectionSuccess>)
-  - [func \(rm \*ResourceMonitor\) RecordMemoryUsage\(bytes int64\)](<#ResourceMonitor.RecordMemoryUsage>)
-  - [func \(rm \*ResourceMonitor\) RecordRequest\(\) func\(success bool\)](<#ResourceMonitor.RecordRequest>)
-  - [func \(rm \*ResourceMonitor\) ResetStats\(\)](<#ResourceMonitor.ResetStats>)
-- [type ResourceStats](<#ResourceStats>)
 - [type UploadConfig](<#UploadConfig>)
 - [type WebhookNotification](<#WebhookNotification>)
 
@@ -555,7 +554,7 @@ var FXModule = fx.Module("minio",
 ```
 
 <a name="RegisterLifecycle"></a>
-## func [RegisterLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L71>)
+## func [RegisterLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L88>)
 
 ```go
 func RegisterLifecycle(params MinioLifeCycleParams)
@@ -574,7 +573,7 @@ The function registers two background goroutines: 1. A connection monitor that c
 On application shutdown, it ensures these goroutines are properly terminated and waits for their completion before allowing the application to exit.
 
 <a name="AMQPNotification"></a>
-## type [AMQPNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L189-L222>)
+## type [AMQPNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L192-L225>)
 
 AMQPNotification defines an AMQP notification target. AMQP notifications can be used with systems like RabbitMQ.
 
@@ -616,7 +615,7 @@ type AMQPNotification struct {
 ```
 
 <a name="BaseNotification"></a>
-## type [BaseNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L157-L172>)
+## type [BaseNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L160-L175>)
 
 BaseNotification contains common properties for all notification types. This is embedded in specific notification target types.
 
@@ -640,7 +639,7 @@ type BaseNotification struct {
 ```
 
 <a name="BufferPool"></a>
-## type [BufferPool](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L214-L229>)
+## type [BufferPool](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L73-L88>)
 
 BufferPool implements an advanced pool of bytes.Buffers with size limits and monitoring. It prevents memory leaks by limiting buffer sizes and pool capacity.
 
@@ -651,7 +650,7 @@ type BufferPool struct {
 ```
 
 <a name="NewBufferPool"></a>
-### func [NewBufferPool](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L236>)
+### func [NewBufferPool](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L95>)
 
 ```go
 func NewBufferPool() *BufferPool
@@ -662,7 +661,7 @@ NewBufferPool creates a new BufferPool instance with default configuration. The 
 Returns a configured BufferPool ready for use.
 
 <a name="NewBufferPoolWithConfig"></a>
-### func [NewBufferPoolWithConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L247>)
+### func [NewBufferPoolWithConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L106>)
 
 ```go
 func NewBufferPoolWithConfig(config BufferPoolConfig) *BufferPool
@@ -677,7 +676,7 @@ Parameters:
 Returns a configured BufferPool ready for use.
 
 <a name="BufferPool.Cleanup"></a>
-### func \(\*BufferPool\) [Cleanup](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L355>)
+### func \(\*BufferPool\) [Cleanup](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L214>)
 
 ```go
 func (bp *BufferPool) Cleanup()
@@ -686,7 +685,7 @@ func (bp *BufferPool) Cleanup()
 Cleanup forces cleanup of the buffer pool, releasing all buffers. This is useful during shutdown or when memory pressure is high.
 
 <a name="BufferPool.Get"></a>
-### func \(\*BufferPool\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L268>)
+### func \(\*BufferPool\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L127>)
 
 ```go
 func (bp *BufferPool) Get() *bytes.Buffer
@@ -697,7 +696,7 @@ Get returns a buffer from the pool. The returned buffer may be newly allocated o
 Returns a \*bytes.Buffer that should be returned to the pool when no longer needed.
 
 <a name="BufferPool.GetStats"></a>
-### func \(\*BufferPool\) [GetStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L328>)
+### func \(\*BufferPool\) [GetStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L187>)
 
 ```go
 func (bp *BufferPool) GetStats() BufferPoolStats
@@ -706,7 +705,7 @@ func (bp *BufferPool) GetStats() BufferPoolStats
 GetStats returns current buffer pool statistics for monitoring. This is useful for understanding memory usage patterns and pool effectiveness.
 
 <a name="BufferPool.Put"></a>
-### func \(\*BufferPool\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L281>)
+### func \(\*BufferPool\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L140>)
 
 ```go
 func (bp *BufferPool) Put(b *bytes.Buffer)
@@ -719,7 +718,7 @@ Parameters:
 - b: The buffer to return to the pool
 
 <a name="BufferPoolConfig"></a>
-## type [BufferPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L194-L201>)
+## type [BufferPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L53-L60>)
 
 BufferPoolConfig contains configuration for the buffer pool
 
@@ -735,7 +734,7 @@ type BufferPoolConfig struct {
 ```
 
 <a name="DefaultBufferPoolConfig"></a>
-### func [DefaultBufferPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L204>)
+### func [DefaultBufferPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L63>)
 
 ```go
 func DefaultBufferPoolConfig() BufferPoolConfig
@@ -744,7 +743,7 @@ func DefaultBufferPoolConfig() BufferPoolConfig
 DefaultBufferPoolConfig returns the default buffer pool configuration
 
 <a name="BufferPoolStats"></a>
-## type [BufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L309-L324>)
+## type [BufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L168-L183>)
 
 Stats returns statistics about buffer pool usage for monitoring and debugging.
 
@@ -768,7 +767,7 @@ type BufferPoolStats struct {
 ```
 
 <a name="Client"></a>
-## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/interface.go#L16-L110>)
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/interface.go#L16-L104>)
 
 Client provides a high\-level interface for interacting with MinIO/S3\-compatible storage. It abstracts object storage operations with features like multipart uploads, presigned URLs, and resource monitoring.
 
@@ -827,14 +826,8 @@ type Client interface {
         expiry ...time.Duration,
     ) (MultipartPresignedGet, error)
 
-    // GetResourceStats returns comprehensive resource usage statistics.
-    GetResourceStats() ResourceStats
-
     // GetBufferPoolStats returns buffer pool statistics.
     GetBufferPoolStats() BufferPoolStats
-
-    // ResetResourceStats resets all resource monitoring statistics.
-    ResetResourceStats()
 
     // CleanupResources performs cleanup of buffer pools and forces garbage collection.
     CleanupResources()
@@ -860,7 +853,7 @@ type Client interface {
 ```
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L40-L55>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L43-L58>)
 
 Config defines the top\-level configuration for MinIO. This structure contains all configuration options for the MinIO client, organized into logical sections for different aspects of functionality.
 
@@ -884,7 +877,7 @@ type Config struct {
 ```
 
 <a name="ConnectionConfig"></a>
-## type [ConnectionConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L59-L80>)
+## type [ConnectionConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L62-L83>)
 
 ConnectionConfig contains MinIO server connection details. These parameters are required to establish a connection to a MinIO server.
 
@@ -914,7 +907,7 @@ type ConnectionConfig struct {
 ```
 
 <a name="ConnectionPoolConfig"></a>
-## type [ConnectionPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L375-L384>)
+## type [ConnectionPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L234-L243>)
 
 ConnectionPoolConfig contains configuration for connection management
 
@@ -932,7 +925,7 @@ type ConnectionPoolConfig struct {
 ```
 
 <a name="DefaultConnectionPoolConfig"></a>
-### func [DefaultConnectionPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L387>)
+### func [DefaultConnectionPoolConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L246>)
 
 ```go
 func DefaultConnectionPoolConfig() ConnectionPoolConfig
@@ -941,7 +934,7 @@ func DefaultConnectionPoolConfig() ConnectionPoolConfig
 DefaultConnectionPoolConfig returns default connection pool configuration
 
 <a name="DownloadConfig"></a>
-## type [DownloadConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L104-L115>)
+## type [DownloadConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L107-L118>)
 
 DownloadConfig defines parameters that control download behavior. These settings optimize memory usage when downloading objects of different sizes.
 
@@ -992,7 +985,7 @@ const (
 ```
 
 <a name="KafkaNotification"></a>
-## type [KafkaNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L242-L254>)
+## type [KafkaNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L245-L257>)
 
 KafkaNotification defines a Kafka notification target. Kafka notifications publish events to a Kafka topic.
 
@@ -1013,7 +1006,7 @@ type KafkaNotification struct {
 ```
 
 <a name="KafkaSASLAuth"></a>
-## type [KafkaSASLAuth](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L258-L267>)
+## type [KafkaSASLAuth](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L261-L270>)
 
 KafkaSASLAuth contains Kafka SASL authentication details. SASL is used for authenticating with Kafka brokers.
 
@@ -1030,64 +1023,26 @@ type KafkaSASLAuth struct {
 }
 ```
 
-<a name="LoggerAdapter"></a>
-## type [LoggerAdapter](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L36-L44>)
+<a name="Logger"></a>
+## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L302-L311>)
 
-LoggerAdapter adapts the logger package's Logger to implement MinioLogger interface. This allows seamless integration with the structured logger from the logger package.
+Logger is an interface that matches the std/v1/logger.Logger interface. It provides context\-aware structured logging with optional error and field parameters.
 
 ```go
-type LoggerAdapter struct {
-    // contains filtered or unexported fields
+type Logger interface {
+    // InfoWithContext logs an informational message with trace context.
+    InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // WarnWithContext logs a warning message with trace context.
+    WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // ErrorWithContext logs an error message with trace context.
+    ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 }
 ```
 
-<a name="LoggerAdapter.Debug"></a>
-### func \(\*LoggerAdapter\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L59>)
-
-```go
-func (la *LoggerAdapter) Debug(msg string, err error, fields ...map[string]any)
-```
-
-Debug implements MinioLogger interface by delegating to the wrapped logger
-
-<a name="LoggerAdapter.Error"></a>
-### func \(\*LoggerAdapter\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L77>)
-
-```go
-func (la *LoggerAdapter) Error(msg string, err error, fields ...map[string]any)
-```
-
-Error implements MinioLogger interface by delegating to the wrapped logger
-
-<a name="LoggerAdapter.Fatal"></a>
-### func \(\*LoggerAdapter\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L83>)
-
-```go
-func (la *LoggerAdapter) Fatal(msg string, err error, fields ...map[string]any)
-```
-
-Fatal implements MinioLogger interface by delegating to the wrapped logger
-
-<a name="LoggerAdapter.Info"></a>
-### func \(\*LoggerAdapter\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L65>)
-
-```go
-func (la *LoggerAdapter) Info(msg string, err error, fields ...map[string]any)
-```
-
-Info implements MinioLogger interface by delegating to the wrapped logger
-
-<a name="LoggerAdapter.Warn"></a>
-### func \(\*LoggerAdapter\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L71>)
-
-```go
-func (la *LoggerAdapter) Warn(msg string, err error, fields ...map[string]any)
-```
-
-Warn implements MinioLogger interface by delegating to the wrapped logger
-
 <a name="MQTTNotification"></a>
-## type [MQTTNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L271-L295>)
+## type [MQTTNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L274-L298>)
 
 MQTTNotification defines an MQTT notification target. MQTT notifications publish events to an MQTT broker.
 
@@ -1120,7 +1075,7 @@ type MQTTNotification struct {
 ```
 
 <a name="MinioClient"></a>
-## type [MinioClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L161-L191>)
+## type [MinioClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L20-L50>)
 
 MinioClient represents a MinIO client with additional functionality. It wraps the standard MinIO client with features for connection management, reconnection handling, and resource monitoring.
 
@@ -1131,10 +1086,10 @@ type MinioClient struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L659>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L277>)
 
 ```go
-func NewClient(config Config, logger MinioLogger) (*MinioClient, error)
+func NewClient(config Config) (*MinioClient, error)
 ```
 
 NewClient creates and validates a new MinIO client. It establishes connections to both the standard and core MinIO APIs, validates the connection, and ensures the configured bucket exists.
@@ -1142,28 +1097,27 @@ NewClient creates and validates a new MinIO client. It establishes connections t
 Parameters:
 
 - config: Configuration for the MinIO client
-- logger: Optional logger for recording operations and errors. If nil, a fallback logger will be used.
 
 Returns a configured and validated MinioClient or an error if initialization fails.
 
 Example:
 
 ```
-// With custom logger
-client, err := minio.NewClient(config, myLogger)
+client, err := minio.NewClient(config)
 if err != nil {
     return fmt.Errorf("failed to initialize MinIO client: %w", err)
 }
 
-// Without logger (uses fallback)
-client, err := minio.NewClient(config, nil)
-if err != nil {
-    return fmt.Errorf("failed to initialize MinIO client: %w", err)
-}
+// Optionally attach logger and observer
+client = client.
+    WithLogger(myLogger).
+    WithObserver(myObserver)
+
+defer client.GracefulShutdown()
 ```
 
 <a name="NewMinioClientWithDI"></a>
-### func [NewMinioClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L45>)
+### func [NewMinioClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L46>)
 
 ```go
 func NewMinioClientWithDI(params MinioParams) (*MinioClient, error)
@@ -1219,7 +1173,7 @@ err := minioClient.CleanupIncompleteUploads(ctx, "uploads/", 24*time.Hour)
 ```
 
 <a name="MinioClient.CleanupResources"></a>
-### func \(\*MinioClient\) [CleanupResources](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1079>)
+### func \(\*MinioClient\) [CleanupResources](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L626>)
 
 ```go
 func (m *MinioClient) CleanupResources()
@@ -1266,7 +1220,7 @@ err := minioClient.CompleteMultipartUpload(
 ```
 
 <a name="MinioClient.Delete"></a>
-### func \(\*MinioClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L241>)
+### func \(\*MinioClient\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L279>)
 
 ```go
 func (m *MinioClient) Delete(ctx context.Context, objectKey string) error
@@ -1357,7 +1311,7 @@ upload, err := minioClient.GenerateMultipartUploadURLs(
 ```
 
 <a name="MinioClient.Get"></a>
-### func \(\*MinioClient\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L86>)
+### func \(\*MinioClient\) [Get](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L90>)
 
 ```go
 func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error)
@@ -1388,7 +1342,7 @@ if err == nil {
 ```
 
 <a name="MinioClient.GetBufferPoolStats"></a>
-### func \(\*MinioClient\) [GetBufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1050>)
+### func \(\*MinioClient\) [GetBufferPoolStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L612>)
 
 ```go
 func (m *MinioClient) GetBufferPoolStats() BufferPoolStats
@@ -1417,30 +1371,8 @@ func (m *MinioClient) GetErrorCategory(err error) ErrorCategory
 
 GetErrorCategory returns the category of the given error
 
-<a name="MinioClient.GetResourceStats"></a>
-### func \(\*MinioClient\) [GetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1032>)
-
-```go
-func (m *MinioClient) GetResourceStats() ResourceStats
-```
-
-GetResourceStats returns comprehensive resource usage statistics for monitoring. This method provides insights into connection health, request performance, memory usage, and buffer pool efficiency.
-
-Returns:
-
-- ResourceStats: Comprehensive statistics about resource usage
-
-Example:
-
-```
-stats := minioClient.GetResourceStats()
-fmt.Printf("Active connections: %d\n", stats.ActiveConnections)
-fmt.Printf("Request success rate: %.2f%%\n", stats.RequestSuccessRate*100)
-fmt.Printf("Average request duration: %v\n", stats.AverageRequestDuration)
-```
-
 <a name="MinioClient.GracefulShutdown"></a>
-### func \(\*MinioClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L139>)
+### func \(\*MinioClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L154>)
 
 ```go
 func (m *MinioClient) GracefulShutdown()
@@ -1582,7 +1514,7 @@ if err == nil {
 ```
 
 <a name="MinioClient.PreSignedPut"></a>
-### func \(\*MinioClient\) [PreSignedPut](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L634>)
+### func \(\*MinioClient\) [PreSignedPut](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_put_utils.go#L641>)
 
 ```go
 func (m *MinioClient) PreSignedPut(ctx context.Context, objectKey string) (string, error)
@@ -1610,7 +1542,7 @@ if err == nil {
 ```
 
 <a name="MinioClient.Put"></a>
-### func \(\*MinioClient\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L37>)
+### func \(\*MinioClient\) [Put](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L38>)
 
 ```go
 func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error)
@@ -1643,26 +1575,8 @@ if err == nil {
 }
 ```
 
-<a name="MinioClient.ResetResourceStats"></a>
-### func \(\*MinioClient\) [ResetResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L1066>)
-
-```go
-func (m *MinioClient) ResetResourceStats()
-```
-
-ResetResourceStats resets all resource monitoring statistics. This is useful for getting fresh metrics for a specific time period.
-
-Example:
-
-```
-// Reset stats at the beginning of a monitoring period
-minioClient.ResetResourceStats()
-// ... perform operations ...
-stats := minioClient.GetResourceStats()
-```
-
 <a name="MinioClient.StreamGet"></a>
-### func \(\*MinioClient\) [StreamGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L154>)
+### func \(\*MinioClient\) [StreamGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/object_utils.go#L168>)
 
 ```go
 func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error)
@@ -1681,8 +1595,56 @@ TranslateError converts MinIO\-specific errors into standardized application err
 
 It maps common MinIO errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
+<a name="MinioClient.WithLogger"></a>
+### func \(\*MinioClient\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L674>)
+
+```go
+func (m *MinioClient) WithLogger(logger Logger) *MinioClient
+```
+
+WithLogger attaches a logger to the MinIO client for internal logging. This method uses the builder pattern and returns the client for method chaining.
+
+The logger will be used for lifecycle events, connection monitoring, and error logging. This is particularly useful for debugging and monitoring connection health.
+
+This is useful for non\-FX usage where you want to enable logging after creating the client. When using FX, the logger is automatically injected via NewClientWithDI.
+
+Example:
+
+```
+client, err := minio.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithLogger(myLogger)
+defer client.GracefulShutdown()
+```
+
+<a name="MinioClient.WithObserver"></a>
+### func \(\*MinioClient\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L652>)
+
+```go
+func (m *MinioClient) WithObserver(observer observability.Observer) *MinioClient
+```
+
+WithObserver attaches an observer to the MinIO client for observability hooks. This method uses the builder pattern and returns the client for method chaining.
+
+The observer will be notified of all storage operations, allowing external systems to track metrics, traces, or other observability data.
+
+This is useful for non\-FX usage where you want to attach an observer after creating the client. When using FX, the observer is automatically injected via NewClientWithDI.
+
+Example:
+
+```
+client, err := minio.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver)
+defer client.GracefulShutdown()
+```
+
 <a name="MinioLifeCycleParams"></a>
-## type [MinioLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L49-L54>)
+## type [MinioLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L66-L71>)
 
 
 
@@ -1695,43 +1657,8 @@ type MinioLifeCycleParams struct {
 }
 ```
 
-<a name="MinioLogger"></a>
-## type [MinioLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L21-L32>)
-
-MinioLogger defines the logging interface used by MinIO client. This interface allows for flexible logger injection while maintaining compatibility with both structured loggers \(like the logger package\) and simple loggers.
-
-```go
-type MinioLogger interface {
-    // Debug logs debug-level messages
-    Debug(msg string, err error, fields ...map[string]any)
-    // Info logs informational messages
-    Info(msg string, err error, fields ...map[string]any)
-    // Warn logs warning messages
-    Warn(msg string, err error, fields ...map[string]any)
-    // Error logs error messages
-    Error(msg string, err error, fields ...map[string]any)
-    // Fatal logs fatal messages and should terminate the application
-    Fatal(msg string, err error, fields ...map[string]any)
-}
-```
-
-<a name="NewLoggerAdapter"></a>
-### func [NewLoggerAdapter](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L48-L54>)
-
-```go
-func NewLoggerAdapter(logger interface {
-    Debug(msg string, err error, fields ...map[string]interface{})
-    Info(msg string, err error, fields ...map[string]interface{})
-    Warn(msg string, err error, fields ...map[string]interface{})
-    Error(msg string, err error, fields ...map[string]interface{})
-    Fatal(msg string, err error, fields ...map[string]interface{})
-}) MinioLogger
-```
-
-NewLoggerAdapter creates a new LoggerAdapter that wraps the logger package's Logger. This function provides a bridge between the logger package and MinIO's logging interface.
-
 <a name="MinioParams"></a>
-## type [MinioParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L37-L43>)
+## type [MinioParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/fx_module.go#L38-L44>)
 
 
 
@@ -1739,141 +1666,11 @@ NewLoggerAdapter creates a new LoggerAdapter that wraps the logger package's Log
 type MinioParams struct {
     fx.In
 
-    Config
-    // Logger is optional - if not provided, fallback logger will be used
-    Logger MinioLogger `optional:"true"`
+    Config   Config
+    Logger   Logger                 `optional:"true"`
+    Observer observability.Observer `optional:"true"`
 }
 ```
-
-<a name="MockLogger"></a>
-## type [MockLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L19-L23>)
-
-MockLogger is a mock of Logger interface.
-
-```go
-type MockLogger struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewMockLogger"></a>
-### func [NewMockLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L31>)
-
-```go
-func NewMockLogger(ctrl *gomock.Controller) *MockLogger
-```
-
-NewMockLogger creates a new mock instance.
-
-<a name="MockLogger.Debug"></a>
-### func \(\*MockLogger\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L43>)
-
-```go
-func (m *MockLogger) Debug(msg string, err error, fields ...map[string]any)
-```
-
-Debug mocks base method.
-
-<a name="MockLogger.EXPECT"></a>
-### func \(\*MockLogger\) [EXPECT](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L38>)
-
-```go
-func (m *MockLogger) EXPECT() *MockLoggerMockRecorder
-```
-
-EXPECT returns an object that allows the caller to indicate expected use.
-
-<a name="MockLogger.Error"></a>
-### func \(\*MockLogger\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L60>)
-
-```go
-func (m *MockLogger) Error(msg string, err error, fields ...map[string]any)
-```
-
-Error mocks base method.
-
-<a name="MockLogger.Fatal"></a>
-### func \(\*MockLogger\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L77>)
-
-```go
-func (m *MockLogger) Fatal(msg string, err error, fields ...map[string]any)
-```
-
-Fatal mocks base method.
-
-<a name="MockLogger.Info"></a>
-### func \(\*MockLogger\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L94>)
-
-```go
-func (m *MockLogger) Info(msg string, err error, fields ...map[string]any)
-```
-
-Info mocks base method.
-
-<a name="MockLogger.Warn"></a>
-### func \(\*MockLogger\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L111>)
-
-```go
-func (m *MockLogger) Warn(msg string, err error, fields ...map[string]any)
-```
-
-Warn mocks base method.
-
-<a name="MockLoggerMockRecorder"></a>
-## type [MockLoggerMockRecorder](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L26-L28>)
-
-MockLoggerMockRecorder is the mock recorder for MockLogger.
-
-```go
-type MockLoggerMockRecorder struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="MockLoggerMockRecorder.Debug"></a>
-### func \(\*MockLoggerMockRecorder\) [Debug](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L53>)
-
-```go
-func (mr *MockLoggerMockRecorder) Debug(msg, err any, fields ...any) *gomock.Call
-```
-
-Debug indicates an expected call of Debug.
-
-<a name="MockLoggerMockRecorder.Error"></a>
-### func \(\*MockLoggerMockRecorder\) [Error](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L70>)
-
-```go
-func (mr *MockLoggerMockRecorder) Error(msg, err any, fields ...any) *gomock.Call
-```
-
-Error indicates an expected call of Error.
-
-<a name="MockLoggerMockRecorder.Fatal"></a>
-### func \(\*MockLoggerMockRecorder\) [Fatal](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L87>)
-
-```go
-func (mr *MockLoggerMockRecorder) Fatal(msg, err any, fields ...any) *gomock.Call
-```
-
-Fatal indicates an expected call of Fatal.
-
-<a name="MockLoggerMockRecorder.Info"></a>
-### func \(\*MockLoggerMockRecorder\) [Info](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L104>)
-
-```go
-func (mr *MockLoggerMockRecorder) Info(msg, err any, fields ...any) *gomock.Call
-```
-
-Info indicates an expected call of Info.
-
-<a name="MockLoggerMockRecorder.Warn"></a>
-### func \(\*MockLoggerMockRecorder\) [Warn](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/mock_logger.go#L121>)
-
-```go
-func (mr *MockLoggerMockRecorder) Warn(msg, err any, fields ...any) *gomock.Call
-```
-
-Warn indicates an expected call of Warn.
 
 <a name="MultipartPresignedGet"></a>
 ## type [MultipartPresignedGet](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/presigned_get_utils.go#L38-L62>)
@@ -2014,7 +1811,7 @@ type MultipartUploadInfo struct {
 ```
 
 <a name="NotificationConfig"></a>
-## type [NotificationConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L135-L153>)
+## type [NotificationConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L138-L156>)
 
 NotificationConfig defines the configuration for event notifications. MinIO can send notifications when events occur on buckets \(e.g., object created\).
 
@@ -2041,7 +1838,7 @@ type NotificationConfig struct {
 ```
 
 <a name="PresignedConfig"></a>
-## type [PresignedConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L119-L131>)
+## type [PresignedConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L122-L134>)
 
 PresignedConfig contains configuration options for presigned URLs. Presigned URLs allow temporary access to objects without requiring AWS credentials.
 
@@ -2062,7 +1859,7 @@ type PresignedConfig struct {
 ```
 
 <a name="RedisNotification"></a>
-## type [RedisNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L226-L238>)
+## type [RedisNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L229-L241>)
 
 RedisNotification defines a Redis notification target. Redis notifications publish events to a Redis pub/sub channel or list.
 
@@ -2082,143 +1879,8 @@ type RedisNotification struct {
 }
 ```
 
-<a name="ResourceMonitor"></a>
-## type [ResourceMonitor](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L397-L428>)
-
-ResourceMonitor tracks resource usage, performance metrics, and connection health
-
-```go
-type ResourceMonitor struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewResourceMonitor"></a>
-### func [NewResourceMonitor](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L431>)
-
-```go
-func NewResourceMonitor(bufferPool *BufferPool) *ResourceMonitor
-```
-
-NewResourceMonitor creates a new resource monitor instance
-
-<a name="ResourceMonitor.GetStats"></a>
-### func \(\*ResourceMonitor\) [GetStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L546>)
-
-```go
-func (rm *ResourceMonitor) GetStats() ResourceStats
-```
-
-GetStats returns comprehensive resource usage statistics
-
-<a name="ResourceMonitor.RecordConnectionAttempt"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionAttempt](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L442>)
-
-```go
-func (rm *ResourceMonitor) RecordConnectionAttempt()
-```
-
-RecordConnectionAttempt records a connection attempt
-
-<a name="ResourceMonitor.RecordConnectionClosure"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionClosure](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L458>)
-
-```go
-func (rm *ResourceMonitor) RecordConnectionClosure()
-```
-
-RecordConnectionClosure records a connection closure
-
-<a name="ResourceMonitor.RecordConnectionFailure"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionFailure](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L453>)
-
-```go
-func (rm *ResourceMonitor) RecordConnectionFailure()
-```
-
-RecordConnectionFailure records a failed connection
-
-<a name="ResourceMonitor.RecordConnectionSuccess"></a>
-### func \(\*ResourceMonitor\) [RecordConnectionSuccess](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L447>)
-
-```go
-func (rm *ResourceMonitor) RecordConnectionSuccess()
-```
-
-RecordConnectionSuccess records a successful connection
-
-<a name="ResourceMonitor.RecordMemoryUsage"></a>
-### func \(\*ResourceMonitor\) [RecordMemoryUsage](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L495>)
-
-```go
-func (rm *ResourceMonitor) RecordMemoryUsage(bytes int64)
-```
-
-RecordMemoryUsage records current memory usage
-
-<a name="ResourceMonitor.RecordRequest"></a>
-### func \(\*ResourceMonitor\) [RecordRequest](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L463>)
-
-```go
-func (rm *ResourceMonitor) RecordRequest() func(success bool)
-```
-
-RecordRequest records the start of a request and returns a function to record completion
-
-<a name="ResourceMonitor.ResetStats"></a>
-### func \(\*ResourceMonitor\) [ResetStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L612>)
-
-```go
-func (rm *ResourceMonitor) ResetStats()
-```
-
-ResetStats resets all statistics counters
-
-<a name="ResourceStats"></a>
-## type [ResourceStats](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/setup.go#L509-L543>)
-
-ResourceStats contains comprehensive resource usage statistics
-
-```go
-type ResourceStats struct {
-    // Connection statistics
-    TotalConnections      int64   `json:"totalConnections"`
-    ActiveConnections     int64   `json:"activeConnections"`
-    FailedConnections     int64   `json:"failedConnections"`
-    ConnectionAttempts    int64   `json:"connectionAttempts"`
-    ConnectionSuccessRate float64 `json:"connectionSuccessRate"`
-
-    // Request statistics
-    TotalRequests      int64   `json:"totalRequests"`
-    SuccessfulRequests int64   `json:"successfulRequests"`
-    FailedRequests     int64   `json:"failedRequests"`
-    RequestSuccessRate float64 `json:"requestSuccessRate"`
-
-    // Performance statistics
-    AverageRequestDuration time.Duration `json:"averageRequestDuration"`
-    MaxRequestDuration     time.Duration `json:"maxRequestDuration"`
-    MinRequestDuration     time.Duration `json:"minRequestDuration"`
-    RequestsPerSecond      float64       `json:"requestsPerSecond"`
-
-    // Memory statistics
-    TotalMemoryAllocated int64 `json:"totalMemoryAllocated"`
-    CurrentMemoryUsage   int64 `json:"currentMemoryUsage"`
-    MaxMemoryUsage       int64 `json:"maxMemoryUsage"`
-
-    // Buffer pool statistics
-    BufferPoolStats BufferPoolStats `json:"bufferPoolStats"`
-
-    // Runtime information
-    Uptime        time.Duration `json:"uptime"`
-    LastResetTime time.Time     `json:"lastResetTime"`
-
-    // System memory info
-    SystemMemoryStats runtime.MemStats `json:"systemMemoryStats"`
-}
-```
-
 <a name="UploadConfig"></a>
-## type [UploadConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L84-L100>)
+## type [UploadConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L87-L103>)
 
 UploadConfig defines the configuration for upload constraints. These parameters control how objects are uploaded, particularly for large objects.
 
@@ -2243,7 +1905,7 @@ type UploadConfig struct {
 ```
 
 <a name="WebhookNotification"></a>
-## type [WebhookNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L176-L185>)
+## type [WebhookNotification](<https://github.com/Aleph-Alpha/std/blob/main/v1/minio/configs.go#L179-L188>)
 
 WebhookNotification defines a webhook notification target. Webhook notifications send HTTP POST requests to a specified endpoint.
 

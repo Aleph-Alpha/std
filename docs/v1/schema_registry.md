@@ -88,6 +88,43 @@ app := fx.New(
 )
 ```
 
+### Observability \\\(Observer Hook\\\)
+
+Schema Registry supports optional observability through the Observer interface from the observability package. This allows external systems to track schema operations without coupling the package to specific metrics/tracing implementations.
+
+Using WithObserver \(non\-FX usage\):
+
+```
+client, err := schema_registry.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver).WithLogger(myLogger)
+```
+
+Using FX \(automatic injection\):
+
+```
+app := fx.New(
+    schema_registry.FXModule,
+    logger.FXModule,  // Optional: provides logger
+    fx.Provide(
+        func() schema_registry.Config { return loadConfig() },
+        func() observability.Observer { return myObserver },  // Optional
+    ),
+)
+```
+
+The observer receives events for all schema operations:
+
+- Component: "schema\_registry"
+- Operations: "get\_schema\_by\_id", "get\_latest\_schema", "register\_schema", "check\_compatibility"
+- Resource: subject name \(or "registry" for ID lookups\)
+- SubResource: schema ID or version
+- Duration: operation duration
+- Error: any error that occurred
+- Metadata: operation\-specific details \(e.g., cache\_hit, schema\_type, schema\_id, is\_compatible\)
+
 ### Type Aliases in Consumer Code
 
 To simplify your code and make it registry\-agnostic, use type aliases:
@@ -265,6 +302,8 @@ For more information, see the SCHEMA\_REGISTRY.md documentation file.
   - [func \(c \*Client\) GetLatestSchema\(subject string\) \(\*Metadata, error\)](<#Client.GetLatestSchema>)
   - [func \(c \*Client\) GetSchemaByID\(id int\) \(string, error\)](<#Client.GetSchemaByID>)
   - [func \(c \*Client\) RegisterSchema\(subject, schema, schemaType string\) \(int, error\)](<#Client.RegisterSchema>)
+  - [func \(c \*Client\) WithLogger\(logger Logger\) \*Client](<#Client.WithLogger>)
+  - [func \(c \*Client\) WithObserver\(observer observability.Observer\) \*Client](<#Client.WithObserver>)
 - [type Config](<#Config>)
 - [type Deserializer](<#Deserializer>)
 - [type JSONDeserializer](<#JSONDeserializer>)
@@ -273,6 +312,7 @@ For more information, see the SCHEMA\_REGISTRY.md documentation file.
 - [type JSONSerializer](<#JSONSerializer>)
   - [func NewJSONSerializer\(config JSONSerializerConfig\) \(\*JSONSerializer, error\)](<#NewJSONSerializer>)
 - [type JSONSerializerConfig](<#JSONSerializerConfig>)
+- [type Logger](<#Logger>)
 - [type Metadata](<#Metadata>)
 - [type ProtobufDeserializer](<#ProtobufDeserializer>)
   - [func NewProtobufDeserializer\(config ProtobufDeserializerConfig\) \(\*ProtobufDeserializer, error\)](<#NewProtobufDeserializer>)
@@ -332,7 +372,7 @@ var FXModule = fx.Module("schema_registry",
 ```
 
 <a name="DecodeSchemaID"></a>
-## func [DecodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L307>)
+## func [DecodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L421>)
 
 ```go
 func DecodeSchemaID(data []byte) (int, []byte, error)
@@ -341,7 +381,7 @@ func DecodeSchemaID(data []byte) (int, []byte, error)
 DecodeSchemaID decodes a schema ID from the Confluent wire format Returns the schema ID and the remaining payload \(after the 5\-byte header\)
 
 <a name="EncodeSchemaID"></a>
-## func [EncodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L298>)
+## func [EncodeSchemaID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L412>)
 
 ```go
 func EncodeSchemaID(schemaID int) []byte
@@ -350,7 +390,7 @@ func EncodeSchemaID(schemaID int) []byte
 EncodeSchemaID encodes a schema ID in the Confluent wire format Format: \[magic\_byte\]\[schema\_id\] \- magic\_byte: 0x0 \(1 byte\) \- schema\_id: 4 bytes \(big\-endian\)
 
 <a name="RegisterSchemaRegistryLifecycle"></a>
-## func [RegisterSchemaRegistryLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L105>)
+## func [RegisterSchemaRegistryLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L123>)
 
 ```go
 func RegisterSchemaRegistryLifecycle(params SchemaRegistryLifecycleParams)
@@ -436,7 +476,7 @@ type AvroSerializerConfig struct {
 ```
 
 <a name="Client"></a>
-## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L41-L56>)
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L44-L65>)
 
 Client is the default implementation of Registry that communicates with Confluent Schema Registry over HTTP.
 
@@ -447,7 +487,7 @@ type Client struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L75>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L97>)
 
 ```go
 func NewClient(config Config) (*Client, error)
@@ -456,7 +496,7 @@ func NewClient(config Config) (*Client, error)
 NewClient creates a new schema registry client Returns the concrete \*Client type.
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L81>)
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L84>)
 
 ```go
 func NewClientWithDI(params SchemaRegistryParams) (*Client, error)
@@ -493,7 +533,7 @@ app := fx.New(
 ```
 
 <a name="Client.CheckCompatibility"></a>
-### func \(\*Client\) [CheckCompatibility](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L247>)
+### func \(\*Client\) [CheckCompatibility](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L338>)
 
 ```go
 func (c *Client) CheckCompatibility(subject, schema, schemaType string) (bool, error)
@@ -502,7 +542,7 @@ func (c *Client) CheckCompatibility(subject, schema, schemaType string) (bool, e
 CheckCompatibility checks if a schema is compatible with the existing schema for a subject
 
 <a name="Client.GetLatestSchema"></a>
-### func \(\*Client\) [GetLatestSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L146>)
+### func \(\*Client\) [GetLatestSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L190>)
 
 ```go
 func (c *Client) GetLatestSchema(subject string) (*Metadata, error)
@@ -511,7 +551,7 @@ func (c *Client) GetLatestSchema(subject string) (*Metadata, error)
 GetLatestSchema retrieves the latest version of a schema for a subject
 
 <a name="Client.GetSchemaByID"></a>
-### func \(\*Client\) [GetSchemaByID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L97>)
+### func \(\*Client\) [GetSchemaByID](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L119>)
 
 ```go
 func (c *Client) GetSchemaByID(id int) (string, error)
@@ -520,7 +560,7 @@ func (c *Client) GetSchemaByID(id int) (string, error)
 GetSchemaByID retrieves a schema from the registry by its ID
 
 <a name="Client.RegisterSchema"></a>
-### func \(\*Client\) [RegisterSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L185>)
+### func \(\*Client\) [RegisterSchema](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L243>)
 
 ```go
 func (c *Client) RegisterSchema(subject, schema, schemaType string) (int, error)
@@ -528,8 +568,38 @@ func (c *Client) RegisterSchema(subject, schema, schemaType string) (int, error)
 
 RegisterSchema registers a new schema with the schema registry
 
+<a name="Client.WithLogger"></a>
+### func \(\*Client\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L453>)
+
+```go
+func (c *Client) WithLogger(logger Logger) *Client
+```
+
+WithLogger sets the logger for this client and returns the client for method chaining. The logger is used for structured logging of client operations and errors.
+
+Example:
+
+```
+client := client.WithObserver(myObserver).WithLogger(myLogger)
+```
+
+<a name="Client.WithObserver"></a>
+### func \(\*Client\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L442>)
+
+```go
+func (c *Client) WithObserver(observer observability.Observer) *Client
+```
+
+WithObserver sets the observer for this client and returns the client for method chaining. The observer receives events about schema registry operations \(e.g., register, get, check compatibility\).
+
+Example:
+
+```
+client := client.WithObserver(myObserver).WithLogger(myLogger)
+```
+
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L59-L71>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L68-L80>)
 
 Config holds configuration for schema registry client
 
@@ -624,8 +694,26 @@ type JSONSerializerConfig struct {
 }
 ```
 
+<a name="Logger"></a>
+## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L84-L93>)
+
+Logger is an interface that matches the std/v1/logger.Logger interface. It provides context\-aware structured logging with optional error and field parameters.
+
+```go
+type Logger interface {
+    // InfoWithContext logs an informational message with trace context.
+    InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // WarnWithContext logs a warning message with trace context.
+    WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // ErrorWithContext logs an error message with trace context.
+    ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+}
+```
+
 <a name="Metadata"></a>
-## type [Metadata](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L31-L37>)
+## type [Metadata](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L34-L40>)
 
 Metadata contains metadata about a registered schema
 
@@ -706,7 +794,7 @@ type ProtobufSerializerConfig struct {
 ```
 
 <a name="Registry"></a>
-## type [Registry](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L16-L28>)
+## type [Registry](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/client.go#L19-L31>)
 
 Registry provides an interface for interacting with a Confluent Schema Registry. It handles schema registration, retrieval, and caching for efficient serialization.
 
@@ -727,7 +815,7 @@ type Registry interface {
 ```
 
 <a name="SchemaRegistryLifecycleParams"></a>
-## type [SchemaRegistryLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L86-L91>)
+## type [SchemaRegistryLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L104-L109>)
 
 SchemaRegistryLifecycleParams groups the dependencies needed for Schema Registry lifecycle management
 
@@ -741,7 +829,7 @@ type SchemaRegistryLifecycleParams struct {
 ```
 
 <a name="SchemaRegistryParams"></a>
-## type [SchemaRegistryParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L46-L50>)
+## type [SchemaRegistryParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/schema_registry/fx_module.go#L47-L53>)
 
 SchemaRegistryParams groups the dependencies needed to create a Schema Registry client
 
@@ -749,7 +837,9 @@ SchemaRegistryParams groups the dependencies needed to create a Schema Registry 
 type SchemaRegistryParams struct {
     fx.In
 
-    Config Config
+    Config   Config
+    Logger   Logger                 `optional:"true"`
+    Observer observability.Observer `optional:"true"`
 }
 ```
 
