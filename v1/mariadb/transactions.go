@@ -2,6 +2,7 @@ package mariadb
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -13,7 +14,9 @@ import (
 // and safety features of the MariaDB wrapper.
 func (m *MariaDB) cloneWithTx(tx *gorm.DB) *MariaDB {
 	db := &MariaDB{
-		cfg: m.cfg,
+		cfg:      m.cfg,
+		observer: m.observer,
+		logger:   m.logger,
 	}
 	// Avoid sharing lifecycle channels with the parent; tx clients should not be able
 	// to shut down monitoring goroutines.
@@ -39,9 +42,12 @@ func (m *MariaDB) cloneWithTx(tx *gorm.DB) *MariaDB {
 //		return tx.Create(ctx, userProfile)
 //	})
 func (m *MariaDB) Transaction(ctx context.Context, fn func(tx Client) error) error {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
-	return db.Transaction(func(txDB *gorm.DB) error {
+	err := db.Transaction(func(txDB *gorm.DB) error {
 		dbWithTx := m.cloneWithTx(txDB)
 		return fn(dbWithTx) // Pass as Client interface
 	})
+	m.observeOperation("transaction", "", "", time.Since(start), err, 0, nil)
+	return err
 }

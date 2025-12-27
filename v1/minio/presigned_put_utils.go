@@ -597,20 +597,27 @@ func (m *MinioClient) CleanupIncompleteUploads(ctx context.Context, prefix strin
 //	    fmt.Printf("Use this URL to check if the object exists: %s\n", url)
 //	}
 func (m *MinioClient) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error) {
+	start := time.Now()
 	c := m.client.Load()
 	if c == nil {
+		m.observeOperation("presigned_head", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
 		return "", ErrConnectionFailed
 	}
 
 	presignedUrl, err := c.PresignedHeadObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
 	if err != nil {
+		m.observeOperation("presigned_head", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
 		return "", err
 	}
 
+	var result string
 	if m.cfg.PresignedConfig.BaseURL != "" {
-		return urlGenerator(presignedUrl, m.cfg.PresignedConfig.BaseURL)
+		result, err = urlGenerator(presignedUrl, m.cfg.PresignedConfig.BaseURL)
+	} else {
+		result = presignedUrl.String()
 	}
-	return presignedUrl.String(), nil
+	m.observeOperation("presigned_head", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+	return result, err
 }
 
 // PreSignedPut generates a pre-signed URL for PutObject operations.
@@ -632,18 +639,25 @@ func (m *MinioClient) PreSignedHeadObject(ctx context.Context, objectKey string)
 //	    fmt.Printf("Upload link: %s\n", url)
 //	}
 func (m *MinioClient) PreSignedPut(ctx context.Context, objectKey string) (string, error) {
+	start := time.Now()
 	c := m.client.Load()
 	if c == nil {
+		m.observeOperation("presigned_put", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
 		return "", ErrConnectionFailed
 	}
 
 	presignedUrl, err := c.PresignedPutObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration)
 	if err != nil {
+		m.observeOperation("presigned_put", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
 		return "", err
 	}
 
+	var result string
 	if m.cfg.PresignedConfig.BaseURL != "" {
-		return urlGenerator(presignedUrl, m.cfg.PresignedConfig.BaseURL)
+		result, err = urlGenerator(presignedUrl, m.cfg.PresignedConfig.BaseURL)
+	} else {
+		result = presignedUrl.String()
 	}
-	return presignedUrl.String(), nil
+	m.observeOperation("presigned_put", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+	return result, err
 }

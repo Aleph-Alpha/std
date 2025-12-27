@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
 )
 
@@ -32,8 +33,9 @@ var FXModule = fx.Module("redis",
 type RedisParams struct {
 	fx.In
 
-	Config Config
-	Logger Logger `optional:"true"` // Optional logger from std/v1/logger
+	Config   Config
+	Logger   Logger                 `optional:"true"` // Optional logger from std/v1/logger
+	Observer observability.Observer `optional:"true"` // Optional observer from std/v1/observability
 }
 
 // NewClientWithDI creates a new Redis client using dependency injection.
@@ -68,7 +70,17 @@ func NewClientWithDI(params RedisParams) (*RedisClient, error) {
 		params.Config.Logger = params.Logger
 	}
 
-	return NewClient(params.Config)
+	client, err := NewClient(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }
 
 // RedisLifecycleParams groups the dependencies needed for Redis lifecycle management
@@ -122,8 +134,9 @@ var ClusterFXModule = fx.Module("redis-cluster",
 type ClusterRedisParams struct {
 	fx.In
 
-	Config ClusterConfig
-	Logger Logger `optional:"true"`
+	Config   ClusterConfig
+	Logger   Logger                 `optional:"true"`
+	Observer observability.Observer `optional:"true"`
 }
 
 // NewClusterClientWithDI creates a new Redis Cluster client using dependency injection.
@@ -133,7 +146,17 @@ func NewClusterClientWithDI(params ClusterRedisParams) (*RedisClient, error) {
 		params.Config.Logger = params.Logger
 	}
 
-	return NewClusterClient(params.Config)
+	client, err := NewClusterClient(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }
 
 // FailoverFXModule is an fx.Module for Redis Sentinel (failover) configuration.
@@ -148,8 +171,9 @@ var FailoverFXModule = fx.Module("redis-failover",
 type FailoverRedisParams struct {
 	fx.In
 
-	Config FailoverConfig
-	Logger Logger `optional:"true"`
+	Config   FailoverConfig
+	Logger   Logger                 `optional:"true"`
+	Observer observability.Observer `optional:"true"`
 }
 
 // NewFailoverClientWithDI creates a new Redis Sentinel client using dependency injection.
@@ -159,5 +183,15 @@ func NewFailoverClientWithDI(params FailoverRedisParams) (*RedisClient, error) {
 		params.Config.Logger = params.Logger
 	}
 
-	return NewFailoverClient(params.Config)
+	client, err := NewFailoverClient(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject observer if provided
+	if params.Observer != nil {
+		client.observer = params.Observer
+	}
+
+	return client, nil
 }

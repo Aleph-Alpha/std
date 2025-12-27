@@ -18,7 +18,8 @@
 //   - Simple publishing interface with error handling
 //   - Consumer interface with automatic acknowledgment handling
 //   - Dead letter queue support
-//   - Integration with the Logger package for structured logging
+//   - Optional observability hooks for metrics and tracing
+//   - Optional context-aware logging for lifecycle events
 //   - Distributed tracing support via message headers
 //
 // # Direct Usage (Without FX)
@@ -33,14 +34,18 @@
 //
 //	// Create a new RabbitMQ client (returns concrete *RabbitClient)
 //	client, err := rabbit.NewClient(rabbit.Config{
-//		Connection: rabbit.ConnectionConfig{
-//			URI: "amqp://guest:guest@localhost:5672/",
+//		Connection: rabbit.Connection{
+//			Host: "localhost",
+//			Port: 5672,
+//			User: "guest",
+//			Password: "guest",
 //		},
-//		Channel: rabbit.ChannelConfig{
+//		Channel: rabbit.Channel{
 //			ExchangeName: "events",
 //			ExchangeType: "topic",
 //			RoutingKey:   "user.created",
 //			QueueName:    "user-events",
+//			IsConsumer:   true,
 //		},
 //	})
 //	if err != nil {
@@ -48,44 +53,179 @@
 //	}
 //	defer client.GracefulShutdown()
 //
+//	// Optionally attach logger and observer
+//	client = client.
+//		WithLogger(myLogger).
+//		WithObserver(myObserver)
+//
 //	// Publish a message
 //	ctx := context.Background()
 //	message := []byte(`{"id": "123", "name": "John"}`)
 //	err = client.Publish(ctx, message)
 //
-// # FX Module Integration
+// # Builder Pattern for Optional Dependencies
 //
-// For production applications using Uber's fx, use the FXModule which provides
-// both the concrete type and interface:
+// The client supports optional dependencies via builder methods:
 //
 //	import (
 //		"github.com/Aleph-Alpha/std/v1/rabbit"
 //		"github.com/Aleph-Alpha/std/v1/logger"
+//		"github.com/Aleph-Alpha/std/v1/observability"
+//	)
+//
+//	// Create client with optional logger and observer
+//	client, err := rabbit.NewClient(config)
+//	if err != nil {
+//		return err
+//	}
+//
+//	// Attach optional dependencies using builder pattern
+//	client = client.
+//		WithLogger(loggerInstance).    // Optional: for lifecycle logging
+//		WithObserver(observerInstance)  // Optional: for metrics/tracing
+//
+//	defer client.GracefulShutdown()
+//
+// # FX Module Integration
+//
+// For production applications using Uber's fx, use the FXModule which provides
+// both the concrete type and interface, with automatic injection of optional
+// dependencies:
+//
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/rabbit"
+//		"github.com/Aleph-Alpha/std/v1/logger"
+//		"github.com/Aleph-Alpha/std/v1/observability"
 //		"go.uber.org/fx"
 //	)
 //
 //	app := fx.New(
-//		logger.FXModule, // Optional: provides std logger
-//		rabbit.FXModule, // Provides *RabbitClient and rabbit.Client interface
-//		fx.Provide(func() rabbit.Config {
-//			return rabbit.Config{
-//				Connection: rabbit.ConnectionConfig{
-//					URI: "amqp://guest:guest@localhost:5672/",
-//				},
-//				Channel: rabbit.ChannelConfig{
-//					ExchangeName: "events",
-//					QueueName:    "user-events",
-//				},
-//			}
-//		}),
+//		logger.FXModule,      // Optional: provides std logger
+//		rabbit.FXModule,      // Provides *RabbitClient and rabbit.Client interface
+//		fx.Provide(
+//			func() rabbit.Config {
+//				return rabbit.Config{
+//					Connection: rabbit.Connection{
+//						Host: "localhost",
+//						Port: 5672,
+//						User: "guest",
+//						Password: "guest",
+//					},
+//					Channel: rabbit.Channel{
+//						ExchangeName: "events",
+//						QueueName:    "user-events",
+//						IsConsumer:   true,
+//					},
+//				}
+//			},
+//			// Optional: provide observer for metrics
+//			func(metrics *prometheus.Metrics) observability.Observer {
+//				return NewObserverAdapter(metrics)
+//			},
+//		),
 //		fx.Invoke(func(client *rabbit.RabbitClient) {
-//			// Use concrete type directly
+//			// Logger and Observer are automatically injected if provided
 //			ctx := context.Background()
 //			client.Publish(ctx, []byte("message"))
 //		}),
-//		// ... other modules
 //	)
 //	app.Run()
+//
+// The FX module automatically injects optional dependencies:
+//   - Logger (rabbit.Logger): If provided via fx, automatically attached
+//   - Observer (observability.Observer): If provided via fx, automatically attached
+//
+// # Observability
+//
+// The package supports optional observability hooks for tracking operations.
+// When an observer is attached, it will be notified of all publish and consume
+// operations with detailed context.
+//
+// Observer Integration:
+//
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/observability"
+//		"github.com/Aleph-Alpha/std/v1/rabbit"
+//	)
+//
+//	// Create an observer (typically wraps your metrics system)
+//	type MetricsObserver struct {
+//		metrics *prometheus.Metrics
+//	}
+//
+//	func (o *MetricsObserver) ObserveOperation(ctx observability.OperationContext) {
+//		// Track metrics based on the operation
+//		switch ctx.Operation {
+//		case "produce":
+//			o.metrics.MessageQueue.MessagesPublished.
+//				WithLabelValues(ctx.Resource, ctx.SubResource, errorStatus(ctx.Error)).
+//				Inc()
+//		case "consume":
+//			o.metrics.MessageQueue.MessagesConsumed.
+//				WithLabelValues(ctx.Resource, errorStatus(ctx.Error)).
+//				Inc()
+//		}
+//	}
+//
+//	// Attach observer to client
+//	client = client.WithObserver(&MetricsObserver{metrics: promMetrics})
+//
+// Observer receives the following context for each operation:
+//
+// Publish operations:
+//   - Component: "rabbit"
+//   - Operation: "produce"
+//   - Resource: exchange name
+//   - SubResource: routing key
+//   - Duration: time taken to publish
+//   - Error: any error that occurred
+//   - Size: message size in bytes
+//
+// Consume operations:
+//   - Component: "rabbit"
+//   - Operation: "consume"
+//   - Resource: queue name
+//   - SubResource: ""
+//   - Duration: time taken to receive message
+//   - Error: nil (errors in message processing are not tracked here)
+//   - Size: message size in bytes
+//
+// # Logging
+//
+// The package supports optional context-aware logging for lifecycle events
+// and background operations. When a logger is attached, it will be used for:
+//   - Connection lifecycle events (connected, disconnected, reconnecting)
+//   - Consumer lifecycle events (started, stopped, shutdown)
+//   - Background reconnection attempts and errors
+//
+// Logger Integration:
+//
+//	import (
+//		"github.com/Aleph-Alpha/std/v1/rabbit"
+//		"github.com/Aleph-Alpha/std/v1/logger"
+//	)
+//
+//	// Create logger instance
+//	loggerClient, err := logger.NewLogger(loggerConfig)
+//	if err != nil {
+//		return err
+//	}
+//
+//	// Attach logger to client
+//	client = client.WithLogger(loggerClient)
+//
+// The logger interface matches std/v1/logger for seamless integration:
+//
+//	type Logger interface {
+//		InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+//		WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+//		ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+//	}
+//
+// Logging is designed to be minimal and non-intrusive:
+//   - Errors that are returned to the caller are NOT logged (avoid duplicate logs)
+//   - Only background operations and lifecycle events are logged
+//   - Context is propagated for distributed tracing
 //
 // # Type Aliases in Consumer Code
 //

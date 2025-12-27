@@ -96,15 +96,18 @@ type MigrationHistoryRecord struct {
 // This method is useful during development or for simple applications,
 // but for production systems, explicit migrations are recommended.
 func (p *Postgres) AutoMigrate(models ...interface{}) error {
+	start := time.Now()
 	db := p.DB()
 
 	// Ensure the migration history table exists
 	if err := p.ensureMigrationHistoryTable(db); err != nil {
+		p.observeOperation("auto_migrate", "", "", time.Since(start), err, 0, nil)
 		return fmt.Errorf("failed to ensure migration history table: %w", err)
 	}
 
 	// Execute GORM's AutoMigrate
 	if err := db.AutoMigrate(models...); err != nil {
+		p.observeOperation("auto_migrate", "", "", time.Since(start), err, 0, nil)
 		return err
 	}
 
@@ -120,9 +123,11 @@ func (p *Postgres) AutoMigrate(models ...interface{}) error {
 	}
 
 	if err := db.Create(&record).Error; err != nil {
+		p.observeOperation("auto_migrate", "", "", time.Since(start), err, 0, nil)
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
 
+	p.observeOperation("auto_migrate", "", "", time.Since(start), nil, 0, nil)
 	return nil
 }
 
@@ -148,16 +153,19 @@ func (p *Postgres) ensureMigrationHistoryTable(dbConn interface{ AutoMigrate(...
 //
 //	err := db.MigrateUp(ctx, "./migrations")
 func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
+	startAll := time.Now()
 	db := p.DB().WithContext(ctx)
 
 	// Ensure the migration history table exists
 	if err := p.ensureMigrationHistoryTable(db); err != nil {
+		p.observeOperation("migrate_up", "", migrationsDir, time.Since(startAll), err, 0, nil)
 		return fmt.Errorf("failed to ensure migration history table: %w", err)
 	}
 
 	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
 	if err := db.Find(&applied).Error; err != nil {
+		p.observeOperation("migrate_up", "", migrationsDir, time.Since(startAll), err, 0, nil)
 		return fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
@@ -170,6 +178,7 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 	// Get available migrations from the migrations directory
 	migrations, err := p.loadMigrations(migrationsDir, UpMigration)
 	if err != nil {
+		p.observeOperation("migrate_up", "", migrationsDir, time.Since(startAll), err, 0, nil)
 		return fmt.Errorf("failed to load migrations: %w", err)
 	}
 
@@ -190,6 +199,9 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 		// Start a transaction
 		tx := db.Begin()
 		if tx.Error != nil {
+			p.observeOperation("migrate_up", "", migration.ID, time.Since(start), tx.Error, 0, map[string]interface{}{
+				"dir": migrationsDir,
+			})
 			return fmt.Errorf("failed to start transaction: %w", tx.Error)
 		}
 
@@ -198,6 +210,9 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 			tx.Rollback()
 			status = "failed"
 			errorMsg = err.Error()
+			p.observeOperation("migrate_up", "", migration.ID, time.Since(start), err, 0, map[string]interface{}{
+				"dir": migrationsDir,
+			})
 		} else {
 			// Record the migration in the history table
 			record := MigrationHistoryRecord{
@@ -212,22 +227,33 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 
 			if err := tx.Create(&record).Error; err != nil {
 				tx.Rollback()
+				p.observeOperation("migrate_up", "", migration.ID, time.Since(start), err, 0, map[string]interface{}{
+					"dir": migrationsDir,
+				})
 				return fmt.Errorf("failed to record migration history: %w", err)
 			}
 
 			if err := tx.Commit().Error; err != nil {
+				p.observeOperation("migrate_up", "", migration.ID, time.Since(start), err, 0, map[string]interface{}{
+					"dir": migrationsDir,
+				})
 				return fmt.Errorf("failed to commit transaction: %w", err)
 			}
 
 			status = "success"
+			p.observeOperation("migrate_up", "", migration.ID, time.Since(start), nil, 1, map[string]interface{}{
+				"dir": migrationsDir,
+			})
 		}
 
 		// If migration failed, return an error
 		if status == "failed" {
+			p.observeOperation("migrate_up", "", migrationsDir, time.Since(startAll), fmt.Errorf("%s", errorMsg), 0, nil)
 			return fmt.Errorf("migration %s failed: %s", migration.ID, errorMsg)
 		}
 	}
 
+	p.observeOperation("migrate_up", "", migrationsDir, time.Since(startAll), nil, 0, nil)
 	return nil
 }
 
@@ -246,17 +272,20 @@ func (p *Postgres) MigrateUp(ctx context.Context, migrationsDir string) error {
 //
 //	err := db.MigrateDown(ctx, "./migrations")
 func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error {
+	startAll := time.Now()
 	db := p.DB().WithContext(ctx)
 
 	// Get the last applied migration
 	var lastMigration MigrationHistoryRecord
 	if err := db.Order("id DESC").First(&lastMigration).Error; err != nil {
+		p.observeOperation("migrate_down", "", migrationsDir, time.Since(startAll), err, 0, nil)
 		return fmt.Errorf("failed to get last migration: %w", err)
 	}
 
 	// Load down migration for this ID
 	downMigrations, err := p.loadMigrations(migrationsDir, DownMigration)
 	if err != nil {
+		p.observeOperation("migrate_down", "", migrationsDir, time.Since(startAll), err, 0, nil)
 		return fmt.Errorf("failed to load down migrations: %w", err)
 	}
 
@@ -269,31 +298,50 @@ func (p *Postgres) MigrateDown(ctx context.Context, migrationsDir string) error 
 	}
 
 	if downMigration == nil {
+		err := fmt.Errorf("no down migration found for %s", lastMigration.ID)
+		p.observeOperation("migrate_down", "", migrationsDir, time.Since(startAll), err, 0, map[string]interface{}{
+			"migration_id": lastMigration.ID,
+		})
 		return fmt.Errorf("no down migration found for %s", lastMigration.ID)
 	}
 
 	// Start a transaction
 	tx := db.Begin()
 	if tx.Error != nil {
+		p.observeOperation("migrate_down", "", lastMigration.ID, time.Since(startAll), tx.Error, 0, map[string]interface{}{
+			"dir": migrationsDir,
+		})
 		return fmt.Errorf("failed to start transaction: %w", tx.Error)
 	}
 
 	// Execute the down migration
 	if err := tx.Exec(downMigration.SQL).Error; err != nil {
 		tx.Rollback()
+		p.observeOperation("migrate_down", "", lastMigration.ID, time.Since(startAll), err, 0, map[string]interface{}{
+			"dir": migrationsDir,
+		})
 		return fmt.Errorf("failed to apply down migration: %w", err)
 	}
 
 	// Remove the migration from history
 	if err := tx.Delete(&MigrationHistoryRecord{}, "id = ?", lastMigration.ID).Error; err != nil {
 		tx.Rollback()
+		p.observeOperation("migrate_down", "", lastMigration.ID, time.Since(startAll), err, 0, map[string]interface{}{
+			"dir": migrationsDir,
+		})
 		return fmt.Errorf("failed to update migration history: %w", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		p.observeOperation("migrate_down", "", lastMigration.ID, time.Since(startAll), err, 0, map[string]interface{}{
+			"dir": migrationsDir,
+		})
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	p.observeOperation("migrate_down", "", lastMigration.ID, time.Since(startAll), nil, 1, map[string]interface{}{
+		"dir": migrationsDir,
+	})
 	return nil
 }
 
@@ -382,11 +430,13 @@ func (p *Postgres) loadMigrations(dir string, direction MigrationDirection) ([]M
 //	    }
 //	}
 func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string) ([]map[string]interface{}, error) {
+	start := time.Now()
 	db := p.DB().WithContext(ctx)
 
 	// Get a list of applied migrations
 	var applied []MigrationHistoryRecord
 	if err := db.Find(&applied).Error; err != nil {
+		p.observeOperation("migration_status", "", migrationsDir, time.Since(start), err, 0, nil)
 		return nil, fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 
@@ -399,6 +449,7 @@ func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string)
 	// Get available migrations
 	upMigrations, err := p.loadMigrations(migrationsDir, UpMigration)
 	if err != nil {
+		p.observeOperation("migration_status", "", migrationsDir, time.Since(start), err, 0, nil)
 		return nil, fmt.Errorf("failed to load migrations: %w", err)
 	}
 
@@ -427,6 +478,7 @@ func (p *Postgres) GetMigrationStatus(ctx context.Context, migrationsDir string)
 		return status[i]["id"].(string) < status[j]["id"].(string)
 	})
 
+	p.observeOperation("migration_status", "", migrationsDir, time.Since(start), nil, int64(len(status)), nil)
 	return status, nil
 }
 

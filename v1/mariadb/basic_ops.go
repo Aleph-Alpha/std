@@ -2,6 +2,7 @@ package mariadb
 
 import (
 	"context"
+	"time"
 )
 
 // Find retrieves records from the database that match the given conditions.
@@ -20,8 +21,15 @@ import (
 //	var users []User
 //	err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 func (m *MariaDB) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
-	return db.Find(dest, conditions...).Error
+	result := db.Find(dest, conditions...)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("find", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	return result.Error
 }
 
 // First retrieves the first record that matches the given conditions.
@@ -43,8 +51,15 @@ func (m *MariaDB) Find(ctx context.Context, dest interface{}, conditions ...inte
 //	    // Handle not found
 //	}
 func (m *MariaDB) First(ctx context.Context, dest interface{}, conditions ...interface{}) error {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
-	return db.First(dest, conditions...).Error
+	result := db.First(dest, conditions...)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("first", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	return result.Error
 }
 
 // Create inserts a new record into the database.
@@ -63,8 +78,15 @@ func (m *MariaDB) First(ctx context.Context, dest interface{}, conditions ...int
 //	user := User{Name: "John", Email: "john@example.com"}
 //	err := db.Create(ctx, &user)
 func (m *MariaDB) Create(ctx context.Context, value interface{}) error {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
-	return db.Create(value).Error
+	result := db.Create(value)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("create", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	return result.Error
 }
 
 // Save updates the database record if the primary key exists,
@@ -83,8 +105,15 @@ func (m *MariaDB) Create(ctx context.Context, value interface{}) error {
 //	user.Name = "Updated Name"
 //	err := db.Save(ctx, &user)
 func (m *MariaDB) Save(ctx context.Context, value interface{}) error {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
-	return db.Save(value).Error
+	result := db.Save(value)
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("save", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
+	return result.Error
 }
 
 // Update updates records that match the given model's non-zero fields or primary key.
@@ -112,9 +141,14 @@ func (m *MariaDB) Save(ctx context.Context, value interface{}) error {
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (m *MariaDB) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error) {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
 	result := db.Model(model).Updates(attrs)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("update", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
 	return result.RowsAffected, result.Error
 }
 
@@ -141,9 +175,14 @@ func (m *MariaDB) Update(ctx context.Context, model interface{}, attrs interface
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (m *MariaDB) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error) {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
 	result := db.Model(model).Update(columnName, value)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("update_column", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
 	return result.RowsAffected, result.Error
 }
 
@@ -171,9 +210,14 @@ func (m *MariaDB) UpdateColumn(ctx context.Context, model interface{}, columnNam
 //	}
 //	fmt.Printf("Updated %d rows\n", rowsAffected)
 func (m *MariaDB) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error) {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
 	result := db.Model(model).Updates(columnValues)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("update_columns", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
 	return result.RowsAffected, result.Error
 }
 
@@ -202,9 +246,14 @@ func (m *MariaDB) UpdateColumns(ctx context.Context, model interface{}, columnVa
 //	user := User{ID: 1}
 //	rowsAffected, err := db.Delete(ctx, &user)
 func (m *MariaDB) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error) {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
 	result := db.Delete(value, conditions...)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("delete", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
 	return result.RowsAffected, result.Error
 }
 
@@ -230,9 +279,16 @@ func (m *MariaDB) Delete(ctx context.Context, value interface{}, conditions ...i
 //	}
 //	fmt.Printf("Updated %d users\n", rowsAffected)
 func (m *MariaDB) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error) {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
 	result := db.Exec(sql, values...)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("exec", table, "", time.Since(start), result.Error, result.RowsAffected, map[string]interface{}{
+		"sql": sql,
+	})
 	return result.RowsAffected, result.Error
 }
 
@@ -253,11 +309,20 @@ func (m *MariaDB) Exec(ctx context.Context, sql string, values ...interface{}) (
 //	var count int64
 //	err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 func (m *MariaDB) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error {
+	start := time.Now()
 	db := m.DB().WithContext(ctx).Model(model)
+	var err error
 	if len(conditions) == 0 {
-		return db.Count(count).Error
+		err = db.Count(count).Error
+	} else {
+		err = db.Where(conditions[0], conditions[1:]...).Count(count).Error
 	}
-	return db.Where(conditions[0], conditions[1:]...).Count(count).Error
+	table := ""
+	if db != nil && db.Statement != nil {
+		table = db.Statement.Table
+	}
+	m.observeOperation("count", table, "", time.Since(start), err, *count, nil)
+	return err
 }
 
 // UpdateWhere updates records that match the specified WHERE condition.
@@ -286,8 +351,13 @@ func (m *MariaDB) Count(ctx context.Context, model interface{}, count *int64, co
 //	}
 //	fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 func (m *MariaDB) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error) {
+	start := time.Now()
 	db := m.DB().WithContext(ctx)
 	result := db.Model(model).Where(condition, args...).Updates(attrs)
-
+	table := ""
+	if result != nil && result.Statement != nil {
+		table = result.Statement.Table
+	}
+	m.observeOperation("update_where", table, "", time.Since(start), result.Error, result.RowsAffected, nil)
 	return result.RowsAffected, result.Error
 }

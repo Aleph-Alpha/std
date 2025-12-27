@@ -263,18 +263,25 @@ func (m *multipartPresignedGetImpl) IsExpired() bool {
 //	    fmt.Printf("Download link: %s\n", url)
 //	}
 func (m *MinioClient) PreSignedGet(ctx context.Context, objectKey string) (string, error) {
+	start := time.Now()
 	c := m.client.Load()
 	if c == nil {
+		m.observeOperation("presigned_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
 		return "", ErrConnectionFailed
 	}
 
 	presignedUrl, err := c.PresignedGetObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
 	if err != nil {
+		m.observeOperation("presigned_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
 		return "", err
 	}
 
+	var result string
 	if m.cfg.PresignedConfig.BaseURL != "" {
-		return urlGenerator(presignedUrl, m.cfg.PresignedConfig.BaseURL)
+		result, err = urlGenerator(presignedUrl, m.cfg.PresignedConfig.BaseURL)
+	} else {
+		result = presignedUrl.String()
 	}
-	return presignedUrl.String(), nil
+	m.observeOperation("presigned_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+	return result, err
 }

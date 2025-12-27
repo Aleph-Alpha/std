@@ -77,6 +77,40 @@
 //	    }),
 //	)
 //
+// # Observability (Observer Hook)
+//
+// Schema Registry supports optional observability through the Observer interface from the observability package.
+// This allows external systems to track schema operations without coupling the package to specific
+// metrics/tracing implementations.
+//
+// Using WithObserver (non-FX usage):
+//
+//	client, err := schema_registry.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver).WithLogger(myLogger)
+//
+// Using FX (automatic injection):
+//
+//	app := fx.New(
+//	    schema_registry.FXModule,
+//	    logger.FXModule,  // Optional: provides logger
+//	    fx.Provide(
+//	        func() schema_registry.Config { return loadConfig() },
+//	        func() observability.Observer { return myObserver },  // Optional
+//	    ),
+//	)
+//
+// The observer receives events for all schema operations:
+//   - Component: "schema_registry"
+//   - Operations: "get_schema_by_id", "get_latest_schema", "register_schema", "check_compatibility"
+//   - Resource: subject name (or "registry" for ID lookups)
+//   - SubResource: schema ID or version
+//   - Duration: operation duration
+//   - Error: any error that occurred
+//   - Metadata: operation-specific details (e.g., cache_hit, schema_type, schema_id, is_compatible)
+//
 // # Type Aliases in Consumer Code
 //
 // To simplify your code and make it registry-agnostic, use type aliases:

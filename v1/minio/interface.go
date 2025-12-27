@@ -74,14 +74,8 @@ type Client interface {
 
 	// Resource monitoring
 
-	// GetResourceStats returns comprehensive resource usage statistics.
-	GetResourceStats() ResourceStats
-
 	// GetBufferPoolStats returns buffer pool statistics.
 	GetBufferPoolStats() BufferPoolStats
-
-	// ResetResourceStats resets all resource monitoring statistics.
-	ResetResourceStats()
 
 	// CleanupResources performs cleanup of buffer pools and forces garbage collection.
 	CleanupResources()

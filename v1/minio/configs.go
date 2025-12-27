@@ -1,6 +1,9 @@
 package minio
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Constants for MinIO client configuration and behavior.
 const (
@@ -292,4 +295,17 @@ type MQTTNotification struct {
 
 	// Reconnect flag enables automatic reconnection on connection loss
 	Reconnect bool
+}
+
+// Logger is an interface that matches the std/v1/logger.Logger interface.
+// It provides context-aware structured logging with optional error and field parameters.
+type Logger interface {
+	// InfoWithContext logs an informational message with trace context.
+	InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+	// WarnWithContext logs a warning message with trace context.
+	WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+	// ErrorWithContext logs an error message with trace context.
+	ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
 }

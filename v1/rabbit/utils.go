@@ -2,7 +2,6 @@ package rabbit
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
@@ -43,10 +42,15 @@ func (rb *RabbitClient) consumeQueue(ctx context.Context, wg *sync.WaitGroup, qu
 		for {
 			select {
 			case <-rb.shutdownSignal:
-				log.Println("INFO: Stopping consumer due to shutdown signal")
+				rb.logInfo(ctx, "Stopping consumer due to shutdown signal", map[string]interface{}{
+					"queue": queueName,
+				})
 				return
 			case <-ctx.Done():
-				log.Println("INFO: Stopping consumer due to context cancellation")
+				rb.logInfo(ctx, "Stopping consumer due to context cancellation", map[string]interface{}{
+					"queue": queueName,
+					"error": ctx.Err().Error(),
+				})
 				return
 			default:
 				rb.mu.RLock()
@@ -62,7 +66,10 @@ func (rb *RabbitClient) consumeQueue(ctx context.Context, wg *sync.WaitGroup, qu
 				rb.mu.RUnlock()
 
 				if err != nil {
-					log.Printf("ERROR: Failed to establish consumer for queue %s: %v", queueName, err)
+					rb.logError(ctx, "Failed to establish consumer", map[string]interface{}{
+						"queue": queueName,
+						"error": err.Error(),
+					})
 					time.Sleep(100 * time.Millisecond)
 					continue
 				}
@@ -70,15 +77,26 @@ func (rb *RabbitClient) consumeQueue(ctx context.Context, wg *sync.WaitGroup, qu
 				for {
 					select {
 					case <-ctx.Done():
-						log.Printf("INFO: Stopping consumer due to context cancellation: %v", ctx.Err())
+						rb.logInfo(ctx, "Stopping consumer due to context cancellation", map[string]interface{}{
+							"queue": queueName,
+							"error": ctx.Err().Error(),
+						})
 						return
 					case <-rb.shutdownSignal:
-						log.Println("INFO: Stopping consumer due to shutdown signal")
+						rb.logInfo(ctx, "Stopping consumer due to shutdown signal", map[string]interface{}{
+							"queue": queueName,
+						})
 						return
 					case msg, ok := <-msgs:
 						if !ok {
 							continue outerLoop
 						}
+
+						// Observe the consume operation
+						start := time.Now()
+						msgSize := int64(len(msg.Body))
+						rb.observeOperation("consume", queueName, "", time.Since(start), nil, msgSize)
+
 						outChan <- &ConsumerMessage{
 							body:     msg.Body,
 							delivery: &msg,
@@ -205,10 +223,18 @@ func (rb *RabbitClient) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-ch
 //
 //	log.Println("Message published successfully with trace context")
 func (rb *RabbitClient) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error {
+	start := time.Now()
+	var publishErr error
+	msgSize := int64(len(msg))
+
+	defer func() {
+		rb.observeOperation("produce", rb.cfg.Channel.ExchangeName, rb.cfg.Channel.RoutingKey, time.Since(start), publishErr, msgSize)
+	}()
+
 	select {
 	case <-ctx.Done():
-		log.Printf("context error for publishing msg into rabbit: %v", ctx.Err())
-		return ctx.Err()
+		publishErr = ctx.Err()
+		return publishErr
 	default:
 		// Initialize header variable
 		var header map[string]interface{}
@@ -219,30 +245,19 @@ func (rb *RabbitClient) Publish(ctx context.Context, msg []byte, headers ...map[
 		}
 
 		rb.mu.RLock()
-		err := rb.Channel.Publish(rb.cfg.Channel.ExchangeName,
+		publishErr = rb.Channel.Publish(rb.cfg.Channel.ExchangeName,
 			rb.cfg.Channel.RoutingKey,
 			false,
 			false,
 			amqp.Publishing{
 				Headers:     header,
 				ContentType: rb.cfg.Channel.ContentType,
-				//ContentEncoding: "",
-				//DeliveryMode:    0,
-				//Priority:        0,
-				//CorrelationId:   "",
-				//ReplyTo:         "",
-				//Expiration:      "",
-				//MessageId:       "",
-				//Timestamp:       time.Time{},
-				//Type:            "",
-				//UserId:          "",
-				//AppId:           "",
-				Body: msg,
+				Body:        msg,
 			},
 		)
 		rb.mu.RUnlock()
 
-		return err
+		return publishErr
 	}
 }
 

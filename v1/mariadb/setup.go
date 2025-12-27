@@ -3,11 +3,11 @@ package mariadb
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -20,6 +20,8 @@ import (
 type MariaDB struct {
 	cfg             Config
 	client          atomic.Pointer[gorm.DB]
+	observer        observability.Observer
+	logger          Logger
 	shutdownSignal  chan struct{}
 	retryChanSignal chan error
 
@@ -41,6 +43,8 @@ func NewMariaDB(cfg Config) (*MariaDB, error) {
 
 	db := &MariaDB{
 		cfg:             cfg,
+		observer:        nil, // No observer by default
+		logger:          nil, // No logger by default
 		shutdownSignal:  make(chan struct{}),
 		retryChanSignal: make(chan error, 1),
 	}
@@ -129,8 +133,6 @@ func connectToMariaDB(mariadbConfig Config) (*gorm.DB, error) {
 	databaseInstance.SetMaxIdleConns(maxIdleConns)
 	databaseInstance.SetConnMaxLifetime(connMaxLifetime)
 
-	log.Println("INFO: Successfully connected to MariaDB/MySQL database")
-
 	return database, nil
 }
 
@@ -147,7 +149,7 @@ outerLoop:
 	for {
 		select {
 		case <-m.shutdownSignal:
-			log.Println("INFO: Stopping RetryConnection loop due to shutdown signal")
+			m.logInfo(ctx, "Stopping RetryConnection loop due to shutdown signal", nil)
 			return
 		case <-ctx.Done():
 			return
@@ -162,12 +164,14 @@ outerLoop:
 				default:
 					newConn, err := connectToMariaDB(m.cfg)
 					if err != nil {
-						log.Printf("ERROR: MariaDB reconnection failed: %v", err)
+						m.logError(ctx, "MariaDB reconnection failed", map[string]interface{}{
+							"error": err.Error(),
+						})
 						time.Sleep(time.Second)
 						continue innerLoop
 					}
 					m.client.Store(newConn)
-					log.Println("INFO: Successfully reconnected to MariaDB/MySQL database")
+					m.logInfo(ctx, "Successfully reconnected to MariaDB/MySQL database", nil)
 					continue outerLoop
 				}
 			}
@@ -193,7 +197,7 @@ func (m *MariaDB) MonitorConnection(ctx context.Context) {
 	for {
 		select {
 		case <-m.shutdownSignal:
-			log.Println("INFO: Stopping MonitorConnection loop due to shutdown signal")
+			m.logInfo(ctx, "Stopping MonitorConnection loop due to shutdown signal", nil)
 			return
 		case <-ticker.C:
 			err := m.healthCheck()
@@ -233,4 +237,68 @@ func (m *MariaDB) healthCheck() error {
 	}
 
 	return nil
+}
+
+// WithObserver attaches an observer to the MariaDB client for observability hooks.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The observer will be notified of all database operations, allowing
+// external systems to track metrics, traces, or other observability data.
+//
+// Example:
+//
+//	client, err := mariadb.NewMariaDB(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver)
+//	defer client.GracefulShutdown()
+func (m *MariaDB) WithObserver(observer observability.Observer) *MariaDB {
+	m.observer = observer
+	return m
+}
+
+// WithLogger attaches a logger to the MariaDB client for internal logging.
+// This method uses the builder pattern and returns the client for method chaining.
+//
+// The logger will be used for lifecycle events, connection monitoring, and background operations.
+//
+// Example:
+//
+//	client, err := mariadb.NewMariaDB(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithLogger(myLogger)
+//	defer client.GracefulShutdown()
+func (m *MariaDB) WithLogger(logger Logger) *MariaDB {
+	m.logger = logger
+	return m
+}
+
+// logInfo logs an informational message using the configured logger if available.
+// This is used for lifecycle and background operation logging.
+func (m *MariaDB) logInfo(ctx context.Context, msg string, fields map[string]interface{}) {
+	if m.logger != nil {
+		m.logger.InfoWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logWarn logs a warning message using the configured logger if available.
+// This is used for non-critical issues during connection monitoring.
+func (m *MariaDB) logWarn(ctx context.Context, msg string, fields map[string]interface{}) {
+	if m.logger != nil {
+		m.logger.WarnWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
+}
+
+// logError logs an error message using the configured logger if available.
+// This is only used for errors in background goroutines that can't be returned to the caller.
+func (m *MariaDB) logError(ctx context.Context, msg string, fields map[string]interface{}) {
+	if m.logger != nil {
+		m.logger.ErrorWithContext(ctx, msg, nil, fields)
+	}
+	// Silently skip if no logger configured
 }

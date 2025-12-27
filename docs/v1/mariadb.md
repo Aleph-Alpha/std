@@ -130,6 +130,45 @@ app := fx.New(
 app.Run()
 ```
 
+### Observability \\\(Observer Hook\\\)
+
+MariaDB supports optional observability through the Observer interface from the observability package. This allows external systems to track operations without coupling the MariaDB package to specific metrics/tracing implementations.
+
+Using WithObserver \(non\-FX usage\):
+
+```
+client, err := mariadb.NewMariaDB(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver).WithLogger(myLogger)
+defer client.GracefulShutdown()
+```
+
+Using FX \(automatic injection\):
+
+```
+app := fx.New(
+    mariadb.FXModule,
+    logger.FXModule,  // Optional: provides logger
+    fx.Provide(
+        func() mariadb.Config { return loadConfig() },
+        func() observability.Observer { return myObserver },  // Optional
+    ),
+)
+```
+
+The observer receives events for all database operations:
+
+- Component: "mariadb"
+- Operations: "find", "first", "create", "update", "delete", "exec", "count", "transaction", "scan", "pluck", etc.
+- Resource: table name \(or database name if table is unknown\)
+- SubResource: additional context \(e.g., migration ID\)
+- Duration: operation duration
+- Error: any error that occurred
+- Size: rows affected or count result
+- Metadata: operation\-specific details \(e.g., SQL for exec, column for pluck\)
+
 Error Handling:
 
 All methods in this package return GORM errors directly. This design provides:
@@ -212,6 +251,7 @@ Package mariadb provides MariaDB/MySQL database operations with an interface\-fi
 - [type Connection](<#Connection>)
 - [type ConnectionDetails](<#ConnectionDetails>)
 - [type ErrorCategory](<#ErrorCategory>)
+- [type Logger](<#Logger>)
 - [type MariaDB](<#MariaDB>)
   - [func NewMariaDB\(cfg Config\) \(\*MariaDB, error\)](<#NewMariaDB>)
   - [func NewMariaDBClientWithDI\(params MariaDBParams\) \(\*MariaDB, error\)](<#NewMariaDBClientWithDI>)
@@ -242,6 +282,8 @@ Package mariadb provides MariaDB/MySQL database operations with an interface\-fi
   - [func \(m \*MariaDB\) UpdateColumn\(ctx context.Context, model interface\{\}, columnName string, value interface\{\}\) \(int64, error\)](<#MariaDB.UpdateColumn>)
   - [func \(m \*MariaDB\) UpdateColumns\(ctx context.Context, model interface\{\}, columnValues map\[string\]interface\{\}\) \(int64, error\)](<#MariaDB.UpdateColumns>)
   - [func \(m \*MariaDB\) UpdateWhere\(ctx context.Context, model interface\{\}, attrs interface\{\}, condition string, args ...interface\{\}\) \(int64, error\)](<#MariaDB.UpdateWhere>)
+  - [func \(m \*MariaDB\) WithLogger\(logger Logger\) \*MariaDB](<#MariaDB.WithLogger>)
+  - [func \(m \*MariaDB\) WithObserver\(observer observability.Observer\) \*MariaDB](<#MariaDB.WithObserver>)
 - [type MariaDBLifeCycleParams](<#MariaDBLifeCycleParams>)
 - [type MariaDBParams](<#MariaDBParams>)
 - [type Migration](<#Migration>)
@@ -434,7 +476,7 @@ var FXModule = fx.Module("mariadb",
 ```
 
 <a name="RegisterMariaDBLifecycle"></a>
-## func [RegisterMariaDBLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L103>)
+## func [RegisterMariaDBLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L126>)
 
 ```go
 func RegisterMariaDBLifecycle(params MariaDBLifeCycleParams)
@@ -492,7 +534,7 @@ type Client interface {
 ```
 
 <a name="ProvideClient"></a>
-### func [ProvideClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L35>)
+### func [ProvideClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L36>)
 
 ```go
 func ProvideClient(db *MariaDB) Client
@@ -501,7 +543,7 @@ func ProvideClient(db *MariaDB) Client
 ProvideClient wraps the concrete \*MariaDB and returns it as Client interface. This enables applications to depend on the interface rather than concrete type.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L7-L13>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L10-L16>)
 
 Config represents the complete configuration for a MariaDB/MySQL database connection. It encapsulates both the basic connection parameters and detailed connection pool settings.
 
@@ -516,7 +558,7 @@ type Config struct {
 ```
 
 <a name="Connection"></a>
-## type [Connection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L17-L63>)
+## type [Connection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L20-L66>)
 
 Connection holds the basic parameters required to connect to a MariaDB/MySQL database. These parameters are used to construct the database connection DSN.
 
@@ -571,7 +613,7 @@ type Connection struct {
 ```
 
 <a name="ConnectionDetails"></a>
-## type [ConnectionDetails](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L68-L84>)
+## type [ConnectionDetails](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L71-L87>)
 
 ConnectionDetails holds configuration settings for the database connection pool. These settings help optimize performance and resource usage by controlling how database connections are created, reused, and expired.
 
@@ -622,8 +664,26 @@ const (
 )
 ```
 
+<a name="Logger"></a>
+## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/configs.go#L91-L100>)
+
+Logger is an interface that matches the std/v1/logger.Logger interface. It provides context\-aware structured logging with optional error and field parameters.
+
+```go
+type Logger interface {
+    // InfoWithContext logs an informational message with trace context.
+    InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // WarnWithContext logs a warning message with trace context.
+    WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // ErrorWithContext logs an error message with trace context.
+    ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+}
+```
+
 <a name="MariaDB"></a>
-## type [MariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L20-L28>)
+## type [MariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L20-L30>)
 
 MariaDB is a wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations for MariaDB/MySQL.
 
@@ -636,7 +696,7 @@ type MariaDB struct {
 ```
 
 <a name="NewMariaDB"></a>
-### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L36>)
+### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L38>)
 
 ```go
 func NewMariaDB(cfg Config) (*MariaDB, error)
@@ -647,17 +707,17 @@ NewMariaDB creates a new MariaDB instance with the provided configuration. It es
 Returns \*MariaDB concrete type \(following Go best practice: "accept interfaces, return structs"\).
 
 <a name="NewMariaDBClientWithDI"></a>
-### func [NewMariaDBClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L77>)
+### func [NewMariaDBClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L84>)
 
 ```go
 func NewMariaDBClientWithDI(params MariaDBParams) (*MariaDB, error)
 ```
 
-NewMariaDBClientWithDI creates a new MariaDB Client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where the Config dependency is automatically provided via the MariaDBParams struct.
+NewMariaDBClientWithDI creates a new MariaDB Client using dependency injection. This function is designed to be used with Uber's fx dependency injection framework where the Config, Logger, and Observer dependencies are automatically provided via the MariaDBParams struct.
 
 Parameters:
 
-- params: A MariaDBParams struct containing the Config instance required to initialize the MariaDB Client. This struct embeds fx.In to enable automatic injection of these dependencies.
+- params: A MariaDBParams struct containing the Config instance and optionally a Logger and Observer instances required to initialize the MariaDB Client. This struct embeds fx.In to enable automatic injection of these dependencies.
 
 Returns:
 
@@ -668,15 +728,19 @@ Example usage with fx:
 ```
 app := fx.New(
     mariadb.FXModule,
+    logger.FXModule,  // Optional: provides logger
     fx.Provide(
         func() mariadb.Config {
             return loadMariaDBConfig() // Your config loading function
+        },
+        func(metrics *prometheus.Metrics) observability.Observer {
+            return &MyObserver{metrics: metrics}  // Optional observer
         },
     ),
 )
 ```
 
-This function delegates to the standard NewMariaDB function, maintaining the same initialization logic while enabling seamless integration with dependency injection.
+This function creates the client and injects the optional logger and observer before returning.
 
 <a name="MariaDB.AutoMigrate"></a>
 ### func \(\*MariaDB\) [AutoMigrate](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/migrations.go#L98>)
@@ -696,7 +760,7 @@ Returns a GORM error if any part of the migration process fails.
 This method is useful during development or for simple applications, but for production systems, explicit migrations are recommended.
 
 <a name="MariaDB.Count"></a>
-### func \(\*MariaDB\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L255>)
+### func \(\*MariaDB\) [Count](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L311>)
 
 ```go
 func (m *MariaDB) Count(ctx context.Context, model interface{}, count *int64, conditions ...interface{}) error
@@ -721,7 +785,7 @@ err := db.Count(ctx, &User{}, &count, "age > ?", 18)
 ```
 
 <a name="MariaDB.Create"></a>
-### func \(\*MariaDB\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L65>)
+### func \(\*MariaDB\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L80>)
 
 ```go
 func (m *MariaDB) Create(ctx context.Context, value interface{}) error
@@ -781,7 +845,7 @@ DB returns the underlying GORM DB Client instance. This method provides direct a
 Use this method when you need to perform operations not covered by the wrapper methods or when you need to access specific GORM functionality. Note that direct usage bypasses some of the safety mechanisms, so use it with care.
 
 <a name="MariaDB.Delete"></a>
-### func \(\*MariaDB\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L204>)
+### func \(\*MariaDB\) [Delete](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L248>)
 
 ```go
 func (m *MariaDB) Delete(ctx context.Context, value interface{}, conditions ...interface{}) (int64, error)
@@ -816,7 +880,7 @@ rowsAffected, err := db.Delete(ctx, &user)
 ```
 
 <a name="MariaDB.Exec"></a>
-### func \(\*MariaDB\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L232>)
+### func \(\*MariaDB\) [Exec](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L281>)
 
 ```go
 func (m *MariaDB) Exec(ctx context.Context, sql string, values ...interface{}) (int64, error)
@@ -847,7 +911,7 @@ fmt.Printf("Updated %d users\n", rowsAffected)
 ```
 
 <a name="MariaDB.Find"></a>
-### func \(\*MariaDB\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L22>)
+### func \(\*MariaDB\) [Find](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L23>)
 
 ```go
 func (m *MariaDB) Find(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -871,7 +935,7 @@ err := db.Find(ctx, &users, "name LIKE ?", "%john%")
 ```
 
 <a name="MariaDB.First"></a>
-### func \(\*MariaDB\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L45>)
+### func \(\*MariaDB\) [First](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L53>)
 
 ```go
 func (m *MariaDB) First(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -934,7 +998,7 @@ if err == nil {
 ```
 
 <a name="MariaDB.GracefulShutdown"></a>
-### func \(\*MariaDB\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L146>)
+### func \(\*MariaDB\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L169>)
 
 ```go
 func (m *MariaDB) GracefulShutdown() error
@@ -1014,7 +1078,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="MariaDB.MonitorConnection"></a>
-### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L185>)
+### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L189>)
 
 ```go
 func (m *MariaDB) MonitorConnection(ctx context.Context)
@@ -1025,7 +1089,7 @@ MonitorConnection periodically checks the health of the database connection and 
 The function respects context cancellation and shutdown signals, ensuring proper resource cleanup and graceful termination when requested.
 
 <a name="MariaDB.Query"></a>
-### func \(\*MariaDB\) [Query](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L34>)
+### func \(\*MariaDB\) [Query](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/query_builder.go#L35>)
 
 ```go
 func (m *MariaDB) Query(ctx context.Context) QueryBuilder
@@ -1056,7 +1120,7 @@ if err != nil {
 ```
 
 <a name="MariaDB.RetryConnection"></a>
-### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L145>)
+### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L147>)
 
 ```go
 func (m *MariaDB) RetryConnection(ctx context.Context)
@@ -1067,7 +1131,7 @@ RetryConnection continuously attempts to reconnect to the MariaDB database when 
 It implements two nested loops: \- The outer loop waits for retry signals \- The inner loop attempts reconnection until successful
 
 <a name="MariaDB.Save"></a>
-### func \(\*MariaDB\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L85>)
+### func \(\*MariaDB\) [Save](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L107>)
 
 ```go
 func (m *MariaDB) Save(ctx context.Context, value interface{}) error
@@ -1090,7 +1154,7 @@ err := db.Save(ctx, &user)
 ```
 
 <a name="MariaDB.Transaction"></a>
-### func \(\*MariaDB\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/transactions.go#L41>)
+### func \(\*MariaDB\) [Transaction](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/transactions.go#L44>)
 
 ```go
 func (m *MariaDB) Transaction(ctx context.Context, fn func(tx Client) error) error
@@ -1125,7 +1189,7 @@ TranslateError converts GORM/database\-specific errors into standardized applica
 It maps common database errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
 <a name="MariaDB.Update"></a>
-### func \(\*MariaDB\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L114>)
+### func \(\*MariaDB\) [Update](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L143>)
 
 ```go
 func (m *MariaDB) Update(ctx context.Context, model interface{}, attrs interface{}) (int64, error)
@@ -1159,7 +1223,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="MariaDB.UpdateColumn"></a>
-### func \(\*MariaDB\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L143>)
+### func \(\*MariaDB\) [UpdateColumn](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L177>)
 
 ```go
 func (m *MariaDB) UpdateColumn(ctx context.Context, model interface{}, columnName string, value interface{}) (int64, error)
@@ -1191,7 +1255,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="MariaDB.UpdateColumns"></a>
-### func \(\*MariaDB\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L173>)
+### func \(\*MariaDB\) [UpdateColumns](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L212>)
 
 ```go
 func (m *MariaDB) UpdateColumns(ctx context.Context, model interface{}, columnValues map[string]interface{}) (int64, error)
@@ -1225,7 +1289,7 @@ fmt.Printf("Updated %d rows\n", rowsAffected)
 ```
 
 <a name="MariaDB.UpdateWhere"></a>
-### func \(\*MariaDB\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L288>)
+### func \(\*MariaDB\) [UpdateWhere](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/basic_ops.go#L353>)
 
 ```go
 func (m *MariaDB) UpdateWhere(ctx context.Context, model interface{}, attrs interface{}, condition string, args ...interface{}) (int64, error)
@@ -1260,8 +1324,52 @@ if err != nil {
 fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
+<a name="MariaDB.WithLogger"></a>
+### func \(\*MariaDB\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L274>)
+
+```go
+func (m *MariaDB) WithLogger(logger Logger) *MariaDB
+```
+
+WithLogger attaches a logger to the MariaDB client for internal logging. This method uses the builder pattern and returns the client for method chaining.
+
+The logger will be used for lifecycle events, connection monitoring, and background operations.
+
+Example:
+
+```
+client, err := mariadb.NewMariaDB(config)
+if err != nil {
+    return err
+}
+client = client.WithLogger(myLogger)
+defer client.GracefulShutdown()
+```
+
+<a name="MariaDB.WithObserver"></a>
+### func \(\*MariaDB\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L256>)
+
+```go
+func (m *MariaDB) WithObserver(observer observability.Observer) *MariaDB
+```
+
+WithObserver attaches an observer to the MariaDB client for observability hooks. This method uses the builder pattern and returns the client for method chaining.
+
+The observer will be notified of all database operations, allowing external systems to track metrics, traces, or other observability data.
+
+Example:
+
+```
+client, err := mariadb.NewMariaDB(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver)
+defer client.GracefulShutdown()
+```
+
 <a name="MariaDBLifeCycleParams"></a>
-## type [MariaDBLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L88-L93>)
+## type [MariaDBLifeCycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L111-L116>)
 
 MariaDBLifeCycleParams groups the dependencies needed for MariaDB lifecycle management. This struct combines all the components required to properly manage the lifecycle of a MariaDB Client within an fx application, including startup, monitoring, and graceful shutdown.
 
@@ -1277,7 +1385,7 @@ type MariaDBLifeCycleParams struct {
 ```
 
 <a name="MariaDBParams"></a>
-## type [MariaDBParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L45-L49>)
+## type [MariaDBParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/fx_module.go#L46-L52>)
 
 MariaDBParams groups the dependencies needed to create a MariaDB Client via dependency injection. This struct is designed to work with Uber's fx dependency injection framework and provides the necessary parameters for initializing a MariaDB database connection.
 
@@ -1287,7 +1395,9 @@ The embedded fx.In marker enables automatic injection of the struct fields from 
 type MariaDBParams struct {
     fx.In
 
-    Config Config
+    Config   Config
+    Logger   Logger                 `optional:"true"`
+    Observer observability.Observer `optional:"true"`
 }
 ```
 

@@ -82,6 +82,43 @@
 //	)
 //	app.Run()
 //
+// # Observability (Observer Hook)
+//
+// MinIO supports optional observability through the Observer interface from the observability package.
+// This allows external systems to track operations without coupling the MinIO package to specific
+// metrics/tracing implementations.
+//
+// Using WithObserver (non-FX usage):
+//
+//	client, err := minio.NewClient(config)
+//	if err != nil {
+//	    return err
+//	}
+//	client = client.WithObserver(myObserver).WithLogger(myLogger)
+//	defer client.GracefulShutdown()
+//
+// Using FX (automatic injection):
+//
+//	app := fx.New(
+//	    minio.FXModule,
+//	    logger.FXModule,  // Optional: provides logger
+//	    fx.Provide(
+//	        func() minio.Config { return loadConfig() },
+//	        func() observability.Observer { return myObserver },  // Optional
+//	    ),
+//	)
+//
+// The observer receives events for all storage operations:
+//   - Component: "minio"
+//   - Operations: "put", "get", "stream_get", "delete", "presigned_get",
+//     "presigned_put", "presigned_head"
+//   - Resource: bucket name
+//   - SubResource: object key
+//   - Duration: operation duration
+//   - Error: any error that occurred
+//   - Size: bytes transferred (for put/get operations)
+//   - Metadata: operation-specific details (e.g., chunk_size for stream_get)
+//
 // # Type Aliases in Consumer Code
 //
 // To simplify your code and make it storage-agnostic, use type aliases:

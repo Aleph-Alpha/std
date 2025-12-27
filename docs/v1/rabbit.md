@@ -26,7 +26,8 @@ Core Features:
 - Simple publishing interface with error handling
 - Consumer interface with automatic acknowledgment handling
 - Dead letter queue support
-- Integration with the Logger package for structured logging
+- Optional observability hooks for metrics and tracing
+- Optional context\-aware logging for lifecycle events
 - Distributed tracing support via message headers
 
 ### Direct Usage \\\(Without FX\\\)
@@ -42,14 +43,18 @@ import (
 
 // Create a new RabbitMQ client (returns concrete *RabbitClient)
 client, err := rabbit.NewClient(rabbit.Config{
-	Connection: rabbit.ConnectionConfig{
-		URI: "amqp://guest:guest@localhost:5672/",
+	Connection: rabbit.Connection{
+		Host: "localhost",
+		Port: 5672,
+		User: "guest",
+		Password: "guest",
 	},
-	Channel: rabbit.ChannelConfig{
+	Channel: rabbit.Channel{
 		ExchangeName: "events",
 		ExchangeType: "topic",
 		RoutingKey:   "user.created",
 		QueueName:    "user-events",
+		IsConsumer:   true,
 	},
 })
 if err != nil {
@@ -57,46 +62,190 @@ if err != nil {
 }
 defer client.GracefulShutdown()
 
+// Optionally attach logger and observer
+client = client.
+	WithLogger(myLogger).
+	WithObserver(myObserver)
+
 // Publish a message
 ctx := context.Background()
 message := []byte(`{"id": "123", "name": "John"}`)
 err = client.Publish(ctx, message)
 ```
 
-### FX Module Integration
+### Builder Pattern for Optional Dependencies
 
-For production applications using Uber's fx, use the FXModule which provides both the concrete type and interface:
+The client supports optional dependencies via builder methods:
 
 ```
 import (
 	"github.com/Aleph-Alpha/std/v1/rabbit"
 	"github.com/Aleph-Alpha/std/v1/logger"
+	"github.com/Aleph-Alpha/std/v1/observability"
+)
+
+// Create client with optional logger and observer
+client, err := rabbit.NewClient(config)
+if err != nil {
+	return err
+}
+
+// Attach optional dependencies using builder pattern
+client = client.
+	WithLogger(loggerInstance).    // Optional: for lifecycle logging
+	WithObserver(observerInstance)  // Optional: for metrics/tracing
+
+defer client.GracefulShutdown()
+```
+
+### FX Module Integration
+
+For production applications using Uber's fx, use the FXModule which provides both the concrete type and interface, with automatic injection of optional dependencies:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/rabbit"
+	"github.com/Aleph-Alpha/std/v1/logger"
+	"github.com/Aleph-Alpha/std/v1/observability"
 	"go.uber.org/fx"
 )
 
 app := fx.New(
-	logger.FXModule, // Optional: provides std logger
-	rabbit.FXModule, // Provides *RabbitClient and rabbit.Client interface
-	fx.Provide(func() rabbit.Config {
-		return rabbit.Config{
-			Connection: rabbit.ConnectionConfig{
-				URI: "amqp://guest:guest@localhost:5672/",
-			},
-			Channel: rabbit.ChannelConfig{
-				ExchangeName: "events",
-				QueueName:    "user-events",
-			},
-		}
-	}),
+	logger.FXModule,      // Optional: provides std logger
+	rabbit.FXModule,      // Provides *RabbitClient and rabbit.Client interface
+	fx.Provide(
+		func() rabbit.Config {
+			return rabbit.Config{
+				Connection: rabbit.Connection{
+					Host: "localhost",
+					Port: 5672,
+					User: "guest",
+					Password: "guest",
+				},
+				Channel: rabbit.Channel{
+					ExchangeName: "events",
+					QueueName:    "user-events",
+					IsConsumer:   true,
+				},
+			}
+		},
+		// Optional: provide observer for metrics
+		func(metrics *prometheus.Metrics) observability.Observer {
+			return NewObserverAdapter(metrics)
+		},
+	),
 	fx.Invoke(func(client *rabbit.RabbitClient) {
-		// Use concrete type directly
+		// Logger and Observer are automatically injected if provided
 		ctx := context.Background()
 		client.Publish(ctx, []byte("message"))
 	}),
-	// ... other modules
 )
 app.Run()
 ```
+
+The FX module automatically injects optional dependencies:
+
+- Logger \(rabbit.Logger\): If provided via fx, automatically attached
+- Observer \(observability.Observer\): If provided via fx, automatically attached
+
+### Observability
+
+The package supports optional observability hooks for tracking operations. When an observer is attached, it will be notified of all publish and consume operations with detailed context.
+
+Observer Integration:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/observability"
+	"github.com/Aleph-Alpha/std/v1/rabbit"
+)
+
+// Create an observer (typically wraps your metrics system)
+type MetricsObserver struct {
+	metrics *prometheus.Metrics
+}
+
+func (o *MetricsObserver) ObserveOperation(ctx observability.OperationContext) {
+	// Track metrics based on the operation
+	switch ctx.Operation {
+	case "produce":
+		o.metrics.MessageQueue.MessagesPublished.
+			WithLabelValues(ctx.Resource, ctx.SubResource, errorStatus(ctx.Error)).
+			Inc()
+	case "consume":
+		o.metrics.MessageQueue.MessagesConsumed.
+			WithLabelValues(ctx.Resource, errorStatus(ctx.Error)).
+			Inc()
+	}
+}
+
+// Attach observer to client
+client = client.WithObserver(&MetricsObserver{metrics: promMetrics})
+```
+
+Observer receives the following context for each operation:
+
+Publish operations:
+
+- Component: "rabbit"
+- Operation: "produce"
+- Resource: exchange name
+- SubResource: routing key
+- Duration: time taken to publish
+- Error: any error that occurred
+- Size: message size in bytes
+
+Consume operations:
+
+- Component: "rabbit"
+- Operation: "consume"
+- Resource: queue name
+- SubResource: ""
+- Duration: time taken to receive message
+- Error: nil \(errors in message processing are not tracked here\)
+- Size: message size in bytes
+
+### Logging
+
+The package supports optional context\-aware logging for lifecycle events and background operations. When a logger is attached, it will be used for:
+
+- Connection lifecycle events \(connected, disconnected, reconnecting\)
+- Consumer lifecycle events \(started, stopped, shutdown\)
+- Background reconnection attempts and errors
+
+Logger Integration:
+
+```
+import (
+	"github.com/Aleph-Alpha/std/v1/rabbit"
+	"github.com/Aleph-Alpha/std/v1/logger"
+)
+
+// Create logger instance
+loggerClient, err := logger.NewLogger(loggerConfig)
+if err != nil {
+	return err
+}
+
+// Attach logger to client
+client = client.WithLogger(loggerClient)
+```
+
+The logger interface matches std/v1/logger for seamless integration:
+
+```
+type Logger interface {
+	InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+	WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+	ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+}
+```
+
+Logging is designed to be minimal and non\-intrusive:
+
+- Errors that are returned to the caller are NOT logged \(avoid duplicate logs\)
+- Only background operations and lifecycle events are logged
+- Context is propagated for distributed tracing
 
 ### Type Aliases in Consumer Code
 
@@ -271,6 +420,7 @@ All methods on the Rabbit type are safe for concurrent use by multiple goroutine
   - [func \(rb \*ConsumerMessage\) NackMsg\(requeue bool\) error](<#ConsumerMessage.NackMsg>)
 - [type DeadLetter](<#DeadLetter>)
 - [type ErrorCategory](<#ErrorCategory>)
+- [type Logger](<#Logger>)
 - [type Message](<#Message>)
 - [type RabbitClient](<#RabbitClient>)
   - [func NewClient\(config Config\) \(\*RabbitClient, error\)](<#NewClient>)
@@ -291,6 +441,8 @@ All methods on the Rabbit type are safe for concurrent use by multiple goroutine
   - [func \(rb \*RabbitClient\) Publish\(ctx context.Context, msg \[\]byte, headers ...map\[string\]interface\{\}\) error](<#RabbitClient.Publish>)
   - [func \(rb \*RabbitClient\) RetryConnection\(cfg Config\)](<#RabbitClient.RetryConnection>)
   - [func \(r \*RabbitClient\) TranslateError\(err error\) error](<#RabbitClient.TranslateError>)
+  - [func \(rb \*RabbitClient\) WithLogger\(logger Logger\) \*RabbitClient](<#RabbitClient.WithLogger>)
+  - [func \(rb \*RabbitClient\) WithObserver\(observer observability.Observer\) \*RabbitClient](<#RabbitClient.WithObserver>)
 - [type RabbitLifecycleParams](<#RabbitLifecycleParams>)
 - [type RabbitParams](<#RabbitParams>)
 
@@ -535,7 +687,7 @@ var FXModule = fx.Module("rabbit",
 ```
 
 <a name="RegisterRabbitLifecycle"></a>
-## func [RegisterRabbitLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L106>)
+## func [RegisterRabbitLifecycle](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L125>)
 
 ```go
 func RegisterRabbitLifecycle(params RabbitLifecycleParams)
@@ -558,7 +710,7 @@ The function:
 This ensures that the RabbitMQ client remains available throughout the application's lifetime and is properly cleaned up during shutdown.
 
 <a name="Channel"></a>
-## type [Channel](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L60-L92>)
+## type [Channel](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L62-L94>)
 
 Channel contains configuration for AMQP channels, exchanges, queues, and bindings. These settings determine how messages are routed and processed.
 
@@ -633,7 +785,7 @@ type Client interface {
 ```
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L6-L16>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L8-L18>)
 
 Config defines the top\-level configuration structure for the RabbitMQ client. It contains all the necessary configuration sections for establishing connections, setting up channels, and configuring dead\-letter behavior.
 
@@ -652,7 +804,7 @@ type Config struct {
 ```
 
 <a name="Connection"></a>
-## type [Connection](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L20-L56>)
+## type [Connection](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L22-L58>)
 
 Connection contains the configuration parameters needed to establish a connection to a RabbitMQ server, including authentication and TLS settings.
 
@@ -697,7 +849,7 @@ type Connection struct {
 ```
 
 <a name="ConsumerMessage"></a>
-## type [ConsumerMessage](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L14-L17>)
+## type [ConsumerMessage](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L13-L16>)
 
 ConsumerMessage implements the Message interface and wraps an AMQP delivery. This struct provides access to the message content and acknowledgment methods.
 
@@ -708,7 +860,7 @@ type ConsumerMessage struct {
 ```
 
 <a name="ConsumerMessage.AckMsg"></a>
-### func \(\*ConsumerMessage\) [AckMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L253>)
+### func \(\*ConsumerMessage\) [AckMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L268>)
 
 ```go
 func (rb *ConsumerMessage) AckMsg() error
@@ -719,7 +871,7 @@ AckMsg acknowledges the message, informing RabbitMQ that the message has been su
 Returns an error if the acknowledgment fails.
 
 <a name="ConsumerMessage.Body"></a>
-### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L270>)
+### func \(\*ConsumerMessage\) [Body](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L285>)
 
 ```go
 func (rb *ConsumerMessage) Body() []byte
@@ -728,7 +880,7 @@ func (rb *ConsumerMessage) Body() []byte
 Body returns the message payload as a byte slice.
 
 <a name="ConsumerMessage.Header"></a>
-### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L308>)
+### func \(\*ConsumerMessage\) [Header](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L323>)
 
 ```go
 func (rb *ConsumerMessage) Header() map[string]interface{}
@@ -771,7 +923,7 @@ for msg := range msgChan {
 ```
 
 <a name="ConsumerMessage.NackMsg"></a>
-### func \(\*ConsumerMessage\) [NackMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L265>)
+### func \(\*ConsumerMessage\) [NackMsg](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L280>)
 
 ```go
 func (rb *ConsumerMessage) NackMsg(requeue bool) error
@@ -786,7 +938,7 @@ Parameters:
 Returns an error if the rejection fails.
 
 <a name="DeadLetter"></a>
-## type [DeadLetter](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L97-L112>)
+## type [DeadLetter](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L99-L114>)
 
 DeadLetter contains configuration for dead\-letter handling. Dead\-letter exchanges receive messages that are rejected, expire, or exceed queue limits. This provides a mechanism for handling failed message processing.
 
@@ -840,6 +992,24 @@ const (
 )
 ```
 
+<a name="Logger"></a>
+## type [Logger](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/configs.go#L118-L127>)
+
+Logger is an interface that matches the std/v1/logger.Logger interface. It provides context\-aware structured logging with optional error and field parameters.
+
+```go
+type Logger interface {
+    // InfoWithContext logs an informational message with trace context.
+    InfoWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // WarnWithContext logs a warning message with trace context.
+    WarnWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+
+    // ErrorWithContext logs an error message with trace context.
+    ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+}
+```
+
 <a name="Message"></a>
 ## type [Message](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/interface.go#L48-L61>)
 
@@ -863,7 +1033,7 @@ type Message interface {
 ```
 
 <a name="RabbitClient"></a>
-## type [RabbitClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L18-L36>)
+## type [RabbitClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L19-L43>)
 
 Rabbit represents a client for interacting with RabbitMQ. It manages connections, channels, and provides methods for publishing and consuming messages with automatic reconnection capabilities.
 
@@ -878,7 +1048,7 @@ type RabbitClient struct {
 ```
 
 <a name="NewClient"></a>
-### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L56>)
+### func [NewClient](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L63>)
 
 ```go
 func NewClient(config Config) (*RabbitClient, error)
@@ -904,7 +1074,7 @@ defer client.GracefulShutdown()
 ```
 
 <a name="NewClientWithDI"></a>
-### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L75>)
+### func [NewClientWithDI](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L78>)
 
 ```go
 func NewClientWithDI(params RabbitParams) (*RabbitClient, error)
@@ -914,7 +1084,7 @@ NewClientWithDI creates a new RabbitMQ client using dependency injection. This f
 
 Parameters:
 
-- params: A RabbitParams struct that contains the Config and Logger instances required to initialize the RabbitMQ client. This struct embeds fx.In to enable automatic injection of these dependencies.
+- params: A RabbitParams struct that contains the Config instance and optionally a Logger and Observer instances required to initialize the RabbitMQ client. This struct embeds fx.In to enable automatic injection of these dependencies.
 
 Returns:
 
@@ -925,21 +1095,22 @@ Example usage with fx:
 ```
 app := fx.New(
     rabbit.FXModule,
+    logger.FXModule,  // Optional: provides logger
     fx.Provide(
         func() rabbit.Config {
             return loadRabbitConfig() // Your config loading function
         },
-        func() rabbit.Logger {
-            return initLogger() // Your logger initialization
+        func(metrics *prometheus.Metrics) observability.Observer {
+            return &MyObserver{metrics: metrics}  // Optional observer
         },
     ),
 )
 ```
 
-Under the hood, this function simply delegates to the standard NewClient function, making it easier to integrate with dependency injection frameworks while maintaining the same initialization logic.
+Under the hood, this function creates the client and injects the optional logger and observer before returning.
 
 <a name="RabbitClient.Consume"></a>
-### func \(\*RabbitClient\) [Consume](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L119>)
+### func \(\*RabbitClient\) [Consume](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L137>)
 
 ```go
 func (rb *RabbitClient) Consume(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -974,7 +1145,7 @@ for msg := range msgChan {
 ```
 
 <a name="RabbitClient.ConsumeDLQ"></a>
-### func \(\*RabbitClient\) [ConsumeDLQ](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L148>)
+### func \(\*RabbitClient\) [ConsumeDLQ](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L166>)
 
 ```go
 func (rb *RabbitClient) ConsumeDLQ(ctx context.Context, wg *sync.WaitGroup) <-chan Message
@@ -1007,7 +1178,7 @@ for msg := range dlqChan {
 ```
 
 <a name="RabbitClient.GetChannel"></a>
-### func \(\*RabbitClient\) [GetChannel](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L167>)
+### func \(\*RabbitClient\) [GetChannel](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L190>)
 
 ```go
 func (rb *RabbitClient) GetChannel() *amqp.Channel
@@ -1025,7 +1196,7 @@ func (r *RabbitClient) GetErrorCategory(err error) ErrorCategory
 GetErrorCategory returns the category of the given error
 
 <a name="RabbitClient.GracefulShutdown"></a>
-### func \(\*RabbitClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L142>)
+### func \(\*RabbitClient\) [GracefulShutdown](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L161>)
 
 ```go
 func (rb *RabbitClient) GracefulShutdown()
@@ -1110,7 +1281,7 @@ func (r *RabbitClient) IsTemporaryError(err error) bool
 IsTemporaryError returns true if the error is temporary
 
 <a name="RabbitClient.Publish"></a>
-### func \(\*RabbitClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L207>)
+### func \(\*RabbitClient\) [Publish](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/utils.go#L225>)
 
 ```go
 func (rb *RabbitClient) Publish(ctx context.Context, msg []byte, headers ...map[string]interface{}) error
@@ -1176,7 +1347,7 @@ log.Println("Message published successfully with trace context")
 ```
 
 <a name="RabbitClient.RetryConnection"></a>
-### func \(\*RabbitClient\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L232>)
+### func \(\*RabbitClient\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L230>)
 
 ```go
 func (rb *RabbitClient) RetryConnection(cfg Config)
@@ -1209,8 +1380,56 @@ TranslateError converts AMQP/RabbitMQ\-specific errors into standardized applica
 
 It maps common RabbitMQ errors to the standardized error types defined above. If an error doesn't match any known type, it's returned unchanged.
 
+<a name="RabbitClient.WithLogger"></a>
+### func \(\*RabbitClient\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L391>)
+
+```go
+func (rb *RabbitClient) WithLogger(logger Logger) *RabbitClient
+```
+
+WithLogger attaches a logger to the RabbitMQ client for internal logging. This method uses the builder pattern and returns the client for method chaining.
+
+The logger will be used for lifecycle events, background worker logs, and cleanup errors. This is particularly useful for debugging and monitoring reconnection behavior.
+
+This is useful for non\-FX usage where you want to enable logging after creating the client. When using FX, the logger is automatically injected via NewClientWithDI.
+
+Example:
+
+```
+client, err := rabbit.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithLogger(myLogger)
+defer client.GracefulShutdown()
+```
+
+<a name="RabbitClient.WithObserver"></a>
+### func \(\*RabbitClient\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/setup.go#L369>)
+
+```go
+func (rb *RabbitClient) WithObserver(observer observability.Observer) *RabbitClient
+```
+
+WithObserver attaches an observer to the RabbitMQ client for observability hooks. This method uses the builder pattern and returns the client for method chaining.
+
+The observer will be notified of all publish and consume operations, allowing external systems to track metrics, traces, or other observability data.
+
+This is useful for non\-FX usage where you want to attach an observer after creating the client. When using FX, the observer is automatically injected via NewClientWithDI.
+
+Example:
+
+```
+client, err := rabbit.NewClient(config)
+if err != nil {
+    return err
+}
+client = client.WithObserver(myObserver)
+defer client.GracefulShutdown()
+```
+
 <a name="RabbitLifecycleParams"></a>
-## type [RabbitLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L80-L86>)
+## type [RabbitLifecycleParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L99-L105>)
 
 RabbitLifecycleParams groups the dependencies needed for RabbitMQ lifecycle management
 
@@ -1225,7 +1444,7 @@ type RabbitLifecycleParams struct {
 ```
 
 <a name="RabbitParams"></a>
-## type [RabbitParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L40-L44>)
+## type [RabbitParams](<https://github.com/Aleph-Alpha/std/blob/main/v1/rabbit/fx_module.go#L40-L46>)
 
 RabbitParams groups the dependencies needed to create a Rabbit client
 
@@ -1233,7 +1452,9 @@ RabbitParams groups the dependencies needed to create a Rabbit client
 type RabbitParams struct {
     fx.In
 
-    Config Config
+    Config   Config
+    Logger   Logger                 `optional:"true"`
+    Observer observability.Observer `optional:"true"`
 }
 ```
 
