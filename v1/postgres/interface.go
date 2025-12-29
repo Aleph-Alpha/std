@@ -46,6 +46,18 @@ type Client interface {
 	// Use this when you need direct access to GORM's functionality
 	DB() *gorm.DB
 
+	// Error translation / classification.
+	//
+	// std deliberately returns raw GORM/driver errors from CRUD/query methods.
+	// Use TranslateError to normalize errors to std's exported sentinels (ErrRecordNotFound,
+	// ErrDuplicateKey, ...), especially when working with the Client interface (e.g. inside
+	// Transaction callbacks).
+	TranslateError(err error) error
+	GetErrorCategory(err error) ErrorCategory
+	IsRetryable(err error) bool
+	IsTemporary(err error) bool
+	IsCritical(err error) bool
+
 	// Lifecycle management
 	GracefulShutdown() error
 }
