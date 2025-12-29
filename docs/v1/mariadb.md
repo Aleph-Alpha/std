@@ -239,7 +239,11 @@ Thread Safety:
 
 All methods on the MariaDB interface are safe for concurrent use by multiple goroutines. The connection pointer is read via an atomic load and can be swapped atomically during reconnection.
 
-Package mariadb provides MariaDB/MySQL database operations with an interface\-first design. The interfaces defined here \(Client, QueryBuilder\) provide a consistent API that can be implemented by different database packages.
+Package mariadb provides MariaDB/MySQL database operations with an interface\-first design.
+
+This package implements the shared database.Client interface defined in v1/database. For database\-agnostic code, depend on database.Client instead of mariadb.Client.
+
+The mariadb.MariaDB type implements both mariadb.Client \(deprecated\) and database.Client.
 
 ## Index
 
@@ -487,18 +491,13 @@ RegisterMariaDBLifecycle registers lifecycle hooks for the MariaDB database comp
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
 
 <a name="Client"></a>
-## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L22-L51>)
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L21-L62>)
 
-Client is the main database client interface that provides CRUD operations, query building, and transaction management.
+Client is the MariaDB\-specific client interface.
 
-This interface allows applications to:
+DEPRECATED: Use database.Client instead for database\-agnostic code.
 
-- Switch between different databases without code changes
-- Write database\-agnostic business logic
-- Mock database operations easily for testing
-- Depend on abstractions rather than concrete implementations
-
-The MariaDB type implements this interface.
+This interface is kept for backward compatibility. The MariaDB type implements both this interface and database.Client.
 
 ```go
 type Client interface {
@@ -527,6 +526,18 @@ type Client interface {
     // Raw GORM access for advanced use cases
     // Use this when you need direct access to GORM's functionality
     DB() *gorm.DB
+
+    // Error translation / classification.
+    //
+    // std deliberately returns raw GORM/driver errors from CRUD/query methods.
+    // Use TranslateError to normalize errors to std's exported sentinels (ErrRecordNotFound,
+    // ErrDuplicateKey, ...), especially when working with the Client interface (e.g. inside
+    // Transaction callbacks).
+    TranslateError(err error) error
+    GetErrorCategory(err error) ErrorCategory
+    IsRetryable(err error) bool
+    IsTemporary(err error) bool
+    IsCritical(err error) bool
 
     // Lifecycle management
     GracefulShutdown() error
@@ -683,9 +694,11 @@ type Logger interface {
 ```
 
 <a name="MariaDB"></a>
-## type [MariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L20-L30>)
+## type [MariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L22-L32>)
 
 MariaDB is a wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations for MariaDB/MySQL.
+
+Implements both mariadb.Client \(deprecated\) and database.Client interfaces.
 
 Concurrency: the active \`\*gorm.DB\` pointer is stored in an atomic pointer and can be swapped during reconnection without blocking readers.
 
@@ -696,7 +709,7 @@ type MariaDB struct {
 ```
 
 <a name="NewMariaDB"></a>
-### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L38>)
+### func [NewMariaDB](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L40>)
 
 ```go
 func NewMariaDB(cfg Config) (*MariaDB, error)
@@ -1078,7 +1091,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="MariaDB.MonitorConnection"></a>
-### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L189>)
+### func \(\*MariaDB\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L191>)
 
 ```go
 func (m *MariaDB) MonitorConnection(ctx context.Context)
@@ -1120,7 +1133,7 @@ if err != nil {
 ```
 
 <a name="MariaDB.RetryConnection"></a>
-### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L147>)
+### func \(\*MariaDB\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L149>)
 
 ```go
 func (m *MariaDB) RetryConnection(ctx context.Context)
@@ -1325,7 +1338,7 @@ fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="MariaDB.WithLogger"></a>
-### func \(\*MariaDB\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L274>)
+### func \(\*MariaDB\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L276>)
 
 ```go
 func (m *MariaDB) WithLogger(logger Logger) *MariaDB
@@ -1347,7 +1360,7 @@ defer client.GracefulShutdown()
 ```
 
 <a name="MariaDB.WithObserver"></a>
-### func \(\*MariaDB\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L256>)
+### func \(\*MariaDB\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/setup.go#L258>)
 
 ```go
 func (m *MariaDB) WithObserver(observer observability.Observer) *MariaDB
@@ -1504,9 +1517,13 @@ const (
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L65-L120>)
+## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L79-L134>)
 
-QueryBuilder provides a fluent interface for building complex database queries. All chainable methods return the QueryBuilder interface, allowing method chaining. Terminal operations \(like Find, First, Create\) execute the query and return results.
+QueryBuilder provides a fluent interface for building complex database queries.
+
+DEPRECATED: Use database.QueryBuilder instead for database\-agnostic code.
+
+This interface is kept for backward compatibility. The mariadbQueryBuilder type implements both this interface and database.QueryBuilder.
 
 Example:
 
