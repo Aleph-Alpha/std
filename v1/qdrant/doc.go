@@ -266,6 +266,38 @@
 //	    vectordb.NewFilterSet(vectordb.Must(vectordb.NewNumericRange("size", vectordb.NumericRange{Lt: &lt}))),
 //	}
 //
+// Nested Filters (Complex Boolean Logic):
+//
+// For complex expressions like (A OR B) AND (C OR D), use NestedFilterCondition:
+//
+//	// Filter: (status = "active" OR status = "pending") AND (region = "US" OR region = "EU")
+//	filters := []*vectordb.FilterSet{
+//	    vectordb.NewFilterSet(
+//	        vectordb.Must(
+//	            &vectordb.NestedFilterCondition{
+//	                Filter: &vectordb.FilterSet{
+//	                    Should: &vectordb.ConditionSet{
+//	                        Conditions: []vectordb.FilterCondition{
+//	                            vectordb.NewMatch("status", "active"),
+//	                            vectordb.NewMatch("status", "pending"),
+//	                        },
+//	                    },
+//	                },
+//	            },
+//	            &vectordb.NestedFilterCondition{
+//	                Filter: &vectordb.FilterSet{
+//	                    Should: &vectordb.ConditionSet{
+//	                        Conditions: []vectordb.FilterCondition{
+//	                            vectordb.NewMatch("region", "US"),
+//	                            vectordb.NewMatch("region", "EU"),
+//	                        },
+//	                    },
+//	                },
+//	            },
+//	        ),
+//	    ),
+//	}
+//
 // # Configuration
 //
 // Qdrant can be configured via environment variables or YAML:

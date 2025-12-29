@@ -104,6 +104,8 @@ func convertVectorDBCondition(c vectordb.FilterCondition) []*qdrant.Condition {
 		return convertVectorDBIsNullCondition(cond)
 	case *vectordb.IsEmptyCondition:
 		return convertVectorDBIsEmptyCondition(cond)
+	case *vectordb.NestedFilterCondition:
+		return convertVectorDBNestedFilterCondition(cond)
 	default:
 		return nil
 	}
@@ -236,6 +238,19 @@ func convertVectorDBIsNullCondition(c *vectordb.IsNullCondition) []*qdrant.Condi
 func convertVectorDBIsEmptyCondition(c *vectordb.IsEmptyCondition) []*qdrant.Condition {
 	key := resolveVectorDBFieldKey(c.Field, c.FieldType)
 	return []*qdrant.Condition{qdrant.NewIsEmpty(key)}
+}
+
+func convertVectorDBNestedFilterCondition(c *vectordb.NestedFilterCondition) []*qdrant.Condition {
+	if c.Filter == nil {
+		return nil
+	}
+	nested := convertVectorDBFilterSet(c.Filter)
+	if nested == nil {
+		return nil
+	}
+	return []*qdrant.Condition{{
+		ConditionOneOf: &qdrant.Condition_Filter{Filter: nested},
+	}}
 }
 
 // resolveVectorDBFieldKey returns the full field path based on FieldType.

@@ -487,7 +487,7 @@ RegisterMariaDBLifecycle registers lifecycle hooks for the MariaDB database comp
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
 
 <a name="Client"></a>
-## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L22-L51>)
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L22-L63>)
 
 Client is the main database client interface that provides CRUD operations, query building, and transaction management.
 
@@ -527,6 +527,18 @@ type Client interface {
     // Raw GORM access for advanced use cases
     // Use this when you need direct access to GORM's functionality
     DB() *gorm.DB
+
+    // Error translation / classification.
+    //
+    // std deliberately returns raw GORM/driver errors from CRUD/query methods.
+    // Use TranslateError to normalize errors to std's exported sentinels (ErrRecordNotFound,
+    // ErrDuplicateKey, ...), especially when working with the Client interface (e.g. inside
+    // Transaction callbacks).
+    TranslateError(err error) error
+    GetErrorCategory(err error) ErrorCategory
+    IsRetryable(err error) bool
+    IsTemporary(err error) bool
+    IsCritical(err error) bool
 
     // Lifecycle management
     GracefulShutdown() error
@@ -1504,7 +1516,7 @@ const (
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L65-L120>)
+## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L77-L132>)
 
 QueryBuilder provides a fluent interface for building complex database queries. All chainable methods return the QueryBuilder interface, allowing method chaining. Terminal operations \(like Find, First, Create\) execute the query and return results.
 
