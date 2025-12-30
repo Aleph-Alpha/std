@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/Aleph-Alpha/std/compare/v1.0.1...v1.1.0) (2025-12-30)
+
+
+### Features
+
+* **vectordb:** add NestedFilterCondition for complex boolean filter logic ([#51](https://github.com/Aleph-Alpha/std/issues/51)) ([2ec510c](https://github.com/Aleph-Alpha/std/commit/2ec510c73044c4238550aeb35eb1cb306f367824))
+
 ## [1.0.1](https://github.com/Aleph-Alpha/std/compare/v1.0.0...v1.0.1) (2025-12-30)
 
 
