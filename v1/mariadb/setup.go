@@ -15,6 +15,8 @@ import (
 // MariaDB is a wrapper around gorm.DB that provides connection monitoring,
 // automatic reconnection, and standardized database operations for MariaDB/MySQL.
 //
+// Implements both mariadb.Client (deprecated) and database.Client interfaces.
+//
 // Concurrency: the active `*gorm.DB` pointer is stored in an atomic pointer and can be
 // swapped during reconnection without blocking readers.
 type MariaDB struct {

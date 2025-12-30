@@ -76,6 +76,7 @@ Generated on Mon Dec 29 15:26:22 CET 2025
 - [tracer](docs/v1/tracer.md)
 - [metrics](docs/v1/metrics.md)
 - [schema_registry](docs/v1/schema_registry.md)
+- [database](docs/v1/database.md)
 - [logger](docs/v1/logger.md)
 - [mariadb](docs/v1/mariadb.md)
 - [redis](docs/v1/redis.md)

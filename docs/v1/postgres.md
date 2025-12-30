@@ -105,7 +105,11 @@ app := fx.New(
 )
 ```
 
-Package postgres provides PostgreSQL database operations with an interface\-first design. The interfaces defined here \(Client, QueryBuilder\) can be implemented by other database packages \(like mariadb\) to provide a consistent API across different databases.
+Package postgres provides PostgreSQL database operations with an interface\-first design.
+
+This package implements the shared database.Client interface defined in v1/database. For database\-agnostic code, depend on database.Client instead of postgres.Client.
+
+The postgres.Postgres type implements both postgres.Client \(deprecated\) and database.Client.
 
 ## Index
 
@@ -355,16 +359,11 @@ The function uses a WaitGroup to ensure that all goroutines complete before the 
 <a name="Client"></a>
 ## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/interface.go#L22-L63>)
 
-Client is the main database client interface that provides CRUD operations, query building, and transaction management.
+Client is the PostgreSQL\-specific client interface.
 
-This interface allows applications to:
+DEPRECATED: Use database.Client instead for database\-agnostic code.
 
-- Switch between PostgreSQL and MariaDB without code changes
-- Write database\-agnostic business logic
-- Mock database operations easily for testing
-- Depend on abstractions rather than concrete implementations
-
-The Postgres type implements this interface.
+This interface is kept for backward compatibility. The Postgres type implements both this interface and database.Client.
 
 ```go
 type Client interface {
@@ -636,9 +635,11 @@ const (
 ```
 
 <a name="Postgres"></a>
-## type [Postgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L20-L30>)
+## type [Postgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L22-L32>)
 
 Postgres is a wrapper around gorm.DB that provides connection monitoring, automatic reconnection, and standardized database operations.
+
+Implements both postgres.Client \(deprecated\) and database.Client interfaces.
 
 Concurrency: the active \`\*gorm.DB\` pointer is stored in an atomic pointer and can be swapped during reconnection without blocking readers.
 
@@ -649,7 +650,7 @@ type Postgres struct {
 ```
 
 <a name="NewPostgres"></a>
-### func [NewPostgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L38>)
+### func [NewPostgres](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L40>)
 
 ```go
 func NewPostgres(cfg Config) (*Postgres, error)
@@ -1031,7 +1032,7 @@ err := db.MigrateUp(ctx, "./migrations")
 ```
 
 <a name="Postgres.MonitorConnection"></a>
-### func \(\*Postgres\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L155>)
+### func \(\*Postgres\) [MonitorConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L157>)
 
 ```go
 func (p *Postgres) MonitorConnection(ctx context.Context)
@@ -1073,7 +1074,7 @@ if err != nil {
 ```
 
 <a name="Postgres.RetryConnection"></a>
-### func \(\*Postgres\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L113>)
+### func \(\*Postgres\) [RetryConnection](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L115>)
 
 ```go
 func (p *Postgres) RetryConnection(ctx context.Context)
@@ -1280,7 +1281,7 @@ fmt.Printf("Updated %d users to inactive status\n", rowsAffected)
 ```
 
 <a name="Postgres.WithLogger"></a>
-### func \(\*Postgres\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L241>)
+### func \(\*Postgres\) [WithLogger](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L243>)
 
 ```go
 func (p *Postgres) WithLogger(logger Logger) *Postgres
@@ -1302,7 +1303,7 @@ defer client.GracefulShutdown()
 ```
 
 <a name="Postgres.WithObserver"></a>
-### func \(\*Postgres\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L223>)
+### func \(\*Postgres\) [WithObserver](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/setup.go#L225>)
 
 ```go
 func (p *Postgres) WithObserver(observer observability.Observer) *Postgres
@@ -1359,7 +1360,7 @@ type PostgresParams struct {
 <a name="QueryBuilder"></a>
 ## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/interface.go#L77-L132>)
 
-QueryBuilder provides a fluent interface for building complex database queries. All chainable methods return the QueryBuilder interface, allowing method chaining. Terminal operations \(like Find, First, Create\) execute the query and return results.
+This interface is kept for backward compatibility. The postgresQueryBuilder type implements both this interface and database.QueryBuilder.
 
 Example:
 
