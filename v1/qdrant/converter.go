@@ -242,11 +242,11 @@ func convertVectorDBIsEmptyCondition(c *vectordb.IsEmptyCondition) []*qdrant.Con
 
 func convertVectorDBNestedFilterCondition(c *vectordb.NestedFilterCondition) []*qdrant.Condition {
 	if c.Filter == nil {
-		return nil
+		return []*qdrant.Condition{}
 	}
 	nested := convertVectorDBFilterSet(c.Filter)
 	if nested == nil {
-		return nil
+		return []*qdrant.Condition{}
 	}
 	return []*qdrant.Condition{{
 		ConditionOneOf: &qdrant.Condition_Filter{Filter: nested},
