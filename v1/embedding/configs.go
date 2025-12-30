@@ -13,7 +13,6 @@ import (
 type Config struct {
 	// Inference endpoint and auth
 	Endpoint     string // Base URL of the Aleph Alpha inference API
-	ServiceToken string // PHARIA internal service token
 	HTTPTimeoutS int    // HTTP timeout seconds (default 30)
 }
 
@@ -29,7 +28,6 @@ func NewConfig() *Config {
 	return &Config{
 		// Default should point to Aleph Alpha inference API
 		Endpoint:     os.Getenv("EMBEDDING_ENDPOINT"),
-		ServiceToken: os.Getenv("EMBEDDING_SERVICE_TOKEN"),
 		HTTPTimeoutS: timeout,
 	}
 }
@@ -38,9 +36,6 @@ func NewConfig() *Config {
 func (c *Config) Validate() error {
 	if c.Endpoint == "" {
 		return fmt.Errorf("embedding: missing EMBEDDING_ENDPOINT")
-	}
-	if c.ServiceToken == "" {
-		return fmt.Errorf("embedding: missing EMBEDDING_SERVICE_TOKEN")
 	}
 	return nil
 }

@@ -9,37 +9,35 @@ import (
 )
 
 type InferenceProvider struct {
-	baseURL      string
-	serviceToken string
-	httpClient   *http.Client
+	baseURL    string
+	httpClient *http.Client
 }
 
 func newInferenceProvider(cfg *Config) (*InferenceProvider, error) {
 	if cfg.Endpoint == "" {
 		return nil, fmt.Errorf("inference: missing EMBEDDING_ENDPOINT")
 	}
-	if cfg.ServiceToken == "" {
-		return nil, fmt.Errorf("inference: missing EMBEDDING_SERVICE_TOKEN")
-	}
 
 	// Remove trailing slash if user added it.
 	base := strings.TrimRight(cfg.Endpoint, "/")
 
 	return &InferenceProvider{
-		baseURL:      base,
-		serviceToken: cfg.ServiceToken,
-		httpClient:   &http.Client{Timeout: time.Duration(cfg.HTTPTimeoutS) * time.Second},
+		baseURL:    base,
+		httpClient: &http.Client{Timeout: time.Duration(cfg.HTTPTimeoutS) * time.Second},
 	}, nil
 }
 
 // Create generates embeddings for the given texts using the specified model.
 // It uses the OpenAI-compatible /v1/embeddings endpoint.
-func (p *InferenceProvider) Create(ctx context.Context, model string, texts ...string) ([][]float64, error) {
+func (p *InferenceProvider) Create(ctx context.Context, token, model string, texts ...string) ([][]float64, error) {
 	if len(texts) == 0 {
 		return nil, fmt.Errorf("inference: no texts provided")
 	}
 	if model == "" {
 		return nil, fmt.Errorf("inference: model is required")
+	}
+	if token == "" {
+		return nil, fmt.Errorf("inference: token is required")
 	}
 
 	reqBody := map[string]any{
@@ -55,7 +53,7 @@ func (p *InferenceProvider) Create(ctx context.Context, model string, texts ...s
 		} `json:"data"`
 	}
 
-	if err := p.postJSON(ctx, url, reqBody, &parsed); err != nil {
+	if err := p.postJSON(ctx, token, url, reqBody, &parsed); err != nil {
 		return nil, err
 	}
 
