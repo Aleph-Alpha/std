@@ -1,10 +1,50 @@
-// Package mariadb provides MariaDB/MySQL database operations with an interface-first design.
+// Package database provides a unified interface for SQL database operations.
 //
-// This package implements the shared database.Client interface defined in v1/database.
-// For database-agnostic code, depend on database.Client instead of mariadb.Client.
+// This package defines shared interfaces (Client, QueryBuilder) that work across
+// different SQL databases including PostgreSQL, MariaDB/MySQL, and potentially others.
 //
-// The mariadb.MariaDB type implements both mariadb.Client (deprecated) and database.Client.
-package mariadb
+// # Implementations
+//
+// The Client interface is implemented by:
+//   - postgres.Postgres (*Postgres)
+//   - mariadb.MariaDB (*MariaDB)
+//
+// # Usage
+//
+// Applications can depend on the database.Client interface for true database-agnostic code:
+//
+//	type UserRepository struct {
+//	    db database.Client
+//	}
+//
+//	func NewUserRepository(db database.Client) *UserRepository {
+//	    return &UserRepository{db: db}
+//	}
+//
+// Then select the implementation via configuration:
+//
+//	var client database.Client
+//	switch config.DBType {
+//	case "postgres":
+//	    client, err = postgres.NewClient(config.Postgres)
+//	case "mariadb":
+//	    client, err = mariadb.NewClient(config.MariaDB)
+//	}
+//
+// # Database-Specific Behavior
+//
+// While the interface is unified, some methods have database-specific behavior:
+//
+// Row-Level Locking:
+//   - PostgreSQL: Works in all contexts (even outside explicit transactions)
+//   - MariaDB: Requires InnoDB storage engine AND explicit transactions (or autocommit=0)
+//
+// Lock Modes:
+//   - ForNoKeyUpdate(), ForKeyShare(): PostgreSQL-only (no-op in MariaDB)
+//   - ForUpdate(), ForShare(): Supported by both
+//
+// See individual database package documentation for details.
+package database
 
 import (
 	"context"
@@ -12,12 +52,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// Client is the MariaDB-specific client interface.
+// Client is the main database client interface that provides CRUD operations,
+// query building, and transaction management.
 //
-// DEPRECATED: Use database.Client instead for database-agnostic code.
+// This interface allows applications to:
+//   - Switch between PostgreSQL and MariaDB without code changes
+//   - Write database-agnostic business logic
+//   - Mock database operations easily for testing
+//   - Depend on abstractions rather than concrete implementations
 //
-// This interface is kept for backward compatibility. The MariaDB type implements
-// both this interface and database.Client.
+// Implementations:
+//   - postgres.Postgres implements this interface
+//   - mariadb.MariaDB implements this interface
 type Client interface {
 	// Basic CRUD operations
 	Find(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -51,8 +97,10 @@ type Client interface {
 	// Use TranslateError to normalize errors to std's exported sentinels (ErrRecordNotFound,
 	// ErrDuplicateKey, ...), especially when working with the Client interface (e.g. inside
 	// Transaction callbacks).
+	//
+	// Note: GetErrorCategory returns implementation-specific ErrorCategory type
+	// (postgres.ErrorCategory or mariadb.ErrorCategory). Cast as needed.
 	TranslateError(err error) error
-	GetErrorCategory(err error) ErrorCategory
 	IsRetryable(err error) bool
 	IsTemporary(err error) bool
 	IsCritical(err error) bool
@@ -62,11 +110,8 @@ type Client interface {
 }
 
 // QueryBuilder provides a fluent interface for building complex database queries.
-//
-// DEPRECATED: Use database.QueryBuilder instead for database-agnostic code.
-//
-// This interface is kept for backward compatibility. The mariadbQueryBuilder type
-// implements both this interface and database.QueryBuilder.
+// All chainable methods return the QueryBuilder interface, allowing method chaining.
+// Terminal operations (like Find, First, Create) execute the query and return results.
 //
 // Example:
 //
@@ -76,6 +121,15 @@ type Client interface {
 //	    Order("created_at DESC").
 //	    Limit(10).
 //	    Find(&users)
+//
+// # Database-Specific Behavior
+//
+// Some methods have database-specific behavior or limitations:
+//
+//   - ForNoKeyUpdate(), ForKeyShare(): PostgreSQL-only (no-op in MariaDB)
+//   - Row-level locking (ForUpdate, ForShare, etc.):
+//   - PostgreSQL: Works in all contexts
+//   - MariaDB: Requires InnoDB storage engine AND explicit transactions
 type QueryBuilder interface {
 	// Query modifiers - these return QueryBuilder for chaining
 	Select(query interface{}, args ...interface{}) QueryBuilder
@@ -99,13 +153,25 @@ type QueryBuilder interface {
 	Scopes(funcs ...func(*gorm.DB) *gorm.DB) QueryBuilder
 
 	// Locking methods
+	//
+	// Note on row-level locking:
+	//   - PostgreSQL: All locking methods work in any context
+	//   - MariaDB: Row-level locks require:
+	//     * InnoDB storage engine (MyISAM/Aria use table-level locks)
+	//     * Explicit transaction (or autocommit=0)
+	//     * With autocommit=1, locks have NO EFFECT in InnoDB
+	//
+	// Always use locking within Transaction() for MariaDB:
+	//   db.Transaction(ctx, func(tx Client) error {
+	//       return tx.Query(ctx).ForUpdate().First(&user)
+	//   })
 	ForUpdate() QueryBuilder
 	ForShare() QueryBuilder
 	ForUpdateSkipLocked() QueryBuilder
 	ForShareSkipLocked() QueryBuilder
 	ForUpdateNoWait() QueryBuilder
-	ForNoKeyUpdate() QueryBuilder // PostgreSQL-specific (no-op in MariaDB)
-	ForKeyShare() QueryBuilder    // PostgreSQL-specific (no-op in MariaDB)
+	ForNoKeyUpdate() QueryBuilder // PostgreSQL-only (no-op in MariaDB)
+	ForKeyShare() QueryBuilder    // PostgreSQL-only (no-op in MariaDB)
 
 	// Conflict handling and returning
 	OnConflict(onConflict interface{}) QueryBuilder
