@@ -114,15 +114,16 @@
 //
 // The package provides DB-agnostic filter conditions:
 //
-//	| Type                  | Description                  | SQL Equivalent                    |
-//	|-----------------------|------------------------------|-----------------------------------|
-//	| MatchCondition        | Exact value match            | WHERE field = value               |
-//	| MatchAnyCondition     | Value in set                 | WHERE field IN (...)              |
-//	| MatchExceptCondition  | Value not in set             | WHERE field NOT IN (...)          |
-//	| NumericRangeCondition | Numeric range                | WHERE field >= min AND field <= max|
-//	| TimeRangeCondition    | Datetime range               | WHERE created_at BETWEEN ...      |
-//	| IsNullCondition       | Field is null                | WHERE field IS NULL               |
-//	| IsEmptyCondition      | Field is empty/null/missing  | WHERE field IS NULL OR field = '' |
+//	| Type                    | Description                  | SQL Equivalent                    |
+//	|-------------------------|------------------------------|-----------------------------------|
+//	| MatchCondition          | Exact value match            | WHERE field = value               |
+//	| MatchAnyCondition       | Value in set                 | WHERE field IN (...)              |
+//	| MatchExceptCondition    | Value not in set             | WHERE field NOT IN (...)          |
+//	| NumericRangeCondition   | Numeric range                | WHERE field >= min AND field <= max|
+//	| TimeRangeCondition      | Datetime range               | WHERE created_at BETWEEN ...      |
+//	| IsNullCondition         | Field is null                | WHERE field IS NULL               |
+//	| IsEmptyCondition        | Field is empty/null/missing  | WHERE field IS NULL OR field = '' |
+//	| NestedFilterCondition   | Nested filter group          | (A OR B) AND (C OR D)             |
 //
 // Use convenience constructors for cleaner code:
 //
