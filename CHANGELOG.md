@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/Aleph-Alpha/std/compare/v0.15.0...v1.0.0) (2025-12-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* Removed v1/database package and unified interface. This reverts the design introduced in v0.15.0, returning to v0.14.0's separate-interfaces-per-package approach.
+
+### Features
+
+* revert to separate interfaces per database package ([#47](https://github.com/Aleph-Alpha/std/issues/47)) ([8a3e111](https://github.com/Aleph-Alpha/std/commit/8a3e111e7820b73ac98c3b61ac4f9957cca8f6ce))
+
 ## [0.15.0](https://github.com/Aleph-Alpha/std/compare/v0.14.0...v0.15.0) (2025-12-30)
 
 
