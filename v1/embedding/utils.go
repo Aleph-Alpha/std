@@ -11,8 +11,7 @@ import (
 // postJSON sends an HTTP POST request to the inference API.
 // It marshals the given body as JSON, attaches required headers,
 // handles HTTP error codes, and optionally decodes the response JSON into `out`.
-func (p *InferenceProvider) postJSON(ctx context.Context, url string, body any, out any) error {
-
+func (p *InferenceProvider) postJSON(ctx context.Context, token, url string, body any, out any) error {
 	// Convert request payload into JSON bytes.
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -27,8 +26,8 @@ func (p *InferenceProvider) postJSON(ctx context.Context, url string, body any, 
 
 	// Add JSON header and service-token authentication.
 	req.Header.Set("Content-Type", "application/json")
-	if p.serviceToken != "" {
-		req.Header.Set("Authorization", "Bearer "+p.serviceToken)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	// Execute the HTTP request. Client timeout is configured in NewInferenceProvider.

@@ -30,8 +30,8 @@ func NewClient(cfg *Config) (*Client, error) {
 }
 
 // Create executes an embedding request for one or more texts.
-func (c *Client) Create(ctx context.Context, model string, texts ...string) ([][]float64, error) {
-	return c.provider.Create(ctx, model, texts...)
+func (c *Client) Create(ctx context.Context, token, model string, texts ...string) ([][]float64, error) {
+	return c.provider.Create(ctx, token, model, texts...)
 }
 
 // Close allows the client to release any internal resources used by the provider.
