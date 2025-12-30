@@ -220,3 +220,51 @@ type IsEmptyCondition struct {
 }
 
 func (c *IsEmptyCondition) IsFilterCondition() {}
+
+// ── Nested Conditions ────────────────────────────────────────────────────────
+
+// NestedFilterCondition allows a FilterSet to be used as a condition.
+// This enables complex recursive filters like (A AND B) OR (C AND D).
+//
+// Example - (A OR B) AND (C OR D):
+//
+//	filters := &FilterSet{
+//	    Must: &ConditionSet{
+//	        Conditions: []FilterCondition{
+//	            &NestedFilterCondition{
+//	                Filter: &FilterSet{
+//	                    Should: &ConditionSet{Conditions: []FilterCondition{A, B}},
+//	                },
+//	            },
+//	            &NestedFilterCondition{
+//	                Filter: &FilterSet{
+//	                    Should: &ConditionSet{Conditions: []FilterCondition{C, D}},
+//	                },
+//	            },
+//	        },
+//	    },
+//	}
+//
+// Example - (A AND B) OR (C AND D):
+//
+//	filters := &FilterSet{
+//	    Should: &ConditionSet{
+//	        Conditions: []FilterCondition{
+//	            &NestedFilterCondition{
+//	                Filter: &FilterSet{
+//	                    Must: &ConditionSet{Conditions: []FilterCondition{A, B}},
+//	                },
+//	            },
+//	            &NestedFilterCondition{
+//	                Filter: &FilterSet{
+//	                    Must: &ConditionSet{Conditions: []FilterCondition{C, D}},
+//	                },
+//	            },
+//	        },
+//	    },
+//	}
+type NestedFilterCondition struct {
+	Filter *FilterSet `json:"filter"`
+}
+
+func (c *NestedFilterCondition) IsFilterCondition() {}

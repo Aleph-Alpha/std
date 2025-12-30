@@ -131,15 +131,16 @@ pgvector/             # (planned) PostgreSQL pgvector adapter
 The package provides DB\-agnostic filter conditions:
 
 ```
-| Type                  | Description                  | SQL Equivalent                    |
-|-----------------------|------------------------------|-----------------------------------|
-| MatchCondition        | Exact value match            | WHERE field = value               |
-| MatchAnyCondition     | Value in set                 | WHERE field IN (...)              |
-| MatchExceptCondition  | Value not in set             | WHERE field NOT IN (...)          |
-| NumericRangeCondition | Numeric range                | WHERE field >= min AND field <= max|
-| TimeRangeCondition    | Datetime range               | WHERE created_at BETWEEN ...      |
-| IsNullCondition       | Field is null                | WHERE field IS NULL               |
-| IsEmptyCondition      | Field is empty/null/missing  | WHERE field IS NULL OR field = '' |
+| Type                    | Description                  | SQL Equivalent                    |
+|-------------------------|------------------------------|-----------------------------------|
+| MatchCondition          | Exact value match            | WHERE field = value               |
+| MatchAnyCondition       | Value in set                 | WHERE field IN (...)              |
+| MatchExceptCondition    | Value not in set             | WHERE field NOT IN (...)          |
+| NumericRangeCondition   | Numeric range                | WHERE field >= min AND field <= max|
+| TimeRangeCondition      | Datetime range               | WHERE created_at BETWEEN ...      |
+| IsNullCondition         | Field is null                | WHERE field IS NULL               |
+| IsEmptyCondition        | Field is empty/null/missing  | WHERE field IS NULL OR field = '' |
+| NestedFilterCondition   | Nested filter group          | (A OR B) AND (C OR D)             |
 ```
 
 Use convenience constructors for cleaner code:
@@ -190,6 +191,8 @@ vectordb.NewTimeRange("created_at", vectordb.TimeRange{AtOrAfter: &start, Before
   - [func NewMatchExcept\(field string, values ...any\) \*MatchExceptCondition](<#NewMatchExcept>)
   - [func NewUserMatchExcept\(field string, values ...any\) \*MatchExceptCondition](<#NewUserMatchExcept>)
   - [func \(c \*MatchExceptCondition\) IsFilterCondition\(\)](<#MatchExceptCondition.IsFilterCondition>)
+- [type NestedFilterCondition](<#NestedFilterCondition>)
+  - [func \(c \*NestedFilterCondition\) IsFilterCondition\(\)](<#NestedFilterCondition.IsFilterCondition>)
 - [type NumericRange](<#NumericRange>)
 - [type NumericRangeCondition](<#NumericRangeCondition>)
   - [func NewNumericRange\(field string, r NumericRange\) \*NumericRangeCondition](<#NewNumericRange>)
@@ -582,6 +585,68 @@ NewUserMatchExcept creates a NOT IN condition for user\-defined fields.
 
 ```go
 func (c *MatchExceptCondition) IsFilterCondition()
+```
+
+
+
+<a name="NestedFilterCondition"></a>
+## type [NestedFilterCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/vectordb/filters.go#L266-L268>)
+
+NestedFilterCondition allows a FilterSet to be used as a condition. This enables complex recursive filters like \(A AND B\) OR \(C AND D\).
+
+Example \- \(A OR B\) AND \(C OR D\):
+
+```
+filters := &FilterSet{
+    Must: &ConditionSet{
+        Conditions: []FilterCondition{
+            &NestedFilterCondition{
+                Filter: &FilterSet{
+                    Should: &ConditionSet{Conditions: []FilterCondition{A, B}},
+                },
+            },
+            &NestedFilterCondition{
+                Filter: &FilterSet{
+                    Should: &ConditionSet{Conditions: []FilterCondition{C, D}},
+                },
+            },
+        },
+    },
+}
+```
+
+Example \- \(A AND B\) OR \(C AND D\):
+
+```
+filters := &FilterSet{
+    Should: &ConditionSet{
+        Conditions: []FilterCondition{
+            &NestedFilterCondition{
+                Filter: &FilterSet{
+                    Must: &ConditionSet{Conditions: []FilterCondition{A, B}},
+                },
+            },
+            &NestedFilterCondition{
+                Filter: &FilterSet{
+                    Must: &ConditionSet{Conditions: []FilterCondition{C, D}},
+                },
+            },
+        },
+    },
+}
+```
+
+```go
+type NestedFilterCondition struct {
+    Filter *FilterSet `json:"filter"`
+}
+```
+
+<a name="NestedFilterCondition.IsFilterCondition"></a>
+### func \(\*NestedFilterCondition\) [IsFilterCondition](<https://github.com/Aleph-Alpha/std/blob/main/v1/vectordb/filters.go#L270>)
+
+```go
+func (c *NestedFilterCondition) IsFilterCondition()
 ```
 
 

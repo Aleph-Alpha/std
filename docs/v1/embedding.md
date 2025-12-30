@@ -103,12 +103,12 @@ client.Create(ctx, "model-name", texts...)
 - [type Client](<#Client>)
   - [func NewClient\(cfg \*Config\) \(\*Client, error\)](<#NewClient>)
   - [func \(c \*Client\) Close\(\) error](<#Client.Close>)
-  - [func \(c \*Client\) Create\(ctx context.Context, model string, texts ...string\) \(\[\]\[\]float64, error\)](<#Client.Create>)
+  - [func \(c \*Client\) Create\(ctx context.Context, token, model string, texts ...string\) \(\[\]\[\]float64, error\)](<#Client.Create>)
 - [type Config](<#Config>)
   - [func NewConfig\(\) \*Config](<#NewConfig>)
   - [func \(c \*Config\) Validate\(\) error](<#Config.Validate>)
 - [type InferenceProvider](<#InferenceProvider>)
-  - [func \(p \*InferenceProvider\) Create\(ctx context.Context, model string, texts ...string\) \(\[\]\[\]float64, error\)](<#InferenceProvider.Create>)
+  - [func \(p \*InferenceProvider\) Create\(ctx context.Context, token, model string, texts ...string\) \(\[\]\[\]float64, error\)](<#InferenceProvider.Create>)
 - [type Provider](<#Provider>)
 
 
@@ -180,13 +180,13 @@ Close allows the client to release any internal resources used by the provider. 
 ### func \(\*Client\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/client.go#L33>)
 
 ```go
-func (c *Client) Create(ctx context.Context, model string, texts ...string) ([][]float64, error)
+func (c *Client) Create(ctx context.Context, token, model string, texts ...string) ([][]float64, error)
 ```
 
 Create executes an embedding request for one or more texts.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/configs.go#L13-L18>)
+## type [Config](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/configs.go#L13-L17>)
 
 
 
@@ -194,13 +194,12 @@ Create executes an embedding request for one or more texts.
 type Config struct {
     // Inference endpoint and auth
     Endpoint     string // Base URL of the Aleph Alpha inference API
-    ServiceToken string // PHARIA internal service token
     HTTPTimeoutS int    // HTTP timeout seconds (default 30)
 }
 ```
 
 <a name="NewConfig"></a>
-### func [NewConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/configs.go#L21>)
+### func [NewConfig](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/configs.go#L20>)
 
 ```go
 func NewConfig() *Config
@@ -209,7 +208,7 @@ func NewConfig() *Config
 NewConfig reads from environment variables.
 
 <a name="Config.Validate"></a>
-### func \(\*Config\) [Validate](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/configs.go#L38>)
+### func \(\*Config\) [Validate](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/configs.go#L36>)
 
 ```go
 func (c *Config) Validate() error
@@ -218,7 +217,7 @@ func (c *Config) Validate() error
 Validate ensures required fields are present.
 
 <a name="InferenceProvider"></a>
-## type [InferenceProvider](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/inference.go#L11-L15>)
+## type [InferenceProvider](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/inference.go#L11-L14>)
 
 
 
@@ -229,10 +228,10 @@ type InferenceProvider struct {
 ```
 
 <a name="InferenceProvider.Create"></a>
-### func \(\*InferenceProvider\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/inference.go#L37>)
+### func \(\*InferenceProvider\) [Create](<https://github.com/Aleph-Alpha/std/blob/main/v1/embedding/inference.go#L32>)
 
 ```go
-func (p *InferenceProvider) Create(ctx context.Context, model string, texts ...string) ([][]float64, error)
+func (p *InferenceProvider) Create(ctx context.Context, token, model string, texts ...string) ([][]float64, error)
 ```
 
 Create generates embeddings for the given texts using the specified model. It uses the OpenAI\-compatible /v1/embeddings endpoint.
@@ -245,7 +244,7 @@ Provider contract
 ```go
 type Provider interface {
     // Create generates embeddings for the given texts using the specified model.
-    Create(ctx context.Context, model string, texts ...string) ([][]float64, error)
+    Create(ctx context.Context, token, model string, texts ...string) ([][]float64, error)
 }
 ```
 
