@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/Aleph-Alpha/std/compare/v1.0.0...v1.0.1) (2025-12-30)
+
+
+### Bug Fixes
+
+* **embedding:** pass token as a parameter to Create method ([#49](https://github.com/Aleph-Alpha/std/issues/49)) ([3669b03](https://github.com/Aleph-Alpha/std/commit/3669b037726b64604442018a182ea67b5cb646ee))
+
 ## [1.0.0](https://github.com/Aleph-Alpha/std/compare/v0.15.0...v1.0.0) (2025-12-30)
 
 
