@@ -1,9 +1,6 @@
 // Package postgres provides PostgreSQL database operations with an interface-first design.
-//
-// This package implements the shared database.Client interface defined in v1/database.
-// For database-agnostic code, depend on database.Client instead of postgres.Client.
-//
-// The postgres.Postgres type implements both postgres.Client (deprecated) and database.Client.
+// The interfaces defined here (Client, QueryBuilder) can be implemented by other database
+// packages (like mariadb) to provide a consistent API across different databases.
 package postgres
 
 import (
@@ -12,12 +9,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// Client is the PostgreSQL-specific client interface.
+// Client is the main database client interface that provides CRUD operations,
+// query building, and transaction management.
 //
-// DEPRECATED: Use database.Client instead for database-agnostic code.
+// This interface allows applications to:
+//   - Switch between PostgreSQL and MariaDB without code changes
+//   - Write database-agnostic business logic
+//   - Mock database operations easily for testing
+//   - Depend on abstractions rather than concrete implementations
 //
-// This interface is kept for backward compatibility. The Postgres type implements
-// both this interface and database.Client.
+// The Postgres type implements this interface.
 type Client interface {
 	// Basic CRUD operations
 	Find(ctx context.Context, dest interface{}, conditions ...interface{}) error
@@ -62,11 +63,8 @@ type Client interface {
 }
 
 // QueryBuilder provides a fluent interface for building complex database queries.
-//
-// DEPRECATED: Use database.QueryBuilder instead for database-agnostic code.
-//
-// This interface is kept for backward compatibility. The postgresQueryBuilder type
-// implements both this interface and database.QueryBuilder.
+// All chainable methods return the QueryBuilder interface, allowing method chaining.
+// Terminal operations (like Find, First, Create) execute the query and return results.
 //
 // Example:
 //

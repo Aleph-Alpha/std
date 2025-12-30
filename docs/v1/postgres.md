@@ -105,11 +105,7 @@ app := fx.New(
 )
 ```
 
-Package postgres provides PostgreSQL database operations with an interface\-first design.
-
-This package implements the shared database.Client interface defined in v1/database. For database\-agnostic code, depend on database.Client instead of postgres.Client.
-
-The postgres.Postgres type implements both postgres.Client \(deprecated\) and database.Client.
+Package postgres provides PostgreSQL database operations with an interface\-first design. The interfaces defined here \(Client, QueryBuilder\) can be implemented by other database packages \(like mariadb\) to provide a consistent API across different databases.
 
 ## Index
 
@@ -357,13 +353,18 @@ RegisterPostgresLifecycle registers lifecycle hooks for the Postgres database co
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
 
 <a name="Client"></a>
-## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/interface.go#L21-L62>)
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/interface.go#L22-L63>)
 
-Client is the PostgreSQL\-specific client interface.
+Client is the main database client interface that provides CRUD operations, query building, and transaction management.
 
-DEPRECATED: Use database.Client instead for database\-agnostic code.
+This interface allows applications to:
 
-This interface is kept for backward compatibility. The Postgres type implements both this interface and database.Client.
+- Switch between PostgreSQL and MariaDB without code changes
+- Write database\-agnostic business logic
+- Mock database operations easily for testing
+- Depend on abstractions rather than concrete implementations
+
+The Postgres type implements this interface.
 
 ```go
 type Client interface {
@@ -1358,13 +1359,9 @@ type PostgresParams struct {
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/interface.go#L79-L134>)
+## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/postgres/interface.go#L77-L132>)
 
-QueryBuilder provides a fluent interface for building complex database queries.
-
-DEPRECATED: Use database.QueryBuilder instead for database\-agnostic code.
-
-This interface is kept for backward compatibility. The postgresQueryBuilder type implements both this interface and database.QueryBuilder.
+QueryBuilder provides a fluent interface for building complex database queries. All chainable methods return the QueryBuilder interface, allowing method chaining. Terminal operations \(like Find, First, Create\) execute the query and return results.
 
 Example:
 

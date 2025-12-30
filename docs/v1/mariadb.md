@@ -239,11 +239,7 @@ Thread Safety:
 
 All methods on the MariaDB interface are safe for concurrent use by multiple goroutines. The connection pointer is read via an atomic load and can be swapped atomically during reconnection.
 
-Package mariadb provides MariaDB/MySQL database operations with an interface\-first design.
-
-This package implements the shared database.Client interface defined in v1/database. For database\-agnostic code, depend on database.Client instead of mariadb.Client.
-
-The mariadb.MariaDB type implements both mariadb.Client \(deprecated\) and database.Client.
+Package mariadb provides MariaDB/MySQL database operations with an interface\-first design. The interfaces defined here \(Client, QueryBuilder\) provide a consistent API that can be implemented by different database packages.
 
 ## Index
 
@@ -491,13 +487,18 @@ RegisterMariaDBLifecycle registers lifecycle hooks for the MariaDB database comp
 The function uses a WaitGroup to ensure that all goroutines complete before the application terminates.
 
 <a name="Client"></a>
-## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L21-L62>)
+## type [Client](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L22-L63>)
 
-Client is the MariaDB\-specific client interface.
+Client is the main database client interface that provides CRUD operations, query building, and transaction management.
 
-DEPRECATED: Use database.Client instead for database\-agnostic code.
+This interface allows applications to:
 
-This interface is kept for backward compatibility. The MariaDB type implements both this interface and database.Client.
+- Switch between different databases without code changes
+- Write database\-agnostic business logic
+- Mock database operations easily for testing
+- Depend on abstractions rather than concrete implementations
+
+The MariaDB type implements this interface.
 
 ```go
 type Client interface {
@@ -1517,13 +1518,9 @@ const (
 ```
 
 <a name="QueryBuilder"></a>
-## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L79-L134>)
+## type [QueryBuilder](<https://github.com/Aleph-Alpha/std/blob/main/v1/mariadb/interface.go#L77-L132>)
 
-QueryBuilder provides a fluent interface for building complex database queries.
-
-DEPRECATED: Use database.QueryBuilder instead for database\-agnostic code.
-
-This interface is kept for backward compatibility. The mariadbQueryBuilder type implements both this interface and database.QueryBuilder.
+QueryBuilder provides a fluent interface for building complex database queries. All chainable methods return the QueryBuilder interface, allowing method chaining. Terminal operations \(like Find, First, Create\) execute the query and return results.
 
 Example:
 
