@@ -15,6 +15,7 @@
 //   - Type-safe collection creation and existence checks
 //   - Support for payload metadata and optional vector retrieval
 //   - Extensible abstraction layer for alternate vector stores (e.g. pgVector)
+//   - Thread-safe concurrent search with mutex protection and context awareness
 //
 // # VectorDB Interface
 //
