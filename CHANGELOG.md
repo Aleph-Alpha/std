@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/Aleph-Alpha/std/compare/v1.1.0...v1.2.0) (2026-01-02)
+
+
+### Features
+
+* **qdrant:** document thread-safe concurrent search ([#55](https://github.com/Aleph-Alpha/std/issues/55)) ([f336e22](https://github.com/Aleph-Alpha/std/commit/f336e22e74e50cfe55b61a1659ca6bfbb26e27d2))
+
 ## [1.1.0](https://github.com/Aleph-Alpha/std/compare/v1.0.1...v1.1.0) (2025-12-30)
 
 
