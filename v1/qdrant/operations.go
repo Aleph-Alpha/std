@@ -62,6 +62,8 @@ func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest
 
 	// Use WaitGroup for partial results
 	var wg sync.WaitGroup
+	// Protects writes to results and errs slices
+	var mu sync.Mutex
 
 	// Create semaphore to limit concurrent searches
 	sem := semaphore.NewWeighted(maxConcurrentSearches)
@@ -71,15 +73,30 @@ func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
+			// Check if context is cancelled
+			if ctx.Err() != nil {
+				mu.Lock()
+				errs[i] = fmt.Errorf("request [%d]: context cancelled: %w", i, ctx.Err())
+				results[i] = []vectordb.SearchResult{}
+				mu.Unlock()
+				return
+			}
+
 			// Acquire semaphore (blocks if at max concurrency)
 			if err := sem.Acquire(ctx, 1); err != nil {
+				mu.Lock()
 				errs[i] = fmt.Errorf("request [%d]: failed to acquire semaphore: %w", i, err)
 				results[i] = []vectordb.SearchResult{}
+				mu.Unlock()
 				return
 			}
 			defer sem.Release(1)
 
 			res, err := searchInternal(ctx, a.client, searchReq)
+
+			mu.Lock()
+			defer mu.Unlock()
 			if err != nil {
 				errs[i] = fmt.Errorf("request [%d]: search failed: %w", i, err)
 				results[i] = []vectordb.SearchResult{}
