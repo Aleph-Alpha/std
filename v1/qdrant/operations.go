@@ -2,6 +2,7 @@ package qdrant
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"slices"
@@ -42,9 +43,9 @@ func NewAdapter(client *qdrant.Client) *Adapter {
 }
 
 // Search performs similarity search across one or more requests.
-func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, []error, error) {
+func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest) ([][]vectordb.SearchResult, error) {
 	if len(requests) == 0 {
-		return nil, nil, fmt.Errorf("at least one search request is required")
+		return nil, fmt.Errorf("at least one search request is required")
 	}
 
 	log.Printf("[Qdrant] Starting search batch with %d requests", len(requests))
@@ -52,7 +53,7 @@ func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest
 	// Validate all requests first
 	for i, searchReq := range requests {
 		if err := validateSearchInput(searchReq.CollectionName, searchReq.Vector, searchReq.TopK); err != nil {
-			return nil, nil, fmt.Errorf("request [%d]: %w", i, err)
+			return nil, fmt.Errorf("request [%d]: %w", i, err)
 		}
 	}
 
@@ -91,11 +92,15 @@ func (a *Adapter) Search(ctx context.Context, requests ...vectordb.SearchRequest
 
 	wg.Wait()
 
-	// Check for systemic failure (context cancelled)
+	//Combine all errors into a single error
+	var finalErr error
 	if ctx.Err() != nil {
-		return results, errs, fmt.Errorf("search batch interrupted: %w", ctx.Err())
+		finalErr = fmt.Errorf("search batch interrupted: %w", ctx.Err())
 	}
-	return results, errs, nil
+	allErrs := errors.Join(errs...)
+	finalErr = errors.Join(finalErr, allErrs)
+
+	return results, finalErr
 }
 
 // Insert adds embeddings to a collection using batch processing.
