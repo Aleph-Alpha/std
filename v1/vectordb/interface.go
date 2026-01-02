@@ -21,25 +21,20 @@ type Service interface {
 	// Each request can target a different collection with different filters.
 	// Returns:
 	//   - results: slice of result slices—one []SearchResult per request
-	//   - errs: per-request errors (errs[i] corresponds to requests[i])
-	//   - err: systemic error (context cancelled, etc.)
+	//   - err: combined error (per-request errors and systemic errors joined)
 	//
 	// Example:
-	//   results, errs, err := db.Search(ctx,
+	//   results, err := db.Search(ctx,
 	//       SearchRequest{CollectionName: "docs", Vector: vec1, TopK: 10},
 	//       SearchRequest{CollectionName: "docs", Vector: vec2, TopK: 5, Filters: filters},
 	//   )
 	//   if err != nil {
-	//       return err // systemic failure
+	//       return err
 	//   }
-	//   for i, res := range results {
-	//       if errs[i] != nil {
-	//           log.Printf("request %d failed: %v", i, errs[i])
-	//           continue
-	//       }
+	//   for _, res := range results {
 	//       // use res...
 	//   }
-	Search(ctx context.Context, requests ...SearchRequest) ([][]SearchResult, []error, error)
+	Search(ctx context.Context, requests ...SearchRequest) ([][]SearchResult, error)
 
 	// Insert adds embeddings to a collection.
 	// Uses batch processing internally for efficiency.
