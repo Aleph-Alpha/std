@@ -17,6 +17,13 @@ import (
 	"go.uber.org/fx/fxtest"
 )
 
+// Helper functions for functional options
+func WithSize(size int64) PutOption {
+	return func(opts *PutOptions) {
+		opts.Size = size
+	}
+}
+
 type minioContainerInstance struct {
 	testcontainers.Container
 	Host   string
@@ -74,13 +81,11 @@ func setupMinioContainer(ctx context.Context) (_ *minioContainerInstance, err er
 
 	cfg := Config{
 		Connection: ConnectionConfig{
-			Endpoint:             host + ":" + mappedPort.Port(),
-			AccessKeyID:          rootUser,
-			SecretAccessKey:      rootPassword,
-			UseSSL:               false,
-			BucketName:           bucket,
-			Region:               "us-east-1",
-			AccessBucketCreation: true,
+			Endpoint:        host + ":" + mappedPort.Port(),
+			AccessKeyID:     rootUser,
+			SecretAccessKey: rootPassword,
+			UseSSL:          false,
+			Region:          "us-east-1",
 		},
 		UploadConfig: UploadConfig{
 			MinPartSize: uint64(minPartSizeForUpload),
@@ -134,21 +139,27 @@ func TestMinioWithFXModule(t *testing.T) {
 
 	require.NotNil(t, client)
 
+	// Create the test bucket
+	const testBucket = "testbucket"
+	err = client.CreateBucket(ctx, testBucket)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.DeleteBucket(ctx, testBucket) })
+
 	t.Run("PutGetDelete", func(t *testing.T) {
 		key := "it/hello.txt"
 		payload := []byte("hello minio integration test")
 
-		n, err := client.Put(ctx, key, bytes.NewReader(payload), int64(len(payload)))
+		n, err := client.Put(ctx, testBucket, key, bytes.NewReader(payload), WithSize(int64(len(payload))))
 		require.NoError(t, err)
 		require.Equal(t, int64(len(payload)), n)
 
-		got, err := client.Get(ctx, key)
+		got, err := client.Get(ctx, testBucket, key)
 		require.NoError(t, err)
 		require.Equal(t, payload, got)
 
-		require.NoError(t, client.Delete(ctx, key))
+		require.NoError(t, client.Delete(ctx, testBucket, key))
 
-		_, err = client.Get(ctx, key)
+		_, err = client.Get(ctx, testBucket, key)
 		require.Error(t, err)
 	})
 
@@ -157,11 +168,11 @@ func TestMinioWithFXModule(t *testing.T) {
 		// Ensure this is above SmallFileThreshold (64 KiB in test config)
 		payload := []byte(strings.Repeat("0123456789", 25000)) // 250kB
 
-		_, err := client.Put(ctx, key, bytes.NewReader(payload), int64(len(payload)))
+		_, err := client.Put(ctx, testBucket, key, bytes.NewReader(payload), WithSize(int64(len(payload))))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Delete(ctx, key) })
+		t.Cleanup(func() { _ = client.Delete(ctx, testBucket, key) })
 
-		got, err := client.Get(ctx, key)
+		got, err := client.Get(ctx, testBucket, key)
 		require.NoError(t, err)
 		require.Equal(t, payload, got)
 	})
@@ -170,11 +181,11 @@ func TestMinioWithFXModule(t *testing.T) {
 		key := "it/stream.txt"
 		payload := []byte(strings.Repeat("abc", 1024))
 
-		_, err := client.Put(ctx, key, bytes.NewReader(payload), int64(len(payload)))
+		_, err := client.Put(ctx, testBucket, key, bytes.NewReader(payload), WithSize(int64(len(payload))))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Delete(ctx, key) })
+		t.Cleanup(func() { _ = client.Delete(ctx, testBucket, key) })
 
-		dataCh, errCh := client.StreamGet(ctx, key, 128)
+		dataCh, errCh := client.StreamGet(ctx, testBucket, key, 128)
 
 		var out []byte
 		for chunk := range dataCh {
@@ -190,12 +201,12 @@ func TestMinioWithFXModule(t *testing.T) {
 		key := "it/stream-cancel.txt"
 		payload := []byte(strings.Repeat("x", 128*1024))
 
-		_, err := client.Put(ctx, key, bytes.NewReader(payload), int64(len(payload)))
+		_, err := client.Put(ctx, testBucket, key, bytes.NewReader(payload), WithSize(int64(len(payload))))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Delete(ctx, key) })
+		t.Cleanup(func() { _ = client.Delete(ctx, testBucket, key) })
 
 		cctx, cancel := context.WithCancel(ctx)
-		dataCh, errCh := client.StreamGet(cctx, key, 1024)
+		dataCh, errCh := client.StreamGet(cctx, testBucket, key, 1024)
 
 		// Consume a little then cancel.
 		for range dataCh {
@@ -210,17 +221,17 @@ func TestMinioWithFXModule(t *testing.T) {
 	t.Run("PresignedURLs", func(t *testing.T) {
 		key := "it/presigned.txt"
 
-		putURL, err := client.PreSignedPut(ctx, key)
+		putURL, err := client.PreSignedPut(ctx, testBucket, key)
 		require.NoError(t, err)
 		_, err = url.Parse(putURL)
 		require.NoError(t, err)
 
-		getURL, err := client.PreSignedGet(ctx, key)
+		getURL, err := client.PreSignedGet(ctx, testBucket, key)
 		require.NoError(t, err)
 		_, err = url.Parse(getURL)
 		require.NoError(t, err)
 
-		headURL, err := client.PreSignedHeadObject(ctx, key)
+		headURL, err := client.PreSignedHeadObject(ctx, testBucket, key)
 		require.NoError(t, err)
 		_, err = url.Parse(headURL)
 		require.NoError(t, err)
@@ -237,7 +248,11 @@ func TestMinioWithFXModule(t *testing.T) {
 		c2, err := NewClient(cfg)
 		require.NoError(t, err)
 
-		u, err := c2.PreSignedGet(ctx, "it/override.txt")
+		// Create bucket for the new client
+		err = c2.CreateBucket(ctx, testBucket)
+		require.NoError(t, err)
+
+		u, err := c2.PreSignedGet(ctx, testBucket, "it/override.txt")
 		require.NoError(t, err)
 
 		parsed, err := url.Parse(u)
@@ -249,7 +264,7 @@ func TestMinioWithFXModule(t *testing.T) {
 		key := "it/multipart-upload.bin"
 		fileSize := int64(25 * 1024 * 1024) // 25MiB -> multiple parts
 
-		upload, err := client.GenerateMultipartUploadURLs(ctx, key, fileSize, "application/octet-stream", 15*time.Minute)
+		upload, err := client.GenerateMultipartUploadURLs(ctx, testBucket, key, fileSize, "application/octet-stream", 15*time.Minute)
 		require.NoError(t, err)
 
 		require.Equal(t, key, upload.GetObjectKey())
@@ -258,7 +273,7 @@ func TestMinioWithFXModule(t *testing.T) {
 		require.Equal(t, len(upload.GetPresignedURLs()), len(upload.GetPartNumbers()))
 
 		// Abort the multipart upload and ensure no error.
-		err = client.AbortMultipartUpload(ctx, upload.GetObjectKey(), upload.GetUploadID())
+		err = client.AbortMultipartUpload(ctx, testBucket, upload.GetObjectKey(), upload.GetUploadID())
 		require.NoError(t, err)
 	})
 
@@ -266,11 +281,11 @@ func TestMinioWithFXModule(t *testing.T) {
 		key := "it/multipart-download.bin"
 		payload := []byte(strings.Repeat("z", 12*1024*1024)) // 12MiB
 
-		_, err := client.Put(ctx, key, bytes.NewReader(payload), int64(len(payload)))
+		_, err := client.Put(ctx, testBucket, key, bytes.NewReader(payload), WithSize(int64(len(payload))))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Delete(ctx, key) })
+		t.Cleanup(func() { _ = client.Delete(ctx, testBucket, key) })
 
-		download, err := client.GenerateMultipartPresignedGetURLs(ctx, key, 5*1024*1024, 15*time.Minute)
+		download, err := client.GenerateMultipartPresignedGetURLs(ctx, testBucket, key, 5*1024*1024, 15*time.Minute)
 		require.NoError(t, err)
 
 		urls := download.GetPresignedURLs()

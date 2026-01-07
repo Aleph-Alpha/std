@@ -15,11 +15,10 @@ import (
 //
 // Parameters:
 //   - ctx: Context for controlling the upload operation
+//   - bucket: Name of the bucket to upload to
 //   - objectKey: Path and name of the object in the bucket
 //   - reader: Source of the data to upload
-//   - size: Optional parameter specifying the size of the data in bytes.
-//     If not provided or set to 0, an unknown size is assumed, which may affect
-//     upload performance as chunking decisions can't be optimized
+//   - opts: Optional functional options for configuring the upload (size, content type, etc.)
 //
 // Returns:
 //   - int64: The number of bytes uploaded
@@ -31,47 +30,72 @@ import (
 //	defer file.Close()
 //
 //	fileInfo, _ := file.Stat()
-//	size, err := minioClient.Put(ctx, "documents/document.pdf", file, fileInfo.Size())
+//	size, err := minioClient.Put(ctx, "my-bucket", "documents/document.pdf", file,
+//	    WithSize(fileInfo.Size()),
+//	    WithContentType("application/pdf"))
 //	if err == nil {
 //	    fmt.Printf("Uploaded %d bytes\n", size)
 //	}
-func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reader, size ...int64) (int64, error) {
+func (m *MinioClient) Put(ctx context.Context, bucket, objectKey string, reader io.Reader, opts ...PutOption) (int64, error) {
 	start := time.Now()
 	c := m.client.Load()
 	if c == nil {
-		m.observeOperation("put", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
+		m.observeOperation("put", bucket, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
 		return 0, ErrConnectionFailed
 	}
 
-	actualSize := unknownSize
-	// If size was provided, use it
-	if len(size) > 0 && size[0] != 0 {
-		actualSize = size[0]
+	// Apply options
+	options := &PutOptions{
+		Size: unknownSize,
+	}
+	for _, opt := range opts {
+		opt(options)
 	}
 
 	// Extract tracing information from context or generate new IDs
 	traceMetadata := extractTraceMetadataFromContext(ctx)
 
-	response, err := c.PutObject(ctx, m.cfg.Connection.BucketName, objectKey, reader, actualSize, minio.PutObjectOptions{
+	// Merge user metadata with trace metadata
+	if options.Metadata != nil {
+		for k, v := range options.Metadata {
+			traceMetadata[k] = v
+		}
+	}
+
+	putOpts := minio.PutObjectOptions{
 		PartSize:     m.cfg.UploadConfig.MinPartSize,
 		UserMetadata: traceMetadata,
-	})
+	}
 
-	m.observeOperation("put", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, response.Size, nil)
+	// Set content type if provided
+	if options.ContentType != "" {
+		putOpts.ContentType = options.ContentType
+	}
+
+	// Override part size if provided
+	if options.PartSize > 0 {
+		putOpts.PartSize = options.PartSize
+	}
+
+	response, err := c.PutObject(ctx, bucket, objectKey, reader, options.Size, putOpts)
+
+	m.observeOperation("put", bucket, objectKey, time.Since(start), err, response.Size, nil)
 	if err != nil {
 		return 0, err
 	}
 	return response.Size, nil
 }
 
-// Get retrieves an object from the bucket and returns its contents as a byte slice.
+// Get retrieves an object from the specified bucket and returns its contents as a byte slice.
 // This method is optimized for both small and large files with safety considerations
 // for buffer use. For small files, it uses direct allocation, while for larger files
 // it leverages a buffer pool to reduce memory pressure.
 //
 // Parameters:
 //   - ctx: Context for controlling the download operation
+//   - bucket: Name of the bucket to download from
 //   - objectKey: Path and name of the object in the bucket
+//   - opts: Optional functional options for configuring the download (version, range, etc.)
 //
 // Returns:
 //   - []byte: The object's contents as a byte slice
@@ -82,23 +106,34 @@ func (m *MinioClient) Put(ctx context.Context, objectKey string, reader io.Reade
 //
 // Example:
 //
-//	data, err := minioClient.Get(ctx, "documents/report.pdf")
+//	data, err := minioClient.Get(ctx, "my-bucket", "documents/report.pdf")
 //	if err == nil {
 //	    fmt.Printf("Downloaded %d bytes\n", len(data))
 //	    ioutil.WriteFile("report.pdf", data, 0644)
 //	}
-func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error) {
+func (m *MinioClient) Get(ctx context.Context, bucket, objectKey string, opts ...GetOption) ([]byte, error) {
 	start := time.Now()
 	c := m.client.Load()
 	if c == nil {
-		m.observeOperation("get", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
+		m.observeOperation("get", bucket, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
 		return nil, ErrConnectionFailed
 	}
 
+	// Apply options
+	options := &GetOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	getOpts := minio.GetObjectOptions{}
+	if options.VersionID != "" {
+		getOpts.VersionID = options.VersionID
+	}
+
 	// Get the object with a single call
-	reader, err := c.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
+	reader, err := c.GetObject(ctx, bucket, objectKey, getOpts)
 	if err != nil {
-		m.observeOperation("get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+		m.observeOperation("get", bucket, objectKey, time.Since(start), err, 0, nil)
 		return nil, fmt.Errorf("failed to get object: %w", err)
 	}
 	defer func(reader io.ReadCloser) {
@@ -113,7 +148,7 @@ func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error)
 	// Get object stats directly from the reader
 	objectInfo, err := reader.Stat()
 	if err != nil {
-		m.observeOperation("get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+		m.observeOperation("get", bucket, objectKey, time.Since(start), err, 0, nil)
 		return nil, fmt.Errorf("failed to get object stats: %w", err)
 	}
 
@@ -125,10 +160,10 @@ func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error)
 		data := make([]byte, size)
 		_, err = io.ReadFull(reader, data)
 		if err != nil {
-			m.observeOperation("get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+			m.observeOperation("get", bucket, objectKey, time.Since(start), err, 0, nil)
 			return nil, fmt.Errorf("failed to read object data: %w", err)
 		}
-		m.observeOperation("get", m.cfg.Connection.BucketName, objectKey, time.Since(start), nil, size, nil)
+		m.observeOperation("get", bucket, objectKey, time.Since(start), nil, size, nil)
 		return data, nil
 	}
 
@@ -147,7 +182,7 @@ func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error)
 	if err != nil {
 		// Return the buffer to the pool even on error
 		m.bufferPool.Put(buffer)
-		m.observeOperation("get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+		m.observeOperation("get", bucket, objectKey, time.Since(start), err, 0, nil)
 		return nil, fmt.Errorf("failed to read large object: %w", err)
 	}
 
@@ -160,12 +195,22 @@ func (m *MinioClient) Get(ctx context.Context, objectKey string) ([]byte, error)
 	m.bufferPool.Put(buffer)
 
 	// Return the independent copy
-	m.observeOperation("get", m.cfg.Connection.BucketName, objectKey, time.Since(start), nil, int64(len(result)), nil)
+	m.observeOperation("get", bucket, objectKey, time.Since(start), nil, int64(len(result)), nil)
 	return result, nil
 }
 
-// StreamGet downloads a file from MinIO and sends chunks through a channel
-func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error) {
+// StreamGet downloads a file from the specified bucket and sends chunks through a channel.
+//
+// Parameters:
+//   - ctx: Context for controlling the download operation
+//   - bucket: Name of the bucket to download from
+//   - objectKey: Path and name of the object in the bucket
+//   - chunkSize: Size of each chunk in bytes
+//
+// Returns:
+//   - <-chan []byte: Channel that receives data chunks
+//   - <-chan error: Channel that receives any error that occurred
+func (m *MinioClient) StreamGet(ctx context.Context, bucket, objectKey string, chunkSize int) (<-chan []byte, <-chan error) {
 	start := time.Now()
 	dataCh := make(chan []byte)
 	errCh := make(chan error, 1) // buffered to avoid goroutine leaks
@@ -179,16 +224,16 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 		// Get the object
 		c := m.client.Load()
 		if c == nil {
-			m.observeOperation("stream_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, map[string]interface{}{
+			m.observeOperation("stream_get", bucket, objectKey, time.Since(start), ErrConnectionFailed, 0, map[string]interface{}{
 				"chunk_size": chunkSize,
 			})
 			errCh <- ErrConnectionFailed
 			return
 		}
 
-		reader, err := c.GetObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.GetObjectOptions{})
+		reader, err := c.GetObject(ctx, bucket, objectKey, minio.GetObjectOptions{})
 		if err != nil {
-			m.observeOperation("stream_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, map[string]interface{}{
+			m.observeOperation("stream_get", bucket, objectKey, time.Since(start), err, 0, map[string]interface{}{
 				"chunk_size": chunkSize,
 			})
 			errCh <- fmt.Errorf("failed to get object: %w", err)
@@ -208,7 +253,7 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 			// Check if context is done
 			select {
 			case <-ctx.Done():
-				m.observeOperation("stream_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), ctx.Err(), totalBytes, map[string]interface{}{
+				m.observeOperation("stream_get", bucket, objectKey, time.Since(start), ctx.Err(), totalBytes, map[string]interface{}{
 					"chunk_size": chunkSize,
 				})
 				errCh <- ctx.Err()
@@ -232,7 +277,7 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 				case dataCh <- chunk:
 					// Chunk sent successfully
 				case <-ctx.Done():
-					m.observeOperation("stream_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), ctx.Err(), totalBytes, map[string]interface{}{
+					m.observeOperation("stream_get", bucket, objectKey, time.Since(start), ctx.Err(), totalBytes, map[string]interface{}{
 						"chunk_size": chunkSize,
 					})
 					errCh <- ctx.Err()
@@ -244,12 +289,12 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 			if err != nil {
 				if err == io.EOF {
 					// Normal end of a file, not an error
-					m.observeOperation("stream_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), nil, totalBytes, map[string]interface{}{
+					m.observeOperation("stream_get", bucket, objectKey, time.Since(start), nil, totalBytes, map[string]interface{}{
 						"chunk_size": chunkSize,
 					})
 					return
 				}
-				m.observeOperation("stream_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, totalBytes, map[string]interface{}{
+				m.observeOperation("stream_get", bucket, objectKey, time.Since(start), err, totalBytes, map[string]interface{}{
 					"chunk_size": chunkSize,
 				})
 				errCh <- fmt.Errorf("error reading object: %w", err)
@@ -266,24 +311,25 @@ func (m *MinioClient) StreamGet(ctx context.Context, objectKey string, chunkSize
 //
 // Parameters:
 //   - ctx: Context for controlling the delete operation
+//   - bucket: Name of the bucket containing the object
 //   - objectKey: Path and name of the object to delete
 //
 // Returns an error if the deletion fails.
 //
 // Example:
 //
-//	err := minioClient.Delete(ctx, "documents/old-report.pdf")
+//	err := minioClient.Delete(ctx, "my-bucket", "documents/old-report.pdf")
 //	if err == nil {
 //	    fmt.Println("Object successfully deleted")
 //	}
-func (m *MinioClient) Delete(ctx context.Context, objectKey string) error {
+func (m *MinioClient) Delete(ctx context.Context, bucket, objectKey string) error {
 	start := time.Now()
 	c := m.client.Load()
 	if c == nil {
-		m.observeOperation("delete", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
+		m.observeOperation("delete", bucket, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
 		return ErrConnectionFailed
 	}
-	err := c.RemoveObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.RemoveObjectOptions{})
-	m.observeOperation("delete", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+	err := c.RemoveObject(ctx, bucket, objectKey, minio.RemoveObjectOptions{})
+	m.observeOperation("delete", bucket, objectKey, time.Since(start), err, 0, nil)
 	return err
 }

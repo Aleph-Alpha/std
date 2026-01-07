@@ -17,6 +17,9 @@ import (
 // 2. Client interface for dependency injection
 // 3. Lifecycle management for graceful startup and shutdown
 //
+// Note: The client supports multi-bucket operations. Bucket names must be
+// specified explicitly in each operation call.
+//
 // Usage:
 //
 //	app := fx.New(

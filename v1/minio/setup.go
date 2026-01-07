@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -306,9 +307,6 @@ func NewClient(config Config) (*MinioClient, error) {
 	if err := minioClient.validateConnection(timeoutCtx); err != nil {
 		return nil, err
 	}
-	if err := minioClient.ensureBucketExists(timeoutCtx); err != nil {
-		return nil, err
-	}
 
 	return minioClient, nil
 }
@@ -420,15 +418,11 @@ outerLoop:
 						continue reconnectLoop
 					}
 
-					// Validate the new connection before swapping pointers.
-					// Prefer bucket-scoped validation to avoid requiring ListAllMyBuckets permissions.
-					if bucket := m.cfg.Connection.BucketName; bucket != "" {
-						_, err = newClient.BucketExists(ctxReconnect, bucket)
-					} else {
-						_, err = newClient.ListBuckets(ctxReconnect)
-					}
+					// Validate the new connection before swapping pointers
+					_, err = newClient.ListBuckets(ctxReconnect)
+					cancel() // Cancel the context to free resources
+
 					if err != nil {
-						cancel() // Cancel the context to free resources
 						m.logError(ctx, "MinIO connection validation failed", map[string]interface{}{
 							"error": err.Error(),
 						})
@@ -437,29 +431,11 @@ outerLoop:
 					}
 
 					// Update the client references
-					oldClient := m.client.Load()
-					oldCoreClient := m.coreClient.Load()
 					m.client.Store(newClient)
 					m.coreClient.Store(newCoreClient)
 
-					// Verify bucket existence after reconnection
-					err = m.ensureBucketExists(ctxReconnect)
-					cancel() // Cancel the context to free resources
-
-					if err != nil {
-						// Revert to the previous clients to avoid leaving the instance in a broken state.
-						m.client.Store(oldClient)
-						m.coreClient.Store(oldCoreClient)
-						m.logError(ctx, "Failed to verify bucket after reconnection", map[string]interface{}{
-							"error": err.Error(),
-						})
-						time.Sleep(time.Second)
-						continue reconnectLoop
-					}
-
 					m.logInfo(ctx, "Successfully reconnected to MinIO", map[string]interface{}{
 						"endpoint": m.cfg.Connection.Endpoint,
-						"bucket":   m.cfg.Connection.BucketName,
 					})
 					continue outerLoop
 				}
@@ -535,67 +511,180 @@ func (m *MinioClient) validateConnection(ctx context.Context) error {
 		return ErrConnectionFailed
 	}
 
-	// Prefer bucket-scoped validation so credentials do not need ListAllMyBuckets.
-	if bucket := m.cfg.Connection.BucketName; bucket != "" {
-		_, err := c.BucketExists(ctx, bucket)
-		return err
-	}
-
-	// Fallback: if no bucket configured, validate by listing buckets.
+	// Validate by listing buckets - this doesn't require a specific bucket
 	_, err := c.ListBuckets(ctx)
 	return err
 }
 
-// ensureBucketExists checks if the configured bucket exists and creates it if necessary.
-// This method is called during initialization and reconnection to ensure the
-// bucket specified in the configuration is available.
+// CreateBucket creates a new bucket with the specified name and options.
+// This method creates a bucket if it doesn't already exist.
 //
 // Parameters:
-//   - ctx: Context for controlling the bucket check/creation operation
+//   - ctx: Context for controlling the operation
+//   - bucket: Name of the bucket to create
+//   - opts: Optional functional options for bucket configuration
 //
-// Returns nil if the bucket exists or was successfully created, or an error if the operation fails.
-func (m *MinioClient) ensureBucketExists(ctx context.Context) error {
-	bucketName := m.cfg.Connection.BucketName
-	if bucketName == "" {
-		return fmt.Errorf("bucket name is empty")
+// Returns an error if the bucket creation fails.
+//
+// Example:
+//
+//	err := minioClient.CreateBucket(ctx, "my-bucket")
+//	if err != nil {
+//	    log.Fatalf("Failed to create bucket: %v", err)
+//	}
+func (m *MinioClient) CreateBucket(ctx context.Context, bucket string, opts ...BucketOption) error {
+	if bucket == "" {
+		return fmt.Errorf("bucket name cannot be empty")
 	}
-
-	// Set a timeout for the operation
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
 
 	c := m.client.Load()
 	if c == nil {
 		return ErrConnectionFailed
 	}
 
-	exists, err := c.BucketExists(ctx, bucketName)
+	// Apply options
+	options := &BucketOptions{
+		Region: m.cfg.Connection.Region,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// Check if bucket already exists
+	exists, err := c.BucketExists(ctx, bucket)
 	if err != nil {
-		return fmt.Errorf("failed to check if bucket exists, bucket: %v, err: %w", bucketName, err)
+		return fmt.Errorf("failed to check if bucket exists: %w", err)
 	}
 
-	if !exists && m.cfg.Connection.AccessBucketCreation {
-		m.logInfo(ctx, "Bucket does not exist, creating it", map[string]interface{}{
-			"bucket": bucketName,
-			"region": m.cfg.Connection.Region,
-		})
-
-		err = c.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{
-			Region: m.cfg.Connection.Region,
-		})
-
-		if err != nil {
-			return err
-		}
-
-		m.logInfo(ctx, "Successfully created bucket", map[string]interface{}{
-			"bucket": bucketName,
-		})
-	} else if !exists {
-		return fmt.Errorf("bucket does not exist, please create it manually")
+	if exists {
+		return nil // Bucket already exists, nothing to do
 	}
+
+	// Create the bucket
+	err = c.MakeBucket(ctx, bucket, minio.MakeBucketOptions{
+		Region:        options.Region,
+		ObjectLocking: options.ObjectLocking,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create bucket: %w", err)
+	}
+
+	m.logInfo(ctx, "Successfully created bucket", map[string]interface{}{
+		"bucket": bucket,
+		"region": options.Region,
+	})
 
 	return nil
+}
+
+// DeleteBucket removes an empty bucket.
+// The bucket must be empty before it can be deleted.
+//
+// Parameters:
+//   - ctx: Context for controlling the operation
+//   - bucket: Name of the bucket to delete
+//
+// Returns an error if the deletion fails.
+//
+// Example:
+//
+//	err := minioClient.DeleteBucket(ctx, "old-bucket")
+//	if err != nil {
+//	    log.Fatalf("Failed to delete bucket: %v", err)
+//	}
+func (m *MinioClient) DeleteBucket(ctx context.Context, bucket string) error {
+	if bucket == "" {
+		return fmt.Errorf("bucket name cannot be empty")
+	}
+
+	c := m.client.Load()
+	if c == nil {
+		return ErrConnectionFailed
+	}
+
+	err := c.RemoveBucket(ctx, bucket)
+	if err != nil {
+		return fmt.Errorf("failed to delete bucket: %w", err)
+	}
+
+	m.logInfo(ctx, "Successfully deleted bucket", map[string]interface{}{
+		"bucket": bucket,
+	})
+
+	return nil
+}
+
+// BucketExists checks if a bucket exists.
+//
+// Parameters:
+//   - ctx: Context for controlling the operation
+//   - bucket: Name of the bucket to check
+//
+// Returns true if the bucket exists, false otherwise, or an error if the check fails.
+//
+// Example:
+//
+//	exists, err := minioClient.BucketExists(ctx, "my-bucket")
+//	if err != nil {
+//	    log.Fatalf("Failed to check bucket: %v", err)
+//	}
+//	if !exists {
+//	    fmt.Println("Bucket does not exist")
+//	}
+func (m *MinioClient) BucketExists(ctx context.Context, bucket string) (bool, error) {
+	if bucket == "" {
+		return false, fmt.Errorf("bucket name cannot be empty")
+	}
+
+	c := m.client.Load()
+	if c == nil {
+		return false, ErrConnectionFailed
+	}
+
+	exists, err := c.BucketExists(ctx, bucket)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if bucket exists: %w", err)
+	}
+
+	return exists, nil
+}
+
+// ListBuckets returns a list of all buckets.
+//
+// Parameters:
+//   - ctx: Context for controlling the operation
+//
+// Returns a list of bucket information or an error if the listing fails.
+//
+// Example:
+//
+//	buckets, err := minioClient.ListBuckets(ctx)
+//	if err != nil {
+//	    log.Fatalf("Failed to list buckets: %v", err)
+//	}
+//	for _, bucket := range buckets {
+//	    fmt.Printf("Bucket: %s, Created: %v\n", bucket.Name, bucket.CreationDate)
+//	}
+func (m *MinioClient) ListBuckets(ctx context.Context) ([]BucketInfo, error) {
+	c := m.client.Load()
+	if c == nil {
+		return nil, ErrConnectionFailed
+	}
+
+	buckets, err := c.ListBuckets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list buckets: %w", err)
+	}
+
+	result := make([]BucketInfo, len(buckets))
+	for i, bucket := range buckets {
+		result[i] = BucketInfo{
+			Name:         bucket.Name,
+			CreationDate: bucket.CreationDate,
+		}
+	}
+
+	return result, nil
 }
 
 // GetBufferPoolStats returns buffer pool statistics for monitoring buffer efficiency.
@@ -701,4 +790,114 @@ func (m *MinioClient) logError(ctx context.Context, msg string, fields map[strin
 		m.logger.ErrorWithContext(ctx, msg, nil, fields)
 	}
 	// Silently skip if no logger configured
+}
+
+// BucketClient is a convenience wrapper that automatically applies a bucket name to all operations.
+// This is useful when performing multiple operations on the same bucket to avoid repeating the bucket name.
+//
+// BucketClient is a lightweight wrapper with no state or lifecycle management - it simply
+// forwards all calls to the underlying MinioClient with the bucket name pre-filled.
+type BucketClient struct {
+	client *MinioClient
+	bucket string
+}
+
+// Bucket returns a BucketClient that automatically uses the specified bucket for all operations.
+// This is a convenience method for when you perform multiple operations on the same bucket.
+//
+// Parameters:
+//   - name: The name of the bucket to use for all operations
+//
+// Returns a BucketClient that wraps the underlying client.
+//
+// Example:
+//
+//	// Get a scoped client for a specific bucket
+//	userBucket := client.Bucket("user-uploads")
+//
+//	// All operations use "user-uploads" bucket automatically
+//	userBucket.Put(ctx, "avatar.jpg", file)
+//	data, _ := userBucket.Get(ctx, "profile.jpg")
+//	userBucket.Delete(ctx, "old-file.txt")
+func (m *MinioClient) Bucket(name string) *BucketClient {
+	return &BucketClient{
+		client: m,
+		bucket: name,
+	}
+}
+
+// Put uploads an object to the bucket associated with this BucketClient.
+func (bc *BucketClient) Put(ctx context.Context, objectKey string, reader io.Reader, opts ...PutOption) (int64, error) {
+	return bc.client.Put(ctx, bc.bucket, objectKey, reader, opts...)
+}
+
+// Get retrieves an object from the bucket associated with this BucketClient.
+func (bc *BucketClient) Get(ctx context.Context, objectKey string, opts ...GetOption) ([]byte, error) {
+	return bc.client.Get(ctx, bc.bucket, objectKey, opts...)
+}
+
+// StreamGet retrieves an object in chunks from the bucket associated with this BucketClient.
+func (bc *BucketClient) StreamGet(ctx context.Context, objectKey string, chunkSize int) (<-chan []byte, <-chan error) {
+	return bc.client.StreamGet(ctx, bc.bucket, objectKey, chunkSize)
+}
+
+// Delete removes an object from the bucket associated with this BucketClient.
+func (bc *BucketClient) Delete(ctx context.Context, objectKey string) error {
+	return bc.client.Delete(ctx, bc.bucket, objectKey)
+}
+
+// PreSignedPut generates a presigned URL for uploading an object to the bucket.
+func (bc *BucketClient) PreSignedPut(ctx context.Context, objectKey string) (string, error) {
+	return bc.client.PreSignedPut(ctx, bc.bucket, objectKey)
+}
+
+// PreSignedGet generates a presigned URL for downloading an object from the bucket.
+func (bc *BucketClient) PreSignedGet(ctx context.Context, objectKey string) (string, error) {
+	return bc.client.PreSignedGet(ctx, bc.bucket, objectKey)
+}
+
+// PreSignedHeadObject generates a presigned URL for retrieving object metadata from the bucket.
+func (bc *BucketClient) PreSignedHeadObject(ctx context.Context, objectKey string) (string, error) {
+	return bc.client.PreSignedHeadObject(ctx, bc.bucket, objectKey)
+}
+
+// GenerateMultipartUploadURLs generates presigned URLs for multipart upload to the bucket.
+func (bc *BucketClient) GenerateMultipartUploadURLs(
+	ctx context.Context,
+	objectKey string,
+	fileSize int64,
+	contentType string,
+	expiry ...time.Duration,
+) (MultipartUpload, error) {
+	return bc.client.GenerateMultipartUploadURLs(ctx, bc.bucket, objectKey, fileSize, contentType, expiry...)
+}
+
+// CompleteMultipartUpload finalizes a multipart upload in the bucket.
+func (bc *BucketClient) CompleteMultipartUpload(ctx context.Context, objectKey, uploadID string, partNumbers []int, etags []string) error {
+	return bc.client.CompleteMultipartUpload(ctx, bc.bucket, objectKey, uploadID, partNumbers, etags)
+}
+
+// AbortMultipartUpload cancels a multipart upload in the bucket.
+func (bc *BucketClient) AbortMultipartUpload(ctx context.Context, objectKey, uploadID string) error {
+	return bc.client.AbortMultipartUpload(ctx, bc.bucket, objectKey, uploadID)
+}
+
+// ListIncompleteUploads lists all incomplete multipart uploads in the bucket.
+func (bc *BucketClient) ListIncompleteUploads(ctx context.Context, prefix string) ([]minio.ObjectMultipartInfo, error) {
+	return bc.client.ListIncompleteUploads(ctx, bc.bucket, prefix)
+}
+
+// CleanupIncompleteUploads removes stale incomplete multipart uploads in the bucket.
+func (bc *BucketClient) CleanupIncompleteUploads(ctx context.Context, prefix string, olderThan time.Duration) error {
+	return bc.client.CleanupIncompleteUploads(ctx, bc.bucket, prefix, olderThan)
+}
+
+// GenerateMultipartPresignedGetURLs generates presigned URLs for downloading parts of an object from the bucket.
+func (bc *BucketClient) GenerateMultipartPresignedGetURLs(
+	ctx context.Context,
+	objectKey string,
+	partSize int64,
+	expiry ...time.Duration,
+) (MultipartPresignedGet, error) {
+	return bc.client.GenerateMultipartPresignedGetURLs(ctx, bc.bucket, objectKey, partSize, expiry...)
 }
