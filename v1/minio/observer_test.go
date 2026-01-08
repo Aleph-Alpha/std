@@ -30,7 +30,7 @@ func (t *TestObserver) GetOperations() []observability.OperationContext {
 
 func TestObserveOperationNilObserverNoPanic(t *testing.T) {
 	m := &MinioClient{
-		cfg:      Config{Connection: ConnectionConfig{BucketName: "testbucket"}},
+		cfg:      Config{},
 		observer: nil,
 	}
 
@@ -41,7 +41,7 @@ func TestObserveOperationNilObserverNoPanic(t *testing.T) {
 func TestObserveOperationCallsObserver(t *testing.T) {
 	obs := &TestObserver{}
 	m := &MinioClient{
-		cfg:      Config{Connection: ConnectionConfig{BucketName: "testbucket"}},
+		cfg:      Config{},
 		observer: obs,
 	}
 
@@ -71,28 +71,10 @@ func TestObserveOperationCallsObserver(t *testing.T) {
 	}
 }
 
-func TestObserveOperationResourceFallbackToBucketName(t *testing.T) {
-	obs := &TestObserver{}
-	m := &MinioClient{
-		cfg:      Config{Connection: ConnectionConfig{BucketName: "testbucket"}},
-		observer: obs,
-	}
-
-	m.observeOperation("list", "", "prefix/", 1*time.Millisecond, nil, 0, nil)
-
-	ops := obs.GetOperations()
-	if len(ops) != 1 {
-		t.Fatalf("expected 1 operation, got %d", len(ops))
-	}
-	if ops[0].Resource != "testbucket" {
-		t.Fatalf("expected fallback resource testbucket, got %q", ops[0].Resource)
-	}
-}
-
 func TestWithObserver(t *testing.T) {
 	obs := &TestObserver{}
 	m := &MinioClient{
-		cfg:      Config{Connection: ConnectionConfig{BucketName: "testbucket"}},
+		cfg:      Config{},
 		observer: nil,
 	}
 

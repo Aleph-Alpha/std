@@ -5,21 +5,30 @@
 // It provides functionality for object operations, bucket management, and presigned URL
 // generation with a focus on ease of use and reliability.
 //
+// # Multi-Bucket Support
+//
+// This package supports multi-bucket operations. All operations require an explicit bucket
+// parameter, enabling you to work with multiple buckets from a single client instance.
+// For convenience when working with a single bucket repeatedly, use the BucketClient wrapper.
+//
 // # Architecture
 //
 // This package follows the "accept interfaces, return structs" design pattern:
 //   - Client interface: Defines the contract for MinIO/S3 operations
 //   - MinioClient struct: Concrete implementation of the Client interface
+//   - BucketClient struct: Lightweight wrapper for scoped bucket operations
 //   - NewClient constructor: Returns *MinioClient (concrete type)
 //   - FX module: Provides both *MinioClient and Client interface for dependency injection
 //
 // Core Features:
-//   - Bucket operations (create, check existence)
+//   - Multi-bucket operations (work with multiple buckets seamlessly)
+//   - Bucket management (create, delete, check existence, list)
 //   - Object operations (upload, download, delete)
 //   - Presigned URL generation for temporary access
 //   - Multipart upload and download support for large files
 //   - Notification configuration
 //   - Integration with the Logger package for structured logging
+//   - Integration with Observability package for metrics and tracing
 //
 // # Direct Usage (Without FX)
 //
@@ -37,17 +46,28 @@
 //			AccessKeyID:     "minioadmin",
 //			SecretAccessKey: "minioadmin",
 //			UseSSL:          true,
-//			BucketName:      "mybucket",
-//			AccessBucketCreation: true,
 //		},
-//	}, nil) // Pass logger if needed
+//	})
 //	if err != nil {
 //		return err
 //	}
 //
-//	// Use the client
 //	ctx := context.Background()
-//	_, err = client.Put(ctx, "path/to/object.txt", file, fileInfo.Size())
+//
+//	// Create a bucket
+//	err = client.CreateBucket(ctx, "mybucket")
+//	if err != nil {
+//		return err
+//	}
+//
+//	// Use the client with explicit bucket parameter
+//	_, err = client.Put(ctx, "mybucket", "path/to/object.txt", file,
+//		minio.WithSize(fileInfo.Size()))
+//
+//	// Or use BucketClient for convenience
+//	bucket := client.Bucket("mybucket")
+//	_, err = bucket.Put(ctx, "path/to/object.txt", file,
+//		minio.WithSize(fileInfo.Size()))
 //
 // # FX Module Integration
 //
@@ -69,14 +89,14 @@
 //					Endpoint:        "play.min.io",
 //					AccessKeyID:     "minioadmin",
 //					SecretAccessKey: "minioadmin",
-//					BucketName:      "mybucket",
 //				},
 //			}
 //		}),
 //		fx.Invoke(func(client *minio.MinioClient) {
-//			// Use concrete type directly
+//			// Use concrete type directly with explicit bucket
 //			ctx := context.Background()
-//			client.Put(ctx, "key", reader, size)
+//			client.CreateBucket(ctx, "mybucket")
+//			client.Put(ctx, "mybucket", "key", reader, minio.WithSize(size))
 //		}),
 //		// ... other modules
 //	)

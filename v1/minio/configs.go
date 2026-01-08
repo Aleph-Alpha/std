@@ -72,14 +72,8 @@ type ConnectionConfig struct {
 	// UseSSL determines whether to use HTTPS (true) or HTTP (false)
 	UseSSL bool
 
-	// BucketName is the default bucket to use for operations
-	BucketName string
-
 	// Region specifies the S3 region (e.g., "us-east-1")
 	Region string
-
-	// AccessBucketCreation determines whether to allow bucket creation if it doesn't exist
-	AccessBucketCreation bool
 }
 
 // UploadConfig defines the configuration for upload constraints.
@@ -308,4 +302,66 @@ type Logger interface {
 
 	// ErrorWithContext logs an error message with trace context.
 	ErrorWithContext(ctx context.Context, msg string, err error, fields ...map[string]interface{})
+}
+
+// Functional options types for flexible API configuration
+
+// PutOption is a functional option for configuring Put operations.
+type PutOption func(*PutOptions)
+
+// PutOptions contains options for Put operations.
+type PutOptions struct {
+	// Size is the size of the object in bytes. If not specified, size is unknown.
+	Size int64
+
+	// ContentType is the MIME type of the object
+	ContentType string
+
+	// Metadata is custom metadata to attach to the object
+	Metadata map[string]string
+
+	// PartSize is the part size for multipart uploads
+	PartSize uint64
+}
+
+// GetOption is a functional option for configuring Get operations.
+type GetOption func(*GetOptions)
+
+// GetOptions contains options for Get operations.
+type GetOptions struct {
+	// VersionID specifies a particular version of an object to retrieve
+	VersionID string
+
+	// Range specifies a byte range to retrieve
+	Range *ByteRange
+}
+
+// ByteRange represents a byte range for partial object retrieval.
+type ByteRange struct {
+	// Start is the starting byte position (inclusive)
+	Start int64
+
+	// End is the ending byte position (inclusive)
+	End int64
+}
+
+// BucketOption is a functional option for configuring bucket operations.
+type BucketOption func(*BucketOptions)
+
+// BucketOptions contains options for bucket operations.
+type BucketOptions struct {
+	// Region specifies the region where the bucket should be created
+	Region string
+
+	// ObjectLocking enables object locking for the bucket
+	ObjectLocking bool
+}
+
+// BucketInfo contains information about a bucket.
+type BucketInfo struct {
+	// Name is the name of the bucket
+	Name string
+
+	// CreationDate is when the bucket was created
+	CreationDate time.Time
 }

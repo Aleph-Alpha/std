@@ -99,7 +99,7 @@ func newMultipartPresignedGet(info *MultipartPresignedGetInfo) MultipartPresigne
 //	)
 func (m *MinioClient) GenerateMultipartPresignedGetURLs(
 	ctx context.Context,
-	objectKey string,
+	bucket, objectKey string,
 	partSize int64,
 	expiry ...time.Duration,
 ) (MultipartPresignedGet, error) {
@@ -115,7 +115,7 @@ func (m *MinioClient) GenerateMultipartPresignedGetURLs(
 	}
 
 	// Get object stats to determine size and other metadata
-	objInfo, err := c.StatObject(ctx, m.cfg.Connection.BucketName, objectKey, minio.StatObjectOptions{})
+	objInfo, err := c.StatObject(ctx, bucket, objectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get object info: %w", err)
 	}
@@ -150,7 +150,7 @@ func (m *MinioClient) GenerateMultipartPresignedGetURLs(
 		reqParams.Set("response-content-range", byteRange)
 
 		// Generate presigned URL for this part
-		presignedURL, err := c.Presign(ctx, "GET", m.cfg.Connection.BucketName, objectKey, expiryDuration, reqParams)
+		presignedURL, err := c.Presign(ctx, "GET", bucket, objectKey, expiryDuration, reqParams)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate presigned URL for part %d: %w", i+1, err)
 		}
@@ -262,17 +262,17 @@ func (m *multipartPresignedGetImpl) IsExpired() bool {
 //	if err == nil {
 //	    fmt.Printf("Download link: %s\n", url)
 //	}
-func (m *MinioClient) PreSignedGet(ctx context.Context, objectKey string) (string, error) {
+func (m *MinioClient) PreSignedGet(ctx context.Context, bucket, objectKey string) (string, error) {
 	start := time.Now()
 	c := m.client.Load()
 	if c == nil {
-		m.observeOperation("presigned_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
+		m.observeOperation("presigned_get", bucket, objectKey, time.Since(start), ErrConnectionFailed, 0, nil)
 		return "", ErrConnectionFailed
 	}
 
-	presignedUrl, err := c.PresignedGetObject(ctx, m.cfg.Connection.BucketName, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
+	presignedUrl, err := c.PresignedGetObject(ctx, bucket, objectKey, m.cfg.PresignedConfig.ExpiryDuration, nil)
 	if err != nil {
-		m.observeOperation("presigned_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+		m.observeOperation("presigned_get", bucket, objectKey, time.Since(start), err, 0, nil)
 		return "", err
 	}
 
@@ -282,6 +282,6 @@ func (m *MinioClient) PreSignedGet(ctx context.Context, objectKey string) (strin
 	} else {
 		result = presignedUrl.String()
 	}
-	m.observeOperation("presigned_get", m.cfg.Connection.BucketName, objectKey, time.Since(start), err, 0, nil)
+	m.observeOperation("presigned_get", bucket, objectKey, time.Since(start), err, 0, nil)
 	return result, err
 }
