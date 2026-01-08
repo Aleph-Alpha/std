@@ -17,13 +17,6 @@ import (
 	"go.uber.org/fx/fxtest"
 )
 
-// Helper functions for functional options
-func WithSize(size int64) PutOption {
-	return func(opts *PutOptions) {
-		opts.Size = size
-	}
-}
-
 type minioContainerInstance struct {
 	testcontainers.Container
 	Host   string
