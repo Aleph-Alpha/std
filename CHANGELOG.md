@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Aleph-Alpha/std/compare/v1.2.0...v1.3.0) (2026-01-08)
+
+
+### Features
+
+* Refactor MinIO Package for Multi-Bucket Operations ([#57](https://github.com/Aleph-Alpha/std/issues/57)) ([bd5d80c](https://github.com/Aleph-Alpha/std/commit/bd5d80c4ed104ddba7ed3f1e5a83d8cdf18ed19c))
+
 ## [1.2.0](https://github.com/Aleph-Alpha/std/compare/v1.1.0...v1.2.0) (2026-01-02)
 
 
