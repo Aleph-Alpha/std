@@ -390,13 +390,9 @@ outerLoop:
 					return
 
 				default:
-					// Create a context with timeout for the reconnection attempt
-					ctxReconnect, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-
 					// Attempt to create new clients
 					newClient, err := connectToMinio(m.cfg)
 					if err != nil {
-						cancel() // Cancel the context to free resources
 						m.logError(ctx, "MinIO reconnection failed", map[string]interface{}{
 							"endpoint":      m.cfg.Connection.Endpoint,
 							"will_retry_in": "1s",
@@ -408,7 +404,6 @@ outerLoop:
 
 					newCoreClient, err := connectToMinioCore(m.cfg)
 					if err != nil {
-						cancel() // Cancel the context to free resources
 						m.logError(ctx, "MinIO core client reconnection failed", map[string]interface{}{
 							"endpoint":      m.cfg.Connection.Endpoint,
 							"will_retry_in": "1s",
@@ -419,15 +414,18 @@ outerLoop:
 					}
 
 					// Validate the new connection before swapping pointers
-					_, err = newClient.ListBuckets(ctxReconnect)
-					cancel() // Cancel the context to free resources
+					if !m.cfg.Connection.SkipConnectionValidation {
+						ctxReconnect, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+						_, err = newClient.ListBuckets(ctxReconnect)
+						cancel()
 
-					if err != nil {
-						m.logError(ctx, "MinIO connection validation failed", map[string]interface{}{
-							"error": err.Error(),
-						})
-						time.Sleep(time.Second)
-						continue reconnectLoop
+						if err != nil {
+							m.logError(ctx, "MinIO connection validation failed", map[string]interface{}{
+								"error": err.Error(),
+							})
+							time.Sleep(time.Second)
+							continue reconnectLoop
+						}
 					}
 
 					// Update the client references
@@ -496,13 +494,17 @@ func connectToMinioCore(cfg Config) (*minio.Core, error) {
 
 // validateConnection performs a simple operation to validate connectivity to MinIO.
 // It attempts to list buckets to ensure the connection and credentials are valid.
+// When SkipConnectionValidation is true, this is a no-op.
 //
 // Parameters:
 //   - ctx: Context for controlling the validation operation
 //
 // Returns nil if the connection is valid, or an error if the validation fails.
 func (m *MinioClient) validateConnection(ctx context.Context) error {
-	// Set a timeout for validation
+	if m.cfg.Connection.SkipConnectionValidation {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -511,7 +513,6 @@ func (m *MinioClient) validateConnection(ctx context.Context) error {
 		return ErrConnectionFailed
 	}
 
-	// Validate by listing buckets - this doesn't require a specific bucket
 	_, err := c.ListBuckets(ctx)
 	return err
 }

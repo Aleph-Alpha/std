@@ -74,6 +74,12 @@ type ConnectionConfig struct {
 
 	// Region specifies the S3 region (e.g., "us-east-1")
 	Region string
+
+	// SkipConnectionValidation disables the ListBuckets call used for
+	// connection health checks (startup, periodic monitoring, reconnection).
+	// Enable this for environments with restricted IAM policies where
+	// s3:ListAllMyBuckets is not granted. Defaults to false.
+	SkipConnectionValidation bool
 }
 
 // UploadConfig defines the configuration for upload constraints.
