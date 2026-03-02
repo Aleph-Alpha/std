@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/Aleph-Alpha/std/compare/v1.3.0...v1.3.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* **minio:** add SkipConnectionValidation option for restricted environments ([#59](https://github.com/Aleph-Alpha/std/issues/59)) ([02cd1fe](https://github.com/Aleph-Alpha/std/commit/02cd1fe8a2cde542d8c02bbb4c5715764195c83b))
+
 ## [1.3.0](https://github.com/Aleph-Alpha/std/compare/v1.2.0...v1.3.0) (2026-01-08)
 
 
